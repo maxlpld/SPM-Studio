@@ -53,7 +53,7 @@ function Get-PythonVersion([string]$Exe, [string[]]$PreArgs) {
         if ($LASTEXITCODE -ne 0 -or -not $out) { return $null }
         $lines = @($out)
         $v = [version]$lines[0]
-        if ($v -ge [version]'3.11') { return @{ Version = $lines[0]; Path = $lines[1] } }
+        if ($v -ge [version]'3.12' -and $v -lt [version]'3.14') { return @{ Version = $lines[0]; Path = $lines[1] } }
     } catch { }
     return $null
 }
@@ -61,14 +61,14 @@ function Get-PythonVersion([string]$Exe, [string[]]$PreArgs) {
 function Find-Python {
     $candidates = @()
     if (Get-Command py -ErrorAction SilentlyContinue) {
-        foreach ($tag in '-3.13', '-3.12', '-3.11', '-3') { $candidates += ,@('py', @($tag)) }
+        foreach ($tag in '-3.12', '-3.13', '-3') { $candidates += ,@('py', @($tag)) }
     }
     foreach ($name in 'python', 'python3') {
         $cmd = Get-Command $name -ErrorAction SilentlyContinue
         # Skip the Microsoft Store "python.exe" stub, which opens the Store instead of running.
         if ($cmd -and $cmd.Source -notlike '*WindowsApps*') { $candidates += ,@($cmd.Source, @()) }
     }
-    foreach ($v in '313', '312', '311') {
+    foreach ($v in '312', '313') {
         $p = Join-Path $env:LOCALAPPDATA "Programs\Python\Python$v\python.exe"
         if (Test-Path $p) { $candidates += ,@($p, @()) }
     }
@@ -81,7 +81,7 @@ function Find-Python {
 
 function Install-PythonWithWinget {
     if (-not (Get-Command winget -ErrorAction SilentlyContinue)) { return $false }
-    $answer = Read-Host 'Python 3.11+ was not found. Install Python 3.12 for your user with winget now? [Y/n]'
+    $answer = Read-Host 'Python 3.12/3.13 was not found. Install Python 3.12 for your user with winget now? [Y/n]'
     if ($answer -and $answer -notmatch '^[Yy]') { return $false }
     & winget install -e --id Python.Python.3.12 --scope user --accept-source-agreements --accept-package-agreements
     return ($LASTEXITCODE -eq 0)
@@ -123,7 +123,7 @@ function Invoke-Stage {
         if (Install-PythonWithWinget) { $py = Find-Python }
     }
     if (-not $py) {
-        Write-Host 'Python 3.11 or newer is required.' -ForegroundColor Yellow
+        Write-Host 'Python 3.12 or 3.13 is required.' -ForegroundColor Yellow
         Write-Host 'Install it from https://www.python.org/downloads/windows/ (tick "Add python.exe to PATH"),'
         Write-Host 'or run:  winget install -e --id Python.Python.3.12 --scope user'
         Write-Host 'then run this installer again.'
