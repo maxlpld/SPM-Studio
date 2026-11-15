@@ -53,7 +53,8 @@ def test_endpoint_and_redaction():
     with pytest.raises(ValueError):endpoint('custom','http://malicious.example.com')
     with pytest.raises(ValueError):endpoint('custom','https://test:pass@example.com')
     assert 'secret' not in redact('Authorization: Bearer secret').lower()
-    assert checked_child(Path('/tmp/root'),Path('/tmp/root/file'))==Path('/tmp/root/file')
+    # macOS resolves /tmp to /private/tmp; compare canonical locations.
+    assert checked_child(Path('/tmp/root'), Path('/tmp/root/file')) == Path('/tmp/root/file').resolve()
     with pytest.raises(ValueError):checked_child(Path('/tmp/root'),Path('/tmp/root/../private'))
 
 
