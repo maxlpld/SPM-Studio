@@ -29,16 +29,17 @@ case "$MODE" in --install|--stage|--activate|--dry-run|--prune-old) ;;
 python_ok() {   # prints the interpreter path when it is Python >= 3.11 and has venv
   "$1" - <<'PY' 2>/dev/null
 import sys, venv
-if sys.version_info >= (3, 11):
+if (3, 11) <= sys.version_info < (3, 14):
     print(sys.executable)
 PY
 }
 
 find_python() {
   local c found
-  for c in python3.13 python3.12 python3.11 \
-           /Library/Frameworks/Python.framework/Versions/3.13/bin/python3 \
+  for c in python3.12 python3.13 python3.11 \
+           /opt/homebrew/bin/python3.12 /usr/local/bin/python3.12 \
            /Library/Frameworks/Python.framework/Versions/3.12/bin/python3 \
+           /Library/Frameworks/Python.framework/Versions/3.13/bin/python3 \
            /Library/Frameworks/Python.framework/Versions/3.11/bin/python3 \
            /opt/homebrew/bin/python3 /usr/local/bin/python3 python3; do
     if command -v "$c" >/dev/null 2>&1; then
@@ -97,7 +98,7 @@ stage() {
     fi
   fi
   if [[ -z "$base_py" ]]; then
-    echo 'Python 3.11 or newer is required (the /usr/bin/python3 of the Xcode tools is too old).' >&2
+    echo 'Python 3.11, 3.12 or 3.13 is required; Python 3.14+ is not yet supported. Python 3.12 is recommended.' >&2
     echo 'Install it from https://www.python.org/downloads/macos/ (or: brew install python@3.12), then run this again.' >&2
     open 'https://www.python.org/downloads/macos/' 2>/dev/null || true
     exit 2

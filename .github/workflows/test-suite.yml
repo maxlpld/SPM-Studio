@@ -26,14 +26,14 @@ jobs:
       QT_QPA_PLATFORM: offscreen
       SPM_STUDIO_USE_GH_CLI: '0'       # tests never use a GitHub sign-in
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           ref: ${{ inputs.ref }}
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: ${{ inputs.python-version }}
           cache: pip
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: '22'
       - name: Qt system libraries (Linux)
@@ -41,7 +41,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends libegl1 libgl1 libxkbcommon0 libxkbcommon-x11-0 \
-            libxcb-cursor0 libfontconfig1 libdbus-1-3
+            libxcb-cursor0 libfontconfig1 libdbus-1-3 xvfb xauth
       - name: Install source and test tools
         run: python -m pip install -e ".[all,dev]"
       - name: Python syntax
@@ -63,7 +63,16 @@ jobs:
             if ($errs) { Write-Host "$($f.Name):"; $errs | ForEach-Object { Write-Host "  $_" }; $bad = 1 }
           }
           exit $bad
-      - name: Headless self-test
-        run: python -m spm_studio --smoke-test
-      - name: Test suite
-        run: python -m pytest -q -rs
+      # On Linux, run Qt against a virtual X11 display; offscreen can crash in native Qt.
+      - name: GUI smoke test (Linux/Xvfb)
+        if: runner.os == 'Linux'
+        run: xvfb-run -a env QT_QPA_PLATFORM=xcb QT_OPENGL=software LIBGL_ALWAYS_SOFTWARE=1 python -X faulthandler -m spm_studio --smoke-test
+      - name: GUI smoke test (Windows/macOS)
+        if: runner.os != 'Linux'
+        run: python -X faulthandler -m spm_studio --smoke-test
+      - name: Test suite (Linux/Xvfb)
+        if: runner.os == 'Linux'
+        run: xvfb-run -a env QT_QPA_PLATFORM=xcb QT_OPENGL=software LIBGL_ALWAYS_SOFTWARE=1 python -X faulthandler -m pytest -vv -rs
+      - name: Test suite (Windows/macOS)
+        if: runner.os != 'Linux'
+        run: python -X faulthandler -m pytest -vv -rs

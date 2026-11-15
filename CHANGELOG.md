@@ -7,6 +7,15 @@ so write it for users. Add new versions **at the top**.
 The internal builds that preceded the GitHub project (0.7.0 – 0.8.3) are documented in
 [`docs/DEVELOPMENT_HISTORY.md`](docs/DEVELOPMENT_HISTORY.md).
 
+## 0.0.2 — 2026-11-15
+
+- Fixed installation on macOS by selecting Vosk 0.3.44 (its macOS Universal2 wheel) while retaining Vosk 0.3.45 on other platforms.
+- Prefer Python 3.12 on macOS and reject untested Python 3.14+ interpreters, preventing accidental use of Python 3.15.
+- Removed obsolete private-repository instructions from the public README.
+- Improved Linux GUI test stability and crash diagnostics with Xvfb, Qt XCB, and Python faulthandler. All tests remain enabled.
+- Improved release CI diagnostics: allow every platform job to finish even when another platform fails, and upgrade GitHub Actions to Node 24-compatible versions.
+- Updated Python package metadata to avoid deprecated license-table warnings.
+
 ## 0.0.1 — 2026-11-15
 
 First release of SPM Studio from its GitHub repository. The application is functionally the same as the

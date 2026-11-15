@@ -38,10 +38,10 @@ jobs:
     outputs:
       tag: ${{ steps.tag.outputs.tag }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           ref: ${{ env.TAG }}
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: '3.12'
       - id: tag
@@ -59,7 +59,7 @@ jobs:
     permissions:
       contents: read
     strategy:
-      fail-fast: true
+      fail-fast: false
       matrix:
         include:
           - { os: ubuntu-latest, python-version: '3.12' }
@@ -79,10 +79,10 @@ jobs:
     permissions:
       contents: write          # create the release and upload its assets; nothing else
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           ref: ${{ env.TAG }}
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: '3.12'
       - name: Release notes, archive and checksums

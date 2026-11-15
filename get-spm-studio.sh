@@ -99,7 +99,7 @@ if [[ -z "$TAG" ]]; then
   if (( ${#AUTH[@]} )); then
     die "No released version found at https://github.com/$REPO, or your GitHub account has no access to it."
   fi
-  die "No released version found at https://github.com/$REPO. If the repository is private: install the GitHub CLI, run 'gh auth login' once, then run this command again (see the README, Private repository)."
+  die "No released version found at https://github.com/$REPO. Verify the release exists under GitHub Releases."
 fi
 VERSION="${TAG#v}"
 

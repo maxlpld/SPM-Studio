@@ -10,7 +10,7 @@
 </p>
 
 <p align="center">
-  <img alt="Version 0.0.1" src="https://img.shields.io/badge/version-0.0.1-57758B">
+  <img alt="Version 0.0.2" src="https://img.shields.io/badge/version-0.0.2-57758B">
   <img alt="Python 3.11+" src="https://img.shields.io/badge/python-3.11%2B-3776AB">
   <img alt="Linux, Windows, macOS" src="https://img.shields.io/badge/platform-Linux%20%7C%20Windows%20%7C%20macOS-555555">
   <img alt="MIT licence" src="https://img.shields.io/badge/licence-MIT-2E7D32">
@@ -41,16 +41,13 @@ version, installs it **for your user only** (no administrator rights, its own pr
 runs a self-test and creates the app launcher. Run it as your normal user — never with `sudo` or
 *Run as administrator*. Running the same command again later updates SPM Studio.
 
-> **The repository is private at the moment?** Then these commands cannot download anything yet — use
-> the [private repository](#private-repository-invited-collaborators) instructions just below.
-
 **Ubuntu / Linux** (Terminal):
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/maxlpld/SPM-Studio/main/get-spm-studio.sh | bash
 ```
 
-**macOS** (Terminal; needs Python 3.11+ from [python.org](https://www.python.org/downloads/macos/) or `brew install python@3.12`):
+**macOS** (Terminal; Python **3.12 recommended**, install via `brew install python@3.12` or [python.org](https://www.python.org/downloads/macos/). Supported: 3.11–3.13):
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/maxlpld/SPM-Studio/main/get-spm-studio.sh | bash
@@ -69,43 +66,9 @@ On Ubuntu/Debian the script offers to install the few Qt system libraries SPM St
 
 A specific version: `curl … | SPM_VERSION=0.0.1 bash` (Windows: `$env:SPM_VERSION='0.0.1'; irm … | iex`).
 
-### Private repository (invited collaborators)
+### Download the source archive instead
 
-While the repository is private, GitHub only serves its files to signed-in members, so the commands above
-fail. Accept the e-mail invitation to the repository, then sign in **once** with the official
-[GitHub CLI](https://cli.github.com/):
-
-| System | Install the GitHub CLI | Sign in (opens your browser) |
-|---|---|---|
-| Ubuntu / Linux | `sudo apt install gh` | `gh auth login` |
-| macOS | `brew install gh` | `gh auth login` |
-| Windows | `winget install GitHub.cli` (then open a new PowerShell) | `gh auth login` |
-
-Choose *GitHub.com*, *HTTPS* and *Login with a web browser*. Then install with:
-
-**Linux / macOS**
-
-```bash
-gh api -H 'Accept: application/vnd.github.raw' repos/maxlpld/SPM-Studio/contents/get-spm-studio.sh | bash
-```
-
-**Windows (PowerShell)**
-
-```powershell
-gh api -H "Accept: application/vnd.github.raw" repos/maxlpld/SPM-Studio/contents/get-spm-studio.ps1 | Out-String | iex
-```
-
-The installer and the in-app update check then use that sign-in automatically (through `gh auth token`).
-SPM Studio never stores it, never writes it to a file in the repository, and sends it only to the GitHub API.
-Without the GitHub CLI you can put a personal access token in the environment variable
-`SPM_STUDIO_GITHUB_TOKEN` instead — see [`SECURITY.md`](SECURITY.md) for which token to create and how to
-keep it safe.
-
-**Without any command line tool:** while signed in on github.com, open the repository's **Releases** page,
-download `SPM-Studio-<version>.zip`, extract it and run the installer for your system
-(`install_spm_studio_clean.sh`, `install_spm_studio_macos.command`, or `install_spm_studio_windows.bat`).
-Step-by-step guides: [Ubuntu](INSTALL_README_Ubuntu.md) · [macOS](INSTALL_README_macOS.md) ·
-[Windows](INSTALL_README_Windows.md) · [all Linux options](README_INSTALL.md).
+Prefer a ZIP? Download the newest source archive from [GitHub Releases](https://github.com/maxlpld/SPM-Studio/releases), extract it and run the installer for your system (`install_spm_studio_clean.sh`, `install_spm_studio_macos.command`, or `install_spm_studio_windows.bat`). Detailed instructions: [Ubuntu](INSTALL_README_Ubuntu.md) · [macOS](INSTALL_README_macOS.md) · [Windows](INSTALL_README_Windows.md).
 
 ### About the one-line commands
 
