@@ -26,21 +26,20 @@ case "$MODE" in --install|--stage|--activate|--dry-run|--prune-old) ;;
   *) echo 'Use --dry-run, --stage, --activate, --install or --prune-old' >&2; exit 2;; esac
 [[ -f "$ROOT/pyproject.toml" && -f "$ROOT/src/spm_studio/ai/chat_ui.py" ]] || { echo 'Run from the extracted SPM_Studio folder.' >&2; exit 2; }
 
-python_ok() {   # prints the interpreter path when it is Python >= 3.11 and has venv
+python_ok() {   # prints the interpreter path when it is Python 3.12 or 3.13 and has venv
   "$1" - <<'PY' 2>/dev/null
 import sys, venv
-if (3, 11) <= sys.version_info < (3, 14):
+if (3, 12) <= sys.version_info < (3, 14):
     print(sys.executable)
 PY
 }
 
 find_python() {
   local c found
-  for c in python3.12 python3.13 python3.11 \
+  for c in python3.12 python3.13 \
            /opt/homebrew/bin/python3.12 /usr/local/bin/python3.12 \
            /Library/Frameworks/Python.framework/Versions/3.12/bin/python3 \
            /Library/Frameworks/Python.framework/Versions/3.13/bin/python3 \
-           /Library/Frameworks/Python.framework/Versions/3.11/bin/python3 \
            /opt/homebrew/bin/python3 /usr/local/bin/python3 python3; do
     if command -v "$c" >/dev/null 2>&1; then
       found="$(python_ok "$(command -v "$c")" || true)"
@@ -93,12 +92,12 @@ stage() {
   if [[ -z "$base_py" ]]; then
     brew_bin="$(brew_path)"
     if [[ -n "$brew_bin" ]]; then
-      read -r -p 'Python 3.11+ not found. Install python@3.12 with Homebrew now? [Y/n] ' answer
+      read -r -p 'Python 3.12/3.13 not found. Install python@3.12 with Homebrew now? [Y/n] ' answer
       if [[ -z "$answer" || "$answer" == [Yy]* ]]; then "$brew_bin" install python@3.12; base_py="$(find_python || true)"; fi
     fi
   fi
   if [[ -z "$base_py" ]]; then
-    echo 'Python 3.11, 3.12 or 3.13 is required; Python 3.14+ is not yet supported. Python 3.12 is recommended.' >&2
+    echo 'Python 3.12 or 3.13 is required; other Python versions are not currently supported. Python 3.12 is recommended.' >&2
     echo 'Install it from https://www.python.org/downloads/macos/ (or: brew install python@3.12), then run this again.' >&2
     open 'https://www.python.org/downloads/macos/' 2>/dev/null || true
     exit 2
