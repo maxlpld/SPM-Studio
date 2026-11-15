@@ -40,7 +40,8 @@ function Test-Admin {
     $id = [Security.Principal.WindowsIdentity]::GetCurrent()
     return (New-Object Security.Principal.WindowsPrincipal($id)).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 }
-if (Test-Admin) {
+# A dry run only reports paths; it is safe on administrator-hosted CI runners.
+if ((Test-Admin) -and $Mode -ne 'DryRun') {
     Write-Host 'Please run this installer from a normal (not "Run as Administrator") window.' -ForegroundColor Yellow
     Write-Host 'SPM Studio installs for your user account only and never needs administrator rights.'
     exit 2
