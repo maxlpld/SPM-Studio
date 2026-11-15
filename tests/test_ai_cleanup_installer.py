@@ -6,6 +6,10 @@ import pytest
 
 ROOT=Path(__file__).resolve().parents[1]
 
+# These scripts use Bash and POSIX filesystem conventions. The Windows PowerShell
+# installer has its own cross-platform dry-run test in test-suite.yml.
+pytestmark = pytest.mark.skipif(os.name == 'nt', reason='POSIX Bash installers only')
+
 
 def test_clean_installer_dry_run(tmp_path):
     env={**os.environ,'HOME':str(tmp_path),'XDG_DATA_HOME':str(tmp_path/'share')}
