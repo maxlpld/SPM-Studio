@@ -25,6 +25,8 @@ jobs:
     env:
       QT_QPA_PLATFORM: offscreen
       SPM_STUDIO_USE_GH_CLI: '0'       # tests never use a GitHub sign-in
+      PYTHONUTF8: '1'                 # Python text files default to UTF-8 on Windows, too
+      PYTHONIOENCODING: 'utf-8'       # spawned module-runner output includes scientific symbols
     steps:
       - uses: actions/checkout@v6
         with:
