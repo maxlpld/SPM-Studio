@@ -26,14 +26,29 @@ if [[ "$MODE" == --dry-run ]];then
   printf 'No old files will be removed. For old-app inventory: bash uninstall_old_research_studio.sh --dry-run\n'
   exit 0
 fi
+# Select a tested interpreter, not necessarily the distro's default python3
+# (Ubuntu releases can ship Python 3.14+ before SPM Studio supports its wheels).
+find_python() {
+  local candidate
+  for candidate in "${SPM_PYTHON:-}" python3.12 python3.13 python3; do
+    [[ -n "$candidate" ]] || continue
+    command -v "$candidate" >/dev/null 2>&1 || continue
+    if "$candidate" -c 'import sys, venv; raise SystemExit(not ((3,12) <= sys.version_info[:2] < (3,14)))' 2>/dev/null; then
+      command -v "$candidate"
+      return 0
+    fi
+  done
+  return 1
+}
 preflight() {
-  command -v python3 >/dev/null || { echo 'python3 not found' >&2;exit 2; }
   command -v unzip >/dev/null || { echo 'unzip missing: sudo apt install unzip' >&2;exit 2; }
-  python3 - <<'PY'
-import sys,venv,shutil
-assert sys.version_info>=(3,11), 'Python 3.11+ is required'
-print('Python:',sys.version.split()[0])
-PY
+  BASE_PY="$(find_python || true)"
+  if [[ -z "$BASE_PY" ]]; then
+    echo 'SPM Studio requires Python 3.12 or 3.13 with venv; Python 3.11 and 3.14+ are not supported.' >&2
+    echo 'Install Python 3.12/3.13 and its venv module, or set SPM_PYTHON to a compatible executable.' >&2
+    exit 2
+  fi
+  "$BASE_PY" -c 'import sys; print("Python:", sys.version.split()[0], "(" + sys.executable + ")")'
   free="$(df -Pk "$HOME" | awk 'NR==2 {print $4}')"
   if ((free<1000000));then echo 'At least 1 GiB free disk space recommended for Qt/scientific dependencies' >&2;exit 2;fi
 }
@@ -48,7 +63,7 @@ stage() {
   mkdir -p "$RELEASE"
   # Do not move the venv after pip editable install: it contains absolute paths.
   cp -a "$ROOT" "$APP"
-  python3 -m venv "$RELEASE/venv"
+  "$BASE_PY" -m venv "$RELEASE/venv"
   "$PY" -m pip install --upgrade pip
   "$PY" -m pip install -e "$APP[all]"
   smoke
