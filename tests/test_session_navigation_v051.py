@@ -123,7 +123,8 @@ def test_main_window_starts_empty_and_keeps_appearance_only(app,monkeypatch,tmp_
     assert window.module_panel.masks==[]
     assert window.settings.value('last_file') is None
     assert window.settings.value('masks_abcd') is None
-    assert window.settings.value('theme')=='default_dark'
+    # Legacy default_dark is migrated to the current graphite theme.
+    assert window.settings.value('theme')=='graphite'
     assert window.settings.value('plot_format')=='pdf'
     window.close()
 
