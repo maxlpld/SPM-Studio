@@ -24,7 +24,9 @@ def test_config_without_secrets(tmp_path,monkeypatch):
     s=config.load();assert s['backend']=='none'
     s['backend']='pi';s['pi_executable']='/usr/bin/pi';config.save(s)
     assert config.load()['backend']=='pi'
-    assert (tmp_path/'spm-studio-ai/ai/settings.json').stat().st_mode & 0o077==0
+    # Windows exposes synthetic POSIX mode bits, not its actual ACLs.
+    if os.name != 'nt':
+        assert (tmp_path/'spm-studio-ai/ai/settings.json').stat().st_mode & 0o077==0
     assert 'sk-something-should-never-go-in-config' not in (tmp_path/'spm-studio-ai/ai/settings.json').read_text()
     with pytest.raises(ValueError):
         s['backend']='unsupported';config.save(s)
