@@ -1,0 +1,42 @@
+{
+  "flake_height": {
+    "module.py": "e31f021dc2ace232256cdcb62d09e4cf3eb33c8f5da6a2663cdda576150535e3",
+    "module.json": "9d732ae9f745195ac347b3fe8be10f76cd6a46fd94128e25d2bc3596fb0e9536",
+    "README.md": "a59bb8f99ef6c791694f6703cb5dc18bc9ce83c04a64ccf6d07d0ce992002fd1"
+  },
+  "cpd_histogram": {
+    "module.py": "6194edfcb97fb1ab1442ad60ccc7d9f1c692e929acb388aa3d89a21bd975412f",
+    "module.json": "6e0f07d29f3143812b5bd72aa6b1cdc844bb5dec62706ba072d542859f968b7e",
+    "README.md": "c52894a5a9fd5686cfbcf7642db9a171d6550d5d374e2477765e71be6ca30f6c"
+  },
+  "kpfm_edge": {
+    "module.py": "03604dfbefe6007abd1948404ab3d91465e80c69084f81b5893d928a522b19d0",
+    "module.json": "6adf0d8326c41f7a836ef749cfaa3c70779dde3367075a7cf2afef719e91550a",
+    "README.md": "f3ff1ab42bce5745acbd367ba9699ed7034b20818b37e214e6188d9b85bd9359"
+  },
+  "lattice_measurements": {
+    "module.py": "8f49cb8e5f6359371266393e9ce62eb201e950fa5893ccce5c07a59e6224388c",
+    "module.json": "dcc204e010638a0b7dacbf3c688232b8ddad8b5066f364074ec69e3417d696df",
+    "README.md": "ca6bf3721fd21a6f7f0edf8772be8686270e2865e527f971d5e5795afc854120"
+  },
+  "batch_scan_report": {
+    "module.py": "c2739b083df732dbe6b22027dc0bae1f53c3dcdfc96165220b18b2cba5d39244",
+    "module.json": "b6ae538e77cfabdef2235266fdcdd4fc2ca0ce2be545a20e420c37d53ff03da0",
+    "README.md": "f289ca534c76155701788a093aedda74da3e414f2e671481b236ffd40a0b0898"
+  },
+  "molecule_lattice_overlay": {
+    "module.py": "93aab227e13a124d6b69c6b7209a4570553e8cd56c938b997058fb28731f9c20",
+    "module.json": "b601084aeaac80b179bbe5c592f5b9cacf465e871146d355a2558cc1621b3202",
+    "README.md": "f9b5bff87c0074e67f14ada22d099237e66bad1d8a17e48e385736f48b18f932"
+  },
+  "molecule_placement": {
+    "module.py": "139408fbb34b4c2a1cd3ec4bd261864b813a2b2e0193077260a65612aaa240fc",
+    "module.json": "3a65b67edb2417c707fdd43f97e88379390f84c1de1709afb7071bdcfcff6936",
+    "README.md": "ae478d49a4f41dacc6500d36cd1bae446ff867b62baca9343aadcb51618a27c5"
+  },
+  "multiframe_drift_stack": {
+    "module.py": "fe449c934cce1f2e513984a60cde59ab58899f8db659bfb800ec182c03f8554b",
+    "module.json": "3363431b6c3e5eb13b5d69a7f76ca98de1907ab9b4803951d64c5f50798e2c85",
+    "README.md": "1dd420aab05645daa3cdab541519fff3ee6c57453b6ff3e466c1b181dfbbdf27"
+  }
+}

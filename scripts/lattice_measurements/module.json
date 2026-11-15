@@ -1,0 +1,213 @@
+{
+  "api_version": "1.0",
+  "id": "lattice_measurements",
+  "name": "Lattice measurements",
+  "version": "0.9.0",
+  "description": "Primitive lattice vectors on the scan, exported exactly like Export… (SVG by default).",
+  "category": "Lattice",
+  "entrypoint": "module:run",
+  "status": "experimental",
+  "mode": "analysis",
+  "requires": [
+    "numpy",
+    "scipy",
+    "matplotlib",
+    "pandas",
+    "skimage",
+    "shapely",
+    "rich",
+    "tifffile",
+    "gwyfile"
+  ],
+  "parameters": {
+    "use_all_scans": {
+      "type": "bool",
+      "label": "Analyze ALL SXM/GWY scans in current folder",
+      "default": false,
+      "description": "Unchecked (default): use only the currently selected scan. Check to analyze every SXM/GWY scan of the same format in the current scan folder (including files not open in Studio). Drift fitting needs this checked and no rectangle ROI."
+    },
+    "analysis_method": {
+      "type": "choice",
+      "label": "Lattice analysis",
+      "default": "primitive_auto",
+      "choices": [
+        "primitive_auto",
+        "profile_fft_diagnostic"
+      ]
+    },
+    "estimate_drift": {
+      "type": "bool",
+      "label": "Estimate lateral drift (needs multiple scans)",
+      "default": false
+    },
+    "trace_direction": {
+      "type": "choice",
+      "label": "Trace direction",
+      "default": "forward",
+      "choices": [
+        "forward",
+        "backward",
+        "both"
+      ]
+    },
+    "lattice_bootstrap": {
+      "type": "integer",
+      "label": "Lattice bootstrap repeats",
+      "default": 400,
+      "min": 0,
+      "max": 5000
+    },
+    "drift_bootstrap": {
+      "type": "integer",
+      "label": "Drift bootstrap repeats",
+      "default": 32,
+      "min": 0,
+      "max": 5000
+    },
+    "peak_prominence_si": {
+      "type": "float",
+      "label": "Prominence (SI)",
+      "default": 0.0,
+      "min": 0.0
+    },
+    "min_distance_px": {
+      "type": "integer",
+      "label": "Min peak distance (px)",
+      "default": 3,
+      "min": 1,
+      "max": 500
+    },
+    "window_fft": {
+      "type": "bool",
+      "label": "Hann-window FFT",
+      "default": true
+    },
+    "scan_colormap": {
+      "type": "choice",
+      "label": "Colormap",
+      "default": "Current scan display",
+      "choices": [
+        "Current scan display",
+        "gray",
+        "afmhot",
+        "viridis",
+        "inferno",
+        "magma",
+        "plasma",
+        "cividis",
+        "copper",
+        "hot",
+        "bone",
+        "cubehelix",
+        "coolwarm",
+        "RdBu_r",
+        "turbo",
+        "Greys",
+        "gray_r"
+      ],
+      "description": "Current scan display = the colormap and contrast set on the scan."
+    },
+    "fft_colormap": {
+      "type": "choice",
+      "label": "FFT / Δf diagnostic colormap",
+      "default": "auto",
+      "choices": [
+        "auto",
+        "gray",
+        "afmhot",
+        "viridis",
+        "inferno",
+        "magma",
+        "plasma",
+        "cividis",
+        "copper",
+        "hot",
+        "bone",
+        "cubehelix",
+        "coolwarm",
+        "RdBu_r",
+        "turbo",
+        "Greys",
+        "gray_r"
+      ],
+      "description": "auto = the plot profile colormap for this channel."
+    },
+    "show_colorbar": {
+      "type": "bool",
+      "label": "Show colourbar",
+      "default": true
+    },
+    "overlay_title": {
+      "type": "string",
+      "label": "Figure title (optional)",
+      "default": ""
+    },
+    "colorbar_title": {
+      "type": "string",
+      "label": "Colourbar title (empty = scan title)",
+      "default": ""
+    },
+    "diagnostic_titles": {
+      "type": "bool",
+      "label": "Titles on diagnostic plots",
+      "default": true
+    },
+    "colorbar_position": {
+      "type": "choice",
+      "label": "Colourbar",
+      "default": "below",
+      "choices": [
+        "below",
+        "right",
+        "left",
+        "none"
+      ],
+      "description": "Same placement as in Export…"
+    },
+    "vector_legend_corner": {
+      "type": "choice",
+      "label": "Vector legend corner",
+      "default": "top_left",
+      "choices": [
+        "top_left",
+        "top_right",
+        "bottom_left",
+        "bottom_right"
+      ],
+      "description": "Position of the color-matched a, b vector length legend (default top left). Angle arc stays between arrows."
+    },
+    "vector_a_color": {
+      "type": "color",
+      "label": "Vector a colour",
+      "default": "#16d8f5",
+      "description": "Choose arrow a and its legend text color."
+    },
+    "vector_b_color": {
+      "type": "color",
+      "label": "Vector b colour",
+      "default": "#fbb748",
+      "description": "Choose arrow b and its legend text color."
+    },
+    "export_gwy": {
+      "type": "bool",
+      "label": "Also save Gwyddion .gwy of the region",
+      "default": false,
+      "description": "Off: only the publication figure is saved (format set in Options › Results)."
+    },
+    "diagnostic_figures": {
+      "type": "bool",
+      "label": "Keep full-scan diagnostic figures",
+      "default": false,
+      "description": "Full-scan mode only: keep the FFT / drift report figures of the original engine."
+    }
+  },
+  "snapshot_channels": "selected",
+  "selection": {
+    "tools": [
+      "rectangle",
+      "line"
+    ],
+    "multiple": true,
+    "preview": "none"
+  }
+}

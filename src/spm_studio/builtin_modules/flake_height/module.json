@@ -1,0 +1,56 @@
+{
+  "api_version": "1.0",
+  "id": "flake_height",
+  "name": "Flake / island height",
+  "version": "0.4.2",
+  "description": "Draw multiple Line ROIs across an island; live profile preview, separate left/right edge heights and stripe spacing. Select scan direction and edge detection parameters.",
+  "category": "Topography",
+  "entrypoint": "module:run",
+  "mode": "analysis",
+  "status": "experimental",
+  "requires": [
+    "numpy",
+    "matplotlib",
+    "scipy"
+  ],
+  "parameters": {
+    "trace_mode": {
+      "type": "choice",
+      "label": "Traces",
+      "default": "selected",
+      "choices": [
+        "selected",
+        "forward",
+        "backward",
+        "both"
+      ]
+    },
+    "edge_decrease_run": {
+      "type": "integer",
+      "label": "Edge decrease run",
+      "min": 2,
+      "max": 15,
+      "default": 3
+    },
+    "find_stripes": {
+      "type": "bool",
+      "label": "Detect flake stripes",
+      "default": true
+    },
+    "prominence_si": {
+      "type": "float",
+      "label": "Stripe prominence (SI)",
+      "default": 0.0,
+      "min": 0.0
+    }
+  },
+  "interaction": "line_profiles",
+  "snapshot_channels": "selected",
+  "selection": {
+    "tools": [
+      "line"
+    ],
+    "multiple": true,
+    "preview": "profiles"
+  }
+}

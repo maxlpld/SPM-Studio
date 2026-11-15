@@ -1,0 +1,5 @@
+# Channel overlay · transparency
+
+Choose a base channel in the SPM Studio channel inspector, then open **Tools → Channel overlay · transparency**. Choose a second channel and adjust its opacity. Optionally add layers 3–5, or specify further channel names separated by commas. The **live scan preview** updates as parameters change. Press **Run analysis** to save publication PNG/PDF/SVG results and a JSON provenance file.
+
+The overlay requires identical scan geometry (pixel dimensions, calibrated scan area, rotation, and position) for all inputs. It never moves, interpolates, or silently registers images, so a match represents their actual stored pixel registration. Channels with a different physical geometry are rejected. Each layer is separately normalized to the 2nd–98th percentile for visualization; raw scientific arrays remain unchanged. Each optional colourbar shows the source channel values in automatic SI units (native Studio convention). PDF/SVG retain vector text, scalebar and colourbars; underlying measured image remains raster data.

@@ -1,0 +1,128 @@
+{
+  "api_version": "1.0",
+  "id": "multiframe_drift_stack",
+  "name": "MultiFrame physical stack",
+  "version": "0.5.0",
+  "description": "Original SPM MultiFrame 0.1.2 drift, primitive reciprocal lattice, overlap and stacking engines; Studio output routing, headless common-region choice.",
+  "category": "MultiFrame",
+  "entrypoint": "module:run",
+  "status": "experimental",
+  "mode": "analysis",
+  "requires": [
+    "numpy",
+    "scipy",
+    "matplotlib",
+    "pandas",
+    "skimage",
+    "shapely",
+    "rich",
+    "tifffile",
+    "gwyfile"
+  ],
+  "parameters": {
+    "estimate_drift": {
+      "type": "bool",
+      "label": "Fit original physical lateral drift",
+      "default": true
+    },
+    "stack_frames": {
+      "type": "bool",
+      "label": "Stack selected scans after lattice analysis",
+      "default": true
+    },
+    "trace_direction": {
+      "type": "choice",
+      "label": "Trace direction",
+      "choices": [
+        "forward",
+        "backward",
+        "both"
+      ],
+      "default": "forward"
+    },
+    "stack_channels": {
+      "type": "string",
+      "label": "Stack channels (comma-separated)",
+      "default": "",
+      "description": "Leave empty to stack only active channel. Example for KPFM: Z,Bias. Choose channels present in your scans."
+    },
+    "combination_method": {
+      "type": "choice",
+      "label": "Stack combination method",
+      "default": "sigma_clipped_mean",
+      "choices": [
+        "mean",
+        "weighted_mean",
+        "sigma_clipped_mean",
+        "median"
+      ]
+    },
+    "exclude_filenames": {
+      "type": "string",
+      "label": "Exclude scans by filename (comma list)",
+      "default": ""
+    },
+    "drift_bootstrap": {
+      "type": "integer",
+      "label": "Drift bootstrap repeats",
+      "default": 32,
+      "min": 0,
+      "max": 5000
+    },
+    "lattice_bootstrap": {
+      "type": "integer",
+      "label": "Lattice bootstrap repeats",
+      "default": 400,
+      "min": 0,
+      "max": 5000
+    },
+    "atom_tracking_path": {
+      "type": "string",
+      "label": "Atom tracking file path (optional)",
+      "default": ""
+    },
+    "use_manual_atom_velocity": {
+      "type": "bool",
+      "label": "Use manual atom tracking drift hint",
+      "default": false
+    },
+    "atom_vx": {
+      "type": "float",
+      "label": "Atom tracking Vx",
+      "default": 0.0
+    },
+    "atom_vy": {
+      "type": "float",
+      "label": "Atom tracking Vy",
+      "default": 0.0
+    },
+    "atom_velocity_unit": {
+      "type": "choice",
+      "label": "Atom tracking velocity unit",
+      "default": "nm/s",
+      "choices": [
+        "nm/s",
+        "pm/s",
+        "m/s",
+        "nm/min"
+      ]
+    },
+    "atom_velocity_convention": {
+      "type": "choice",
+      "label": "Velocity refers to",
+      "default": "correction",
+      "choices": [
+        "correction",
+        "sample"
+      ]
+    }
+  },
+  "snapshot_channels": "selected",
+  "selection": {
+    "tools": [
+      "rectangle"
+    ],
+    "multiple": false,
+    "preview": "none"
+  }
+}

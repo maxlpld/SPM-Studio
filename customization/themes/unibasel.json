@@ -1,0 +1,9 @@
+{
+  "schema_version": 1,
+  "name": "Unibasel",
+  "background": "#171E28",
+  "surface": "#202B36",
+  "foreground": "#F4F6F7",
+  "accent": "#C90021",
+  "muted": "#A4AEB9"
+}

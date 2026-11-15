@@ -1,0 +1,65 @@
+{
+  "schema_version": 1,
+  "name": "AFM Dissipation / Excitation",
+  "channel_contains": "Z",
+  "visible_channels": [
+    "Z",
+    "OC M1 Excitation"
+  ],
+  "style": {
+    "colormap": "gray",
+    "range_mode": "full",
+    "low": 1,
+    "high": 99,
+    "gamma": 1,
+    "scale_bar": true,
+    "colorbar": true
+  },
+  "processing": [],
+  "channel_styles": {
+    "Z": {
+      "colormap": "gray",
+      "range_mode": "full",
+      "low": 1,
+      "high": 99,
+      "gamma": 1,
+      "scale_bar": true,
+      "colorbar": true
+    },
+    "OC M1 Excitation": {
+      "colormap": "viridis",
+      "range_mode": "percentile",
+      "low": 1,
+      "high": 99,
+      "gamma": 1,
+      "scale_bar": true,
+      "colorbar": true
+    }
+  },
+  "channel_processing": {
+    "Z": [
+      {
+        "operation": "plane",
+        "params": {},
+        "enabled": true
+      },
+      {
+        "operation": "row_median",
+        "params": {},
+        "enabled": true
+      },
+      {
+        "operation": "fix_zero",
+        "params": {},
+        "enabled": true
+      }
+    ],
+    "OC M1 Excitation": []
+  },
+  "channel_titles": {
+    "Z": "Z",
+    "OC M1 Excitation": "$V_{exc}$"
+  },
+  "notes": "Fix Zero shifts only colorbar labels (0 to maximum-minus-minimum); numerical Z after plane and row-median processing is preserved.",
+  "auto_crop_incomplete": true
+}

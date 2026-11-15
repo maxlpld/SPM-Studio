@@ -1,0 +1,45 @@
+{
+  "api_version": "1.0",
+  "id": "lattice_measurements",
+  "name": "Lattice measurements",
+  "version": "0.4.2",
+  "description": "Real-space profile maxima/minima and 2-D FFT diagnostics with cycles-per-length reciprocal axes. Automatic basis classification is intentionally not claimed.",
+  "category": "Lattice",
+  "entrypoint": "module:run",
+  "status": "experimental",
+  "mode": "analysis",
+  "requires": [
+    "numpy",
+    "scipy",
+    "matplotlib"
+  ],
+  "parameters": {
+    "peak_prominence_si": {
+      "type": "float",
+      "label": "Prominence (SI)",
+      "default": 0.0,
+      "min": 0.0
+    },
+    "min_distance_px": {
+      "type": "integer",
+      "label": "Min peak distance (px)",
+      "default": 3,
+      "min": 1,
+      "max": 500
+    },
+    "window_fft": {
+      "type": "bool",
+      "label": "Hann-window FFT",
+      "default": true
+    }
+  },
+  "snapshot_channels": "selected",
+  "selection": {
+    "tools": [
+      "line",
+      "rectangle"
+    ],
+    "multiple": true,
+    "preview": "profiles"
+  }
+}

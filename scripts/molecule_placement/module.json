@@ -1,0 +1,119 @@
+{
+  "api_version": "1.0",
+  "id": "molecule_placement",
+  "name": "Molecule placement",
+  "version": "0.10.0",
+  "description": "Molecules at true scale on the lattice result, exported exactly like Export… (SVG by default).",
+  "category": "Overlays",
+  "entrypoint": "module:run",
+  "status": "experimental",
+  "mode": "analysis",
+  "requires": [
+    "numpy",
+    "PIL"
+  ],
+  "parameters": {
+    "lattice_result_json": {
+      "type": "file",
+      "label": "Lattice result (blank = latest)",
+      "default": "",
+      "description": "Optional. Run Lattice measurements first; leave blank to use latest result for open scan."
+    },
+    "molecule_image": {
+      "type": "file",
+      "label": "Molecule artwork",
+      "default": "",
+      "description": "Use the large Load molecule SVG / PNG… button above the parameters; the selected file appears there with a thumbnail."
+    },
+    "molecule_width_nm": {
+      "type": "float",
+      "label": "Width (nm)",
+      "default": 0.783,
+      "min": 0,
+      "description": "Real-space width of the drawn molecule itself (empty artwork margins are trimmed automatically). 0 = derive from height and artwork aspect."
+    },
+    "molecule_height_nm": {
+      "type": "float",
+      "label": "Height (nm)",
+      "default": 0.887,
+      "min": 0,
+      "description": "Real-space height of the drawn molecule itself. 0 = derive from width and artwork aspect (recommended to avoid stretching)."
+    },
+    "trim_artwork_margins": {
+      "type": "bool",
+      "label": "Trim empty artwork margins",
+      "default": true,
+      "description": "Recommended. Uses the bounding box of the non-transparent / non-white pixels of the artwork, so transparent or white borders no longer shrink the molecules."
+    },
+    "orientation_mode": {
+      "type": "choice",
+      "label": "Alignment",
+      "choices": [
+        "align_height_a",
+        "align_width_a",
+        "manual"
+      ],
+      "default": "align_height_a",
+      "description": "Auto: align image height/width axis to computed primitive lattice a vector. Manual: use angle below."
+    },
+    "rotation_offset_deg": {
+      "type": "float",
+      "label": "Rotation (°)",
+      "default": 0.0
+    },
+    "origin_x_nm": {
+      "type": "float",
+      "label": "Shift X (nm)",
+      "default": 0.0
+    },
+    "origin_y_nm": {
+      "type": "float",
+      "label": "Shift Y (nm)",
+      "default": 0.0
+    },
+    "opacity": {
+      "type": "float",
+      "label": "Opacity",
+      "default": 0.9,
+      "min": 0,
+      "max": 1
+    },
+    "molecule_count": {
+      "type": "integer",
+      "label": "Count (0 = all sites)",
+      "default": 0,
+      "min": 0,
+      "max": 20000,
+      "description": "0 places a molecule on every eligible lattice site. N>0 places exactly up to N molecules, nearest the chosen origin first."
+    },
+    "remove_white_background": {
+      "type": "bool",
+      "label": "Remove white background",
+      "default": false
+    },
+    "max_molecules": {
+      "type": "integer",
+      "label": "Maximum molecules",
+      "default": 1200,
+      "min": 1,
+      "max": 20000
+    },
+    "show_lattice_vectors": {
+      "type": "bool",
+      "label": "Show lattice vectors",
+      "default": true
+    },
+    "export_gwy": {
+      "type": "bool",
+      "label": "Also save Gwyddion .gwy",
+      "default": false,
+      "description": "Off: only the publication figure is saved (format set in Options › Results)."
+    }
+  },
+  "snapshot_channels": "selected",
+  "selection": {
+    "tools": [],
+    "multiple": false,
+    "preview": "molecule_placement"
+  }
+}

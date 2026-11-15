@@ -1,0 +1,48 @@
+{
+  "api_version": "1.0",
+  "id": "multiframe_drift_stack",
+  "name": "MultiFrame physical stack",
+  "version": "0.4.3",
+  "description": "Experimental physical-coordinate resampling and overlap. Drift fitting/lattice estimation are unavailable without original multiframe engines.",
+  "category": "MultiFrame",
+  "entrypoint": "module:run",
+  "status": "experimental",
+  "mode": "analysis",
+  "requires": [
+    "numpy",
+    "scipy",
+    "matplotlib"
+  ],
+  "parameters": {
+    "estimate_drift": {
+      "type": "bool",
+      "label": "Estimate drift (not available)",
+      "default": false
+    },
+    "allow_unverified_orientation": {
+      "type": "bool",
+      "label": "Acknowledge unverified orientation",
+      "default": false
+    },
+    "exclude_filenames": {
+      "type": "string",
+      "label": "Exclude filenames (comma list)",
+      "default": ""
+    },
+    "min_contributors": {
+      "type": "integer",
+      "label": "Min contributors per pixel",
+      "default": 2,
+      "min": 2,
+      "max": 1000
+    }
+  },
+  "snapshot_channels": "selected",
+  "selection": {
+    "tools": [
+      "rectangle"
+    ],
+    "multiple": false,
+    "preview": "histogram"
+  }
+}

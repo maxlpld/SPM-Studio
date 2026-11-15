@@ -1,0 +1,106 @@
+name: Publish release
+# Push a version tag and this workflow creates the GitHub Release that SPM Studio's "Check for updates"
+# and the get-spm-studio scripts read:
+#
+#   python tools/release_tools.py bump 0.0.2      # then write the notes in CHANGELOG.md and commit
+#   git tag v0.0.2 && git push origin main v0.0.2
+#
+# 1. verify: tag == pyproject.toml version, update repository == this repository, CHANGELOG section and
+#    README badge match. 2. tests on Linux, Windows and macOS. 3. publish: release notes = the matching
+#    CHANGELOG.md section; assets = one cross-platform source archive + SHA256SUMS.txt.
+# Nothing is published if a step fails. Re-running for an existing release replaces its notes and assets
+# (Actions › Publish release › Run workflow, enter the tag).
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Existing version tag to (re)publish, e.g. v0.0.1'
+        required: true
+
+permissions: {}
+
+concurrency:
+  group: release-${{ github.event.inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
+env:
+  TAG: ${{ github.event.inputs.tag || github.ref_name }}
+
+jobs:
+  verify:
+    name: Tag, version and repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    outputs:
+      tag: ${{ steps.tag.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TAG }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - id: tag
+        run: echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+      - name: Tag matches pyproject version
+        run: python tools/release_tools.py check-tag "$TAG"
+      - name: Update repository is this repository
+        run: python tools/release_tools.py check-repo "$GITHUB_REPOSITORY"
+      - name: CHANGELOG notes and README badge match the version
+        run: python tools/release_tools.py check-changelog
+
+  tests:
+    name: Tests
+    needs: verify
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - { os: ubuntu-latest, python-version: '3.12' }
+          - { os: windows-latest, python-version: '3.12' }
+          - { os: macos-latest, python-version: '3.12' }
+    uses: ./.github/workflows/test-suite.yml
+    with:
+      os: ${{ matrix.os }}
+      python-version: ${{ matrix.python-version }}
+      ref: ${{ needs.verify.outputs.tag }}
+
+  publish:
+    name: Publish GitHub Release
+    needs: [verify, tests]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write          # create the release and upload its assets; nothing else
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TAG }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Release notes, archive and checksums
+        run: |
+          python tools/release_tools.py notes "$TAG" > release_notes.md
+          python tools/release_tools.py archive dist
+          (cd dist && sha256sum *.zip > SHA256SUMS.txt && cat SHA256SUMS.txt)
+      - name: Create or update the GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          pre=""
+          case "$TAG" in *-*|*a[0-9]*|*b[0-9]*|*rc[0-9]*) pre="--prerelease";; esac
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Release $TAG exists: replacing its notes and assets."
+            gh release edit "$TAG" --notes-file release_notes.md
+            gh release upload "$TAG" dist/*.zip dist/SHA256SUMS.txt --clobber
+          else
+            gh release create "$TAG" dist/*.zip dist/SHA256SUMS.txt $pre \
+              --title "SPM Studio ${TAG#v}" --notes-file release_notes.md --verify-tag
+          fi

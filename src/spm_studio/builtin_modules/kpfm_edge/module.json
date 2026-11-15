@@ -1,0 +1,49 @@
+{
+  "api_version": "1.0",
+  "id": "kpfm_edge",
+  "name": "KPFM edge analysis",
+  "version": "0.4.3",
+  "description": "Topography/CPD edge metrics and 2-D gradient correlation from registered image grids. Experimental simplified implementation.",
+  "category": "KPFM",
+  "entrypoint": "module:run",
+  "status": "experimental",
+  "mode": "analysis",
+  "requires": [
+    "numpy",
+    "scipy",
+    "matplotlib"
+  ],
+  "parameters": {
+    "topography_channel": {
+      "type": "channel",
+      "label": "Topography channel",
+      "default": "Z"
+    },
+    "smooth_sigma_px": {
+      "type": "float",
+      "label": "Profile smoothing \u03c3 (px)",
+      "default": 2.0,
+      "min": 0.0,
+      "max": 50.0
+    },
+    "edge_window_fraction": {
+      "type": "float",
+      "label": "Feature window fraction",
+      "default": 0.2,
+      "min": 0.02,
+      "max": 0.5
+    }
+  },
+  "snapshot_channels": "selected",
+  "selection": {
+    "tools": [
+      "line",
+      "rectangle"
+    ],
+    "multiple": false,
+    "preview": "profiles"
+  },
+  "snapshot_parameter_channels": [
+    "topography_channel"
+  ]
+}

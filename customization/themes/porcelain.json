@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "name": "Porcelain",
+  "background": "#F2F3F5",
+  "surface": "#FFFFFF",
+  "foreground": "#16181D",
+  "accent": "#0F7C6F",
+  "muted": "#5E6672",
+  "font_family": "Inter",
+  "font_size": 10,
+  "radius": 6
+}

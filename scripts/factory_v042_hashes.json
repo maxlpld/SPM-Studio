@@ -1,0 +1,15 @@
+{
+  "cpd_histogram": {
+    "module.py": "0df8df60755fbbd304cc7de678877f92465c8dc82bb34b4da8dc7a6e4655f130",
+    "module.json": "d54f187f55ad914219882d6a95245fcacbcb199f65393132199de6503b2aa9c8"
+  },
+  "kpfm_edge": {
+    "module.json": "649e81397de4b3c5e49f62e22163eb0dfa7a468083097f0167170bbc244b98a2"
+  },
+  "molecule_lattice_overlay": {
+    "module.json": "2c453c69f27c5b55d896631449d15cc5994376b5d352e013ace57e8fc44d6f51"
+  },
+  "multiframe_drift_stack": {
+    "module.json": "e24c68c1b9934bf7c82f6f18e821ed8773e21672f37c73f62647264dca941290"
+  }
+}

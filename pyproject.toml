@@ -1,0 +1,39 @@
+[build-system]
+requires = ["setuptools>=65", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "spm-studio"
+version = "0.0.1"
+description = "SPM Studio — Scientific image & data analysis"
+readme = "README.md"
+requires-python = ">=3.11"
+license = {text = "MIT"}
+dependencies = ["numpy>=1.24", "PySide6>=6.5", "gwyfile>=0.3.0", "certifi>=2024.2"]
+
+[project.optional-dependencies]
+gwy = ["gwyfile>=0.3.0"]
+legacy-sxm = ["nanonispy>=1.1"]
+analysis = ["scipy>=1.10", "matplotlib>=3.7"]
+# Offline, local-only push-to-talk speech-to-text for the AI assistant chat box.
+# No audio or network access beyond a one-time, user-confirmed model download
+# (see spm_studio/ai/speech.py); transcription itself never touches the network.
+voice = ["vosk>=0.3.45"]
+all = ["gwyfile>=0.3.0", "scipy>=1.10", "matplotlib>=3.7", "scikit-image>=0.21", "pandas>=2.0", "shapely>=2.0", "rich>=13.7", "tifffile>=2024.1", "keyring>=25", "vosk>=0.3.45"]
+dev = ["pytest>=7", "pytest-qt>=4", "scipy>=1.10", "matplotlib>=3.7", "keyring>=25"]
+
+[project.scripts]
+spm-studio = "spm_studio.app:main"
+spm-studio-check = "spm_studio.core.diagnostics:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+spm_studio = ["update_config.json", "builtin_modules/*/*.json", "builtin_modules/*/*.py", "builtin_modules/*/README.md", "builtin_modules/README_SCRIPT.md", "resources/*.json", "resources/*.png", "resources/fonts/*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.setuptools]
+include-package-data = true

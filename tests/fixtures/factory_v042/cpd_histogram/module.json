@@ -1,0 +1,105 @@
+{
+  "api_version": "1.0",
+  "id": "cpd_histogram",
+  "name": "CPD / Bias histogram",
+  "version": "0.4.2",
+  "description": "Named value masks, in-scan spatial region, independent Gaussian populations, live histogram/overlays and combined masked-image + comparison export; advanced original options remain under migration.",
+  "category": "KPFM",
+  "entrypoint": "module:run",
+  "mode": "analysis",
+  "status": "experimental",
+  "requires": [
+    "numpy",
+    "scipy",
+    "matplotlib"
+  ],
+  "parameters": {
+    "trace_mode": {
+      "type": "choice",
+      "label": "Trace",
+      "default": "selected",
+      "choices": [
+        "selected",
+        "forward",
+        "backward",
+        "both"
+      ]
+    },
+    "bins": {
+      "type": "integer",
+      "label": "Histogram bins",
+      "default": 130,
+      "min": 20,
+      "max": 1000
+    },
+    "populations": {
+      "type": "integer",
+      "label": "Default Gaussians per mask",
+      "default": 2,
+      "min": 0,
+      "max": 8
+    },
+    "masks_json": {
+      "type": "text",
+      "label": "Named masks (JSON)",
+      "default": "[]",
+      "description": "Managed by the mask editor; JSON can also be imported/exported"
+    },
+    "comparison_with_masked_image": {
+      "type": "bool",
+      "label": "Export masked-image comparison",
+      "default": true
+    },
+    "image_scale_bar": {
+      "type": "bool",
+      "label": "Show physical image scale bar",
+      "default": true
+    },
+    "raw_populations": {
+      "type": "integer",
+      "label": "Raw-only Gaussians (when no masks)",
+      "default": 0,
+      "min": 0,
+      "max": 8
+    },
+    "add_mask_fits_to_raw": {
+      "type": "bool",
+      "label": "Reuse mask Gaussians in raw fit",
+      "default": true,
+      "description": "Fit only non-negative raw amplitudes; mask means and sigmas remain fixed"
+    },
+    "plot_title": {
+      "type": "string",
+      "label": "Plot title (optional)",
+      "default": ""
+    },
+    "x_axis_label": {
+      "type": "string",
+      "label": "X label (optional)",
+      "default": ""
+    },
+    "y_axis_label": {
+      "type": "string",
+      "label": "Y label (optional)",
+      "default": ""
+    },
+    "scale_bar_color": {
+      "type": "choice",
+      "label": "Scale-bar color",
+      "choices": [
+        "white",
+        "black"
+      ],
+      "default": "white"
+    }
+  },
+  "interaction": "histogram_masks",
+  "snapshot_channels": "selected",
+  "selection": {
+    "tools": [
+      "rectangle"
+    ],
+    "multiple": false,
+    "preview": "histogram"
+  }
+}

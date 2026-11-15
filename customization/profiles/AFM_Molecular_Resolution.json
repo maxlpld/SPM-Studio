@@ -1,0 +1,112 @@
+{
+  "schema_version": 1,
+  "name": "AFM Molecular Resolution",
+  "channel_contains": "Z",
+  "visible_channels": [
+    "Z",
+    "OC M1 Freq",
+    "OC M1 Excitation",
+    "OC M2 Freq",
+    "OC M2 Excitation"
+  ],
+  "style": {
+    "colormap": "gray",
+    "range_mode": "percentile",
+    "low": 1,
+    "high": 99,
+    "gamma": 1,
+    "scale_bar": true,
+    "colorbar": true
+  },
+  "processing": [
+    {
+      "operation": "plane",
+      "params": {},
+      "enabled": true
+    },
+    {
+      "operation": "row_median",
+      "params": {},
+      "enabled": true
+    },
+    {
+      "operation": "fix_zero",
+      "params": {},
+      "enabled": true
+    }
+  ],
+  "channel_styles": {
+    "Z": {
+      "colormap": "gray",
+      "range_mode": "percentile",
+      "low": 1,
+      "high": 99,
+      "gamma": 1,
+      "scale_bar": true,
+      "colorbar": true
+    },
+    "OC M1 Freq": {
+      "colormap": "cividis",
+      "range_mode": "percentile",
+      "low": 1,
+      "high": 99,
+      "gamma": 1,
+      "scale_bar": true,
+      "colorbar": true
+    },
+    "OC M1 Excitation": {
+      "colormap": "viridis",
+      "range_mode": "percentile",
+      "low": 1,
+      "high": 99,
+      "gamma": 1,
+      "scale_bar": true,
+      "colorbar": true
+    },
+    "OC M2 Freq": {
+      "colormap": "Gold",
+      "range_mode": "percentile",
+      "low": 1,
+      "high": 99,
+      "gamma": 1,
+      "scale_bar": true,
+      "colorbar": true
+    },
+    "OC M2 Excitation": {
+      "colormap": "copper",
+      "range_mode": "percentile",
+      "low": 1,
+      "high": 99,
+      "gamma": 1,
+      "scale_bar": true,
+      "colorbar": true
+    }
+  },
+  "channel_processing": {
+    "Z": [
+      {
+        "operation": "plane",
+        "params": {},
+        "enabled": true
+      },
+      {
+        "operation": "row_median",
+        "params": {},
+        "enabled": true
+      },
+      {
+        "operation": "fix_zero",
+        "params": {},
+        "enabled": true
+      }
+    ]
+  },
+  "channel_titles": {
+    "Z": "$Z$",
+    "OC M1 Freq": "$\\Delta f$",
+    "OC M1 Excitation": "$V_{exc}$",
+    "OC M2 Freq": "$\\Delta f_{TR}$",
+    "OC M2 Excitation": "$\\mathrm{Exc}_{TR}$"
+  },
+  "auto_crop_incomplete": true
+}

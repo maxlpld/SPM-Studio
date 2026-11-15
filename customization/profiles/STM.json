@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "name": "STM",
+  "channel_contains": "Z",
+  "style": {
+    "colormap": "gray",
+    "range_mode": "percentile",
+    "low": 1,
+    "high": 99,
+    "gamma": 1,
+    "scale_bar": true,
+    "colorbar": true
+  },
+  "processing": [],
+  "visible_channels": [
+    "Z"
+  ]
+}

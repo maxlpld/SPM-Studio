@@ -1,0 +1,187 @@
+{
+  "api_version": "1.0",
+  "id": "channel_overlay",
+  "name": "Channel overlay · transparency",
+  "version": "1.0.0",
+  "description": "Superimpose 2–5 or more calibrated channels; live opacity preview, per-channel colourmaps, PNG/PDF/SVG publication output. No resampling of measurements.",
+  "category": "Overlays",
+  "entrypoint": "module:run",
+  "status": "operational",
+  "mode": "analysis",
+  "requires": [
+    "numpy",
+    "PySide6"
+  ],
+  "snapshot_channels": "all",
+  "selection": {
+    "tools": [],
+    "multiple": false,
+    "preview": "none"
+  },
+  "parameters": {
+    "channel_2": {
+      "type": "channel",
+      "label": "Layer 2 · channel (required)",
+      "default": "",
+      "description": "A second channel is required; later layers are optional."
+    },
+    "opacity_2": {
+      "type": "float",
+      "label": "Layer 2 · opacity (0–1)",
+      "default": 0.5,
+      "min": 0,
+      "max": 1
+    },
+    "palette_2": {
+      "type": "choice",
+      "label": "Layer 2 · colour palette",
+      "choices": [
+        "inferno",
+        "viridis",
+        "magma",
+        "ice",
+        "ruby",
+        "Gold",
+        "gray",
+        "gray-inverted",
+        "copper",
+        "hot",
+        "plasma",
+        "cividis",
+        "coolwarm"
+      ],
+      "default": "inferno"
+    },
+    "channel_3": {
+      "type": "channel",
+      "label": "Layer 3 · channel (optional)",
+      "default": "",
+      "description": "A second channel is required; later layers are optional."
+    },
+    "opacity_3": {
+      "type": "float",
+      "label": "Layer 3 · opacity (0–1)",
+      "default": 0.4,
+      "min": 0,
+      "max": 1
+    },
+    "palette_3": {
+      "type": "choice",
+      "label": "Layer 3 · colour palette",
+      "choices": [
+        "inferno",
+        "viridis",
+        "magma",
+        "ice",
+        "ruby",
+        "Gold",
+        "gray",
+        "gray-inverted",
+        "copper",
+        "hot",
+        "plasma",
+        "cividis",
+        "coolwarm"
+      ],
+      "default": "viridis"
+    },
+    "channel_4": {
+      "type": "channel",
+      "label": "Layer 4 · channel (optional)",
+      "default": "",
+      "description": "A second channel is required; later layers are optional."
+    },
+    "opacity_4": {
+      "type": "float",
+      "label": "Layer 4 · opacity (0–1)",
+      "default": 0.4,
+      "min": 0,
+      "max": 1
+    },
+    "palette_4": {
+      "type": "choice",
+      "label": "Layer 4 · colour palette",
+      "choices": [
+        "inferno",
+        "viridis",
+        "magma",
+        "ice",
+        "ruby",
+        "Gold",
+        "gray",
+        "gray-inverted",
+        "copper",
+        "hot",
+        "plasma",
+        "cividis",
+        "coolwarm"
+      ],
+      "default": "ice"
+    },
+    "channel_5": {
+      "type": "channel",
+      "label": "Layer 5 · channel (optional)",
+      "default": "",
+      "description": "A second channel is required; later layers are optional."
+    },
+    "opacity_5": {
+      "type": "float",
+      "label": "Layer 5 · opacity (0–1)",
+      "default": 0.4,
+      "min": 0,
+      "max": 1
+    },
+    "palette_5": {
+      "type": "choice",
+      "label": "Layer 5 · colour palette",
+      "choices": [
+        "inferno",
+        "viridis",
+        "magma",
+        "ice",
+        "ruby",
+        "Gold",
+        "gray",
+        "gray-inverted",
+        "copper",
+        "hot",
+        "plasma",
+        "cividis",
+        "coolwarm"
+      ],
+      "default": "ruby"
+    },
+    "additional_channels": {
+      "type": "string",
+      "label": "Extra channels (comma-separated)",
+      "default": "",
+      "description": "Optional unlimited extra channel names, separated by commas; must have the same scan geometry."
+    },
+    "additional_opacity": {
+      "type": "float",
+      "label": "Extra channel opacity (0–1)",
+      "default": 0.4,
+      "min": 0,
+      "max": 1
+    },
+    "show_colorbars": {
+      "type": "bool",
+      "label": "Quantitative colourbars for all layers",
+      "default": true
+    },
+    "export_dpi": {
+      "type": "integer",
+      "label": "Export resolution (DPI)",
+      "default": 600,
+      "min": 150,
+      "max": 2400
+    },
+    "export_width_mm": {
+      "type": "float",
+      "label": "Export page width (mm)",
+      "default": 178.0,
+      "min": 60.0,
+      "max": 300.0
+    }
+  }
+}

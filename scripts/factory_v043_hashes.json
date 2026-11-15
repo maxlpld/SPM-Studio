@@ -1,0 +1,14 @@
+{
+  "cpd_histogram": {
+    "module.py": "371fa8e4f78587005d5db88435e0fe7d7a8999a7e24f98dc8d76a52385c43985",
+    "module.json": "7604627fa13249d54bd42cf0cee82b3f321cda0116b9da5a23d77e8a37f30cfc"
+  },
+  "lattice_measurements": {
+    "module.py": "f6590a6b1519022cfe47b8a7e40f99765c9e1429150d509aac943b24dc75a0e0",
+    "module.json": "76aa6233a03ddb69091d98ad9416d8ee9fd99a87816f4b81ef8f0987695205a4"
+  },
+  "multiframe_drift_stack": {
+    "module.py": "abf42fddb907af0b67688000b75eaaa30fb6362edd5db576b01eb8034235e37c",
+    "module.json": "18baec128f3eebece747a54f4800346ac020cf6b806c8e2353d662b4752e36a5"
+  }
+}

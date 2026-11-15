@@ -1,0 +1,38 @@
+{
+  "schema_version": 1,
+  "name": "Large presentation",
+  "font_family": "DejaVu Sans",
+  "font_size": 14,
+  "title_size": 16,
+  "label_size": 14,
+  "tick_size": 12,
+  "legend_size": 12,
+  "line_width": 2.0,
+  "marker_size": 6,
+  "grid": false,
+  "axes_spines": [
+    "left",
+    "right",
+    "top",
+    "bottom"
+  ],
+  "max_ticks": 5,
+  "scientific_notation": true,
+  "figure_width_in": 10,
+  "figure_height_in": 6,
+  "dpi": 600,
+  "background": "#ffffff",
+  "image_colormap": "gray",
+  "image_interpolation": "nearest",
+  "image_colorbar": true,
+  "image_aspect": "equal",
+  "auto_limits": true,
+  "channel_colormaps": {
+    "Z": "gray",
+    "Bias": "coolwarm",
+    "Current": "viridis",
+    "Excitation": "inferno"
+  },
+  "journal_frame": true,
+  "panel_labels": true
+}

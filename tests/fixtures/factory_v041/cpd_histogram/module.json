@@ -1,0 +1,51 @@
+{
+  "api_version": "1.0",
+  "id": "cpd_histogram",
+  "name": "CPD / Bias histogram",
+  "version": "0.4.1",
+  "description": "Interactive named value-range masks. Drag over the live histogram, add/rename/delete masks, choose Gaussian components per mask. Masks and comparison plots saved per scan.",
+  "category": "KPFM",
+  "entrypoint": "module:run",
+  "mode": "analysis",
+  "status": "experimental",
+  "requires": [
+    "numpy",
+    "scipy",
+    "matplotlib"
+  ],
+  "parameters": {
+    "trace_mode": {
+      "type": "choice",
+      "label": "Trace",
+      "default": "selected",
+      "choices": [
+        "selected",
+        "forward",
+        "backward",
+        "both"
+      ]
+    },
+    "bins": {
+      "type": "integer",
+      "label": "Histogram bins",
+      "default": 130,
+      "min": 20,
+      "max": 1000
+    },
+    "populations": {
+      "type": "integer",
+      "label": "Default Gaussians per mask",
+      "default": 2,
+      "min": 0,
+      "max": 8
+    },
+    "masks_json": {
+      "type": "text",
+      "label": "Named masks (JSON)",
+      "default": "[]",
+      "description": "Managed by the mask editor; JSON can also be imported/exported"
+    }
+  },
+  "interaction": "histogram_masks",
+  "snapshot_channels": "selected"
+}

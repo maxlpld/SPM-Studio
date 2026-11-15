@@ -1,0 +1,73 @@
+# ---- Python, virtual environments, tools
+.venv/
+venv/
+env/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+pip-wheel-metadata/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+.tox/
+.nox/
+node_modules/
+
+# ---- Build and release output (made by GitHub Actions, never committed)
+build/
+dist/
+dist-check/
+*.whl
+*.tar.gz
+/SPM-Studio-*.zip
+/SPM_Studio_AI_Integrated_*.zip
+release_notes.md
+.patch_backups/
+
+# ---- Secrets and personal credentials: never commit
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+id_rsa*
+id_ed25519*
+auth.json
+credentials.json
+secrets.json
+*.token
+.netrc
+.pypirc
+
+# ---- AI assistant runtime data (lives in the user's data folders, not here)
+.pi/
+pi-agent/
+sessions/
+*.jsonl
+chat_history*.json
+
+# ---- Research data, results and logs (keep measurements out of the repository)
+*.npy
+*.npz
+*.sxm
+*.gwy
+*.nhf
+*.nid
+*.log
+SPM_Studio_Results/
+demo-projects/
+legacy_reference/
+
+# ---- Operating system and editors
+.DS_Store
+Thumbs.db
+desktop.ini
+.vscode/
+.idea/
+*.swp
+*~

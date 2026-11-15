@@ -1,0 +1,86 @@
+name: Tests
+# Every push and pull request. Version tags (v*) are tested by release.yml instead.
+#
+# Linux runs on every push. Windows and macOS run on pull requests, on manual runs (Actions › Tests ›
+# Run workflow) and, once the repository is public, on every push. In a private repository GitHub counts
+# Windows minutes twice and macOS minutes ten times against the free monthly allowance; set the
+# repository variable FULL_TEST_MATRIX = true (Settings › Secrets and variables › Actions › Variables)
+# to run them on every push anyway.
+on:
+  push:
+    branches: ['**']
+    tags-ignore: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    name: Syntax, packaging, versions
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Python syntax
+        run: python -m compileall -q src scripts tests tools install.py
+      - name: Shell script syntax
+        run: for f in *.sh *.command; do bash -n "$f" || exit 1; done
+      - name: Version consistency (pyproject.toml, CHANGELOG.md, README badge)
+        run: python tools/release_tools.py check-changelog
+      - name: Update repository configured
+        run: |
+          repo="$(python tools/release_tools.py show-repo)"
+          if [ "$repo" = "YOUR_GITHUB_USER/SPM-Studio" ]; then
+            echo "::warning::update_config.json still has the placeholder; run: python tools/release_tools.py set-repo ${GITHUB_REPOSITORY}"
+          elif [ "${repo,,}" != "${GITHUB_REPOSITORY,,}" ]; then
+            echo "::warning::update_config.json points at $repo, this repository is ${GITHUB_REPOSITORY}"
+          fi
+      - name: Build sdist and wheel, check their contents
+        run: |
+          python -m pip install --upgrade pip build
+          python -m build --outdir dist-check
+          python - <<'PY'
+          import glob, zipfile
+          wheel = zipfile.ZipFile(glob.glob('dist-check/*.whl')[0]).namelist()
+          need = ['spm_studio/update_config.json', 'spm_studio/resources/spm-studio.png',
+                  'spm_studio/resources/fonts/Inter-Regular.otf', 'spm_studio/app.py',
+                  'spm_studio/core/updates.py']
+          missing = [n for n in need if n not in wheel]
+          assert not missing, f'missing from wheel: {missing}'
+          assert any(n.startswith('spm_studio/builtin_modules/') and n.endswith('.json') for n in wheel)
+          print('wheel ok,', len(wheel), 'files')
+          PY
+      - name: Release archive builds
+        run: python tools/release_tools.py archive dist-check && unzip -l dist-check/SPM-Studio-*.zip | tail -n 1
+
+  linux:
+    name: Linux
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ['3.11', '3.13']      # oldest and newest supported
+    uses: ./.github/workflows/test-suite.yml
+    with:
+      os: ubuntu-latest
+      python-version: ${{ matrix.python-version }}
+
+  windows-macos:
+    name: Windows / macOS
+    if: github.event_name != 'push' || !github.event.repository.private || vars.FULL_TEST_MATRIX == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest]
+    uses: ./.github/workflows/test-suite.yml
+    with:
+      os: ${{ matrix.os }}
+      python-version: '3.12'

@@ -1,0 +1,38 @@
+{
+  "schema_version": 1,
+  "name": "Clean publication",
+  "font_family": "DejaVu Sans",
+  "font_size": 10,
+  "title_size": 11,
+  "label_size": 10,
+  "tick_size": 9,
+  "legend_size": 8,
+  "line_width": 1.5,
+  "marker_size": 4,
+  "grid": false,
+  "axes_spines": [
+    "left",
+    "right",
+    "top",
+    "bottom"
+  ],
+  "max_ticks": 5,
+  "scientific_notation": true,
+  "figure_width_in": 7.0,
+  "figure_height_in": 4.4,
+  "dpi": 600,
+  "background": "#ffffff",
+  "image_colormap": "gray",
+  "image_interpolation": "nearest",
+  "image_colorbar": true,
+  "image_aspect": "equal",
+  "auto_limits": true,
+  "channel_colormaps": {
+    "Z": "gray",
+    "Bias": "coolwarm",
+    "Current": "viridis",
+    "Excitation": "inferno"
+  },
+  "journal_frame": true,
+  "panel_labels": true
+}
