@@ -123,8 +123,10 @@ def test_main_window_starts_empty_and_keeps_appearance_only(app,monkeypatch,tmp_
     assert window.module_panel.masks==[]
     assert window.settings.value('last_file') is None
     assert window.settings.value('masks_abcd') is None
-    assert window.settings.value('theme')=='default_dark'
-    assert window.settings.value('plot_format')=='pdf'
+    # Legacy default_dark is migrated to the current graphite theme.
+    assert window.settings.value('theme')=='graphite'
+    # The obsolete plot_format preference is scan/session-scoped and cleared.
+    assert window.settings.value('plot_format') is None
     window.close()
 
 

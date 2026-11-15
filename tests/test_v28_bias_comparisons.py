@@ -88,9 +88,9 @@ def test_inset_bounds_position_and_export_vector(tmp_path):
 def test_auto_unit_shared_across_small_and_large_signal_magnitudes():
     graphs,specs=_scenario(unit='V',signal='Excitation')
     # Make second site ~100x stronger so individual Auto unit selection would differ.
-    second=specs['/tmp/synthetic_bias_1.npz']
+    second=specs[str(Path('/tmp/synthetic_bias_1.npz'))]
     second.data[:,1]*=.001
-    first=specs['/tmp/synthetic_bias_0.npz']
+    first=specs[str(Path('/tmp/synthetic_bias_0.npz'))]
     first.data[:,1]*=.1
     fig,_,warnings=create_figure({'options':{'share_bias':True,'share_signal':True},
                                   'images':[],'graphs':graphs},{},specs)

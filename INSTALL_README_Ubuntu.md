@@ -28,7 +28,7 @@ The manual install from the downloaded archive works exactly as before:
 
 ## Requirements
 
-- Ubuntu 24.04 / 26.04 (or similar), **Python 3.11+** with `venv` + `pip`, run as your normal user (never `sudo`).
+- Ubuntu 24.04 / 26.04 (or similar), **Python 3.12 or 3.13** with `venv` + `pip`, run as your normal user (never `sudo`).
 - ~1.5 GiB free disk space, internet for the one-time dependency download.
 - Qt system libraries:
 

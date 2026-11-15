@@ -11,7 +11,7 @@
 
 <p align="center">
   <img alt="Version 0.0.2" src="https://img.shields.io/badge/version-0.0.2-57758B">
-  <img alt="Python 3.11+" src="https://img.shields.io/badge/python-3.11%2B-3776AB">
+  <img alt="Python 3.12–3.13" src="https://img.shields.io/badge/python-3.12--3.13-3776AB">
   <img alt="Linux, Windows, macOS" src="https://img.shields.io/badge/platform-Linux%20%7C%20Windows%20%7C%20macOS-555555">
   <img alt="MIT licence" src="https://img.shields.io/badge/licence-MIT-2E7D32">
 </p>
@@ -47,7 +47,7 @@ runs a self-test and creates the app launcher. Run it as your normal user — ne
 curl -fsSL https://raw.githubusercontent.com/maxlpld/SPM-Studio/main/get-spm-studio.sh | bash
 ```
 
-**macOS** (Terminal; Python **3.12 recommended**, install via `brew install python@3.12` or [python.org](https://www.python.org/downloads/macos/). Supported: 3.11–3.13):
+**macOS** (Terminal; Python **3.12 recommended**, install via `brew install python@3.12` or [python.org](https://www.python.org/downloads/macos/). Supported: 3.12–3.13):
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/maxlpld/SPM-Studio/main/get-spm-studio.sh | bash
@@ -207,7 +207,7 @@ Check results on your own data before publishing them.
 | | |
 |---|---|
 | Systems | Ubuntu 24.04+ (other Linux distributions with Qt 6 libraries should work), Windows 10 21H2+ / 11 (64-bit), macOS 12+ (Apple Silicon and Intel) |
-| Python | 3.11 or newer (the installers check this; Windows can install 3.12 via winget, macOS via Homebrew) |
+| Python | 3.12 or 3.13 (installers check this; Windows can install 3.12 via winget, macOS via Homebrew) |
 | Disk / network | about 1.5 GiB; internet for the one-time download of the Python packages (PySide6, NumPy, SciPy, …) |
 | AI assistant | optional; Node.js, Pi, Ollama etc. are installed only if you choose them |
 

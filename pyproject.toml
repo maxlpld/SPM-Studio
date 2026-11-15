@@ -7,7 +7,7 @@ name = "spm-studio"
 version = "0.0.2"
 description = "SPM Studio — Scientific image & data analysis"
 readme = "README.md"
-requires-python = ">=3.11,<3.14"
+requires-python = ">=3.12,<3.14"
 license = "MIT"
 dependencies = ["numpy>=1.24", "PySide6>=6.5", "gwyfile>=0.3.0", "certifi>=2024.2"]
 

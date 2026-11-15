@@ -12,7 +12,7 @@ chat history, no personal scans/results, no Pi configuration. It was checked for
 curl -fsSL https://raw.githubusercontent.com/maxlpld/SPM-Studio/main/get-spm-studio.sh | bash
 ```
 
-It downloads the newest release from GitHub and runs the installer below (Python 3.11+ must be installed
+It downloads the newest release from GitHub and runs the installer below (Python 3.12 or 3.13 must be installed
 first, see Requirements). Run it again at any time to update. Later updates: **Settings › Check for
 updates…** in the app, or `~/.local/bin/spm-studio --update`.
 
@@ -30,7 +30,7 @@ The manual install from the downloaded archive works exactly as before:
 ## Requirements
 
 - macOS 12 Monterey or newer, your normal user account (never `sudo`).
-- **Python 3.11+** — the `python3` that comes with the Xcode command-line tools is too old. Install the
+- **Python 3.12 or 3.13** — the `python3` that comes with the Xcode command-line tools is too old. Install the
   official one from https://www.python.org/downloads/macos/ (recommended), or with Homebrew
   `brew install python@3.12` (the installer offers this when Homebrew is present).
 - ~1.5 GB free disk space, internet for the one-time dependency download.
@@ -105,7 +105,7 @@ Your data, AI sign-ins/keys, `~/.pi`, Ollama and its models are always kept.
 
 ## Troubleshooting
 
-- **“Python 3.11 or newer is required”**: install Python from python.org (or `brew install python@3.12`), rerun.
+- **“Python 3.12 or 3.13 is required”**: install Python from python.org (or `brew install python@3.12`), rerun.
 - **`SMOKE FAILED`**: nothing switched; `rm -rf ~/Library/Application\ Support/SPMStudio/releases/0.0.1`, retry.
 - **“SPM Studio.app can't be opened”**: right-click › *Open* once (the app is created locally by the
   installer and is not notarised).

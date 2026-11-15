@@ -1,5 +1,6 @@
 """Bounded LRU for loaded scans and processed data."""
 from collections import OrderedDict
+import os
 import numpy as np
 
 class ArrayCache:
@@ -36,10 +37,10 @@ class ArrayCache:
 
     def evict_scan(self,path):
         """Forget one scan's cached arrays without flushing other loaded scans."""
-        target=str(path)
+        target=os.path.normcase(os.path.normpath(str(path)))
         for key in list(self._items):
             if (isinstance(key,tuple) and key and key[0]=='scan' and
-                isinstance(key[1],tuple) and key[1] and str(key[1][0])==target):
+                isinstance(key[1],tuple) and key[1] and os.path.normcase(os.path.normpath(str(key[1][0])))==target):
                 _, cost=self._items.pop(key)
                 self._bytes-=cost
 

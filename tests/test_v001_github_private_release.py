@@ -353,7 +353,8 @@ def test_get_script_private_repository_without_sign_in_explains(tmp_path):
                SPM_STUDIO_GITHUB_TOKEN='', GH_TOKEN='', GITHUB_TOKEN='')
     r = subprocess.run(['bash', str(ROOT / 'get-spm-studio.sh')], capture_output=True, text=True, env=env,
                        stdin=subprocess.DEVNULL, timeout=60)
-    assert r.returncode != 0 and 'gh auth login' in r.stderr
+    # Public repositories do not require gh login; a missing release is explained clearly.
+    assert r.returncode != 0 and 'No released version found' in r.stderr
 
 
 @POSIX_USER

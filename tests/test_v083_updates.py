@@ -166,7 +166,10 @@ def test_release_tools_notes_and_tag():
     assert r.returncode != 0
     r = subprocess.run([sys.executable, str(ROOT / 'tools/release_tools.py'), 'notes', v],
                        capture_output=True, text=True)
-    assert 'Check for updates' in r.stdout
+    # Notes come from the *current* version, not historical v0.8.3 text.
+    assert r.returncode == 0
+    assert r.stdout.strip()
+    assert r.stdout.strip() in (ROOT / 'CHANGELOG.md').read_text()
 
 
 @pytest.mark.skipif(os.name == 'nt' or (hasattr(os, 'geteuid') and os.geteuid() == 0),
