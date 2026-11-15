@@ -100,7 +100,11 @@ def test_molecule_is_placed_on_duplicate_with_physical_scale(tmp_path):
     m=json.loads((out/'molecule_placement.json').read_text())
     assert m['count']>50
     assert m['pixel_size_nm']==doc['roi_geometry']['pixel_size_nm']
-    assert m['molecule_png_pixels']==[120,180]
+    # Transparent margins are trimmed by default; metadata stores visible artwork dimensions.
+    assert m['artwork_scale']['artwork_canvas_px'] == [120, 180]
+    assert m['molecule_png_pixels'] == m['artwork_scale']['visible_molecule_px']
+    assert 0 < m['molecule_png_pixels'][0] <= 120
+    assert 0 < m['molecule_png_pixels'][1] <= 180
     assert m['rotation_deg']==pytest.approx(math.degrees(math.atan2(doc['basis_local_nm'][1][0],doc['basis_local_nm'][0][0]))-90)
     assert np.any(np.asarray(Image.open(out/'lattice_plus_molecules.png'))[:,:,0]>200)
     assert ctx.scan_path.read_text()=='unchanged instrument file'
