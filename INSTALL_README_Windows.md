@@ -33,7 +33,7 @@ The manual install from the downloaded archive works exactly as before:
 
 - Windows 10 (21H2+) or 11, 64-bit, a normal user account (**no administrator rights needed** — do not
   use *Run as administrator*).
-- **Python 3.12 or 3.13** from python.org or winget. If none is found, the installer offers to install Python 3.12
+- **Python 3.12 or newer** from python.org or winget. If none is found, the installer offers to install Python 3.12
   for your user with `winget` (built into Windows 11 / recent Windows 10).
 - ~1.5 GB free disk space, internet for the one-time dependency download.
 
@@ -119,7 +119,7 @@ Your data, AI sign-ins/keys, Ollama and its models are always kept.
 
 ## Troubleshooting
 
-- **“Python 3.12 or 3.13 is required”**: install Python from https://www.python.org/downloads/windows/
+- **“Python 3.12 or newer is required”**: install Python from https://www.python.org/downloads/windows/
   (tick *Add python.exe to PATH*) or `winget install -e --id Python.Python.3.12 --scope user`, then rerun.
 - **Typing `python` opens the Microsoft Store**: that is the Store stub; the installer ignores it — install
   a real Python as above.

@@ -30,10 +30,10 @@ fi
 # (Ubuntu releases can ship Python 3.14+ before SPM Studio supports its wheels).
 find_python() {
   local candidate
-  for candidate in "${SPM_PYTHON:-}" python3.12 python3.13 python3; do
+  for candidate in "${SPM_PYTHON:-}" python3.12 python3.13 python3.14 python3.15 python3; do
     [[ -n "$candidate" ]] || continue
     command -v "$candidate" >/dev/null 2>&1 || continue
-    if "$candidate" -c 'import sys, venv; raise SystemExit(not ((3,12) <= sys.version_info[:2] < (3,14)))' 2>/dev/null; then
+    if "$candidate" -c 'import sys, venv, ensurepip; raise SystemExit(sys.version_info[:2] < (3,12))' 2>/dev/null; then
       command -v "$candidate"
       return 0
     fi
@@ -44,8 +44,8 @@ preflight() {
   command -v unzip >/dev/null || { echo 'unzip missing: sudo apt install unzip' >&2;exit 2; }
   BASE_PY="$(find_python || true)"
   if [[ -z "$BASE_PY" ]]; then
-    echo 'SPM Studio requires Python 3.12 or 3.13 with venv; Python 3.11 and 3.14+ are not supported.' >&2
-    echo 'Install Python 3.12/3.13 and its venv module, or set SPM_PYTHON to a compatible executable.' >&2
+    echo 'SPM Studio requires Python 3.12 or newer with venv and ensurepip (Python 3.11 is not supported).' >&2
+    echo 'Install Python 3.12+ and its venv module, or set SPM_PYTHON to a compatible executable.' >&2
     exit 2
   fi
   "$BASE_PY" -c 'import sys; print("Python:", sys.version.split()[0], "(" + sys.executable + ")")'

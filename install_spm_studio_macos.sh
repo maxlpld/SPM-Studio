@@ -26,21 +26,27 @@ case "$MODE" in --install|--stage|--activate|--dry-run|--prune-old) ;;
   *) echo 'Use --dry-run, --stage, --activate, --install or --prune-old' >&2; exit 2;; esac
 [[ -f "$ROOT/pyproject.toml" && -f "$ROOT/src/spm_studio/ai/chat_ui.py" ]] || { echo 'Run from the extracted SPM_Studio folder.' >&2; exit 2; }
 
-python_ok() {   # prints the interpreter path when it is Python 3.12 or 3.13 and has venv
+python_ok() {   # prints a Python >=3.12 interpreter with venv and ensurepip
   "$1" - <<'PY' 2>/dev/null
-import sys, venv
-if (3, 12) <= sys.version_info < (3, 14):
+import sys, venv, ensurepip
+if sys.version_info[:2] >= (3, 12):
     print(sys.executable)
 PY
 }
 
 find_python() {
   local c found
-  for c in python3.12 python3.13 \
+  for c in "${SPM_PYTHON:-}" python3.12 python3.13 python3.14 python3.15 \
            /opt/homebrew/bin/python3.12 /usr/local/bin/python3.12 \
+           /opt/homebrew/bin/python3.13 /usr/local/bin/python3.13 \
+           /opt/homebrew/bin/python3.14 /usr/local/bin/python3.14 \
+           /opt/homebrew/bin/python3.15 /usr/local/bin/python3.15 \
            /Library/Frameworks/Python.framework/Versions/3.12/bin/python3 \
            /Library/Frameworks/Python.framework/Versions/3.13/bin/python3 \
+           /Library/Frameworks/Python.framework/Versions/3.14/bin/python3 \
+           /Library/Frameworks/Python.framework/Versions/3.15/bin/python3 \
            /opt/homebrew/bin/python3 /usr/local/bin/python3 python3; do
+    [[ -n "$c" ]] || continue
     if command -v "$c" >/dev/null 2>&1; then
       found="$(python_ok "$(command -v "$c")" || true)"
       if [[ -n "$found" ]]; then echo "$found"; return 0; fi
@@ -92,12 +98,12 @@ stage() {
   if [[ -z "$base_py" ]]; then
     brew_bin="$(brew_path)"
     if [[ -n "$brew_bin" ]]; then
-      read -r -p 'Python 3.12/3.13 not found. Install python@3.12 with Homebrew now? [Y/n] ' answer
+      read -r -p 'Python 3.12+ not found. Install python@3.12 with Homebrew now? [Y/n] ' answer
       if [[ -z "$answer" || "$answer" == [Yy]* ]]; then "$brew_bin" install python@3.12; base_py="$(find_python || true)"; fi
     fi
   fi
   if [[ -z "$base_py" ]]; then
-    echo 'Python 3.12 or 3.13 is required; other Python versions are not currently supported. Python 3.12 is recommended.' >&2
+    echo 'Python 3.12 or newer with venv is required. Python 3.12 is recommended for maximum third-party package compatibility.' >&2
     echo 'Install it from https://www.python.org/downloads/macos/ (or: brew install python@3.12), then run this again.' >&2
     open 'https://www.python.org/downloads/macos/' 2>/dev/null || true
     exit 2
