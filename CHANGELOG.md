@@ -7,6 +7,14 @@ so write it for users. Add new versions **at the top**.
 The internal builds that preceded the GitHub project (0.7.0 – 0.8.3) are documented in
 [`docs/DEVELOPMENT_HISTORY.md`](docs/DEVELOPMENT_HISTORY.md).
 
+## 0.0.4 — 2026-11-16
+
+- **Improved first-time Pi assistant setup:** the Models step now proposes Fast/Smart defaults from models listed by connected providers, prefers subscription authentication, and filters out old GPT-4 models that are incompatible with ChatGPT OAuth. Users can override all choices, keep custom choices on refresh, or restore recommendations.
+- **Updated ChatGPT subscription sign-in** to match Pi's current OpenAI login flow. The setup still checks actual model access with a live test, since model listings alone do not guarantee access.
+- **Prevented unfinished AI setup:** the Finish button is now disabled until Pi answers a real test successfully, making unsupported model errors clear rather than silently accepting a broken setup.
+- **Fixed Git installation during Windows Pi setup:** the wizard explicitly selects the `winget` source to bypass a broken Microsoft Store source (certificate error `0x8a15005e`), with manual installation instructions if necessary.
+- SPM processing, scientific analysis modules, and existing user data are unchanged. The update is installed beside previous versions.
+
 ## 0.0.3 — 2026-11-16
 
 - **Fixed Windows installation from PowerShell.** Python detection now keeps its interpreter-information hashtable separate from the private virtual environment's `python.exe` path. This resolves the `System.Collections.Hashtable is not recognized` failure when installing with Python 3.12 or 3.13, including Anaconda Python.
