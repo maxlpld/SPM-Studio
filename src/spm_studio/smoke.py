@@ -78,7 +78,10 @@ def run(win) -> int:
         assert win.ai_dock.tools_button is not None
         from spm_studio.ai.config import spm_context_file
         from spm_studio.core import paths
-        assert str(paths.scripts_dir()) in spm_context_file(paths.scripts_dir()).read_text()
+        # The generated prompt is UTF-8. Without an explicit encoding,
+        # Windows users with a cp1252 locale fail this installer smoke test
+        # on perfectly valid Unicode punctuation (e.g. U+201D).
+        assert str(paths.scripts_dir()) in spm_context_file(paths.scripts_dir()).read_text(encoding='utf-8')
 
     def live_tools():
         from spm_studio.core import paths
