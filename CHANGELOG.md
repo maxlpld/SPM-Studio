@@ -7,6 +7,16 @@ so write it for users. Add new versions **at the top**.
 The internal builds that preceded the GitHub project (0.7.0 – 0.8.3) are documented in
 [`docs/DEVELOPMENT_HISTORY.md`](docs/DEVELOPMENT_HISTORY.md).
 
+## 0.0.6 — 2026-11-16
+
+### Windows installation
+
+- **Fixed the Windows update smoke test failing on Unicode content:** the assistant's generated UTF-8 system context is now decoded explicitly as UTF-8, avoiding `UnicodeDecodeError` under Windows cp1252 locales (including environments based on Anaconda Python).
+- **Consistent Unicode startup:** Windows staging checks now set `PYTHONUTF8=1`, and desktop/Start-menu shortcuts and the command launcher start Python in UTF-8 mode. This keeps SPM Studio's generated configuration and assistant content readable on Windows machines regardless of legacy text encoding defaults.
+- **Cross-platform regression coverage:** the automated Windows test workflow also runs the application smoke test with Python UTF-8 mode disabled to prevent this issue from returning.
+
+This is a Windows installation and reliability patch. All scientific analysis features and existing user data are unchanged.
+
 ## 0.0.5 — 2026-11-16
 
 ### Interface

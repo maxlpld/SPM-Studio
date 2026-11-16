@@ -475,10 +475,15 @@ def test_literature_sources_reach_each_agent(home):
 
 
 # ------------------------------------------------------------------------- release
-def test_version_and_changelog_are_0_0_5():
-    assert re.search(r'^version = "0\.0\.5"', (ROOT / 'pyproject.toml').read_text(encoding='utf8'), re.M)
-    assert '## 0.0.5 — ' in (ROOT / 'CHANGELOG.md').read_text(encoding='utf8')
-    assert 'version-0.0.5-' in (ROOT / 'README.md').read_text(encoding='utf8')
+def test_version_and_changelog_match_current_package():
+    # This regression should remain valid for subsequent patch releases.
+    match = re.search(r'^version = "(\d+\.\d+\.\d+)"',
+                      (ROOT / 'pyproject.toml').read_text(encoding='utf8'), re.M)
+    assert match
+    current = match.group(1)
+    assert tuple(map(int, current.split('.'))) >= (0, 0, 5)
+    assert f'## {current} — ' in (ROOT / 'CHANGELOG.md').read_text(encoding='utf8')
+    assert f'version-{current}-' in (ROOT / 'README.md').read_text(encoding='utf8')
     assert 'SPM Studio — Scientific image & data analysis' not in \
         (ROOT / 'src' / 'spm_studio' / 'ui' / 'main_window.py').read_text(encoding='utf8')
     from spm_studio.core import paths
@@ -582,7 +587,9 @@ def test_settings_window_pages_and_library_actions(window, tmp_path, monkeypatch
     assert dialog.stack.currentIndex() == 3
     author = dialog.findChild(type(dialog.about_version), 'AboutAuthorV005')
     assert 'maxlpld' in author.text() and 'https://github.com/maxlpld' in author.text()
-    assert '0.0.5' in dialog.about_version.text()
+    current = re.search(r'^version = "(\d+\.\d+\.\d+)"',
+                        (ROOT / 'pyproject.toml').read_text(encoding='utf8'), re.M).group(1)
+    assert f'Version {current}' in dialog.about_version.text()
     assert dialog.findChild(QPushButton, 'AboutGitHubButtonV005') is not None
     assert dialog.findChild(QPushButton, 'SettingsGitHubButtonV005') is not None
     # theme list follows the theme files
