@@ -505,9 +505,10 @@ class PiSetupWizard(QDialog):
                 can_route = bool(recommended['router'] and self.use_router.isEnabled())
                 self.use_router.setChecked(can_route)
                 self.economics.setCurrentIndex(self.economics.findData('default'))
+            # Refresh controls without marking defaults as a manual edit.
+            self._router_toggled(self.use_router.isChecked())
         finally:
             self._updating_model_choices = False
-        self._router_toggled(self.use_router.isChecked())
 
         if not auth:
             self.model_guidance.setText('No connected provider. Go back to Sign in first.')

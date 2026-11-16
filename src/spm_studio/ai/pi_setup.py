@@ -397,7 +397,9 @@ def remove_auth(provider: str, directory: Path | None = None):
 
 def login_script(provider: str) -> Path:
     label = next((lab for p, lab, _ in SUBSCRIPTIONS if p == provider), provider)
-    command = next((c for p, _, c in SUBSCRIPTIONS if p == provider), '/login')
+    # Preserve the older Pi provider command for existing installations.
+    command = next((c for p, _, c in SUBSCRIPTIONS if p == provider),
+                   '/login openai-codex' if provider == 'openai-codex' else '/login')
     banner = (f'SPM Studio - sign in to {label} for the assistant\n'
               '\n'
               f'1. In the Pi screen below, type:   {command}   and press Enter.\n'
