@@ -49,11 +49,11 @@ if ((Test-Admin) -and $Mode -ne 'DryRun') {
 
 function Get-PythonVersion([string]$Exe, [string[]]$PreArgs) {
     try {
-        $out = & $Exe @PreArgs -c "import sys;print('%d.%d' % sys.version_info[:2]);print(sys.executable)" 2>$null
+        $out = & $Exe @PreArgs -c "import sys,venv,ensurepip;print('%d.%d' % sys.version_info[:2]);print(sys.executable)" 2>$null
         if ($LASTEXITCODE -ne 0 -or -not $out) { return $null }
         $lines = @($out)
         $v = [version]$lines[0]
-        if ($v -ge [version]'3.12' -and $v -lt [version]'3.14') { return @{ Version = $lines[0]; Path = $lines[1] } }
+        if ($v -ge [version]'3.12') { return @{ Version = $lines[0]; Path = $lines[1] } }
     } catch { }
     return $null
 }
@@ -61,14 +61,14 @@ function Get-PythonVersion([string]$Exe, [string[]]$PreArgs) {
 function Find-Python {
     $candidates = @()
     if (Get-Command py -ErrorAction SilentlyContinue) {
-        foreach ($tag in '-3.12', '-3.13', '-3') { $candidates += ,@('py', @($tag)) }
+        foreach ($tag in '-3.12', '-3.13', '-3.14', '-3.15', '-3') { $candidates += ,@('py', @($tag)) }
     }
     foreach ($name in 'python', 'python3') {
         $cmd = Get-Command $name -ErrorAction SilentlyContinue
         # Skip the Microsoft Store "python.exe" stub, which opens the Store instead of running.
         if ($cmd -and $cmd.Source -notlike '*WindowsApps*') { $candidates += ,@($cmd.Source, @()) }
     }
-    foreach ($v in '312', '313') {
+    foreach ($v in '312', '313', '314', '315') {
         $p = Join-Path $env:LOCALAPPDATA "Programs\Python\Python$v\python.exe"
         if (Test-Path $p) { $candidates += ,@($p, @()) }
     }
@@ -81,9 +81,9 @@ function Find-Python {
 
 function Install-PythonWithWinget {
     if (-not (Get-Command winget -ErrorAction SilentlyContinue)) { return $false }
-    $answer = Read-Host 'Python 3.12/3.13 was not found. Install Python 3.12 for your user with winget now? [Y/n]'
+    $answer = Read-Host 'Python 3.12+ was not found. Install Python 3.12 for your user with winget now? [Y/n]'
     if ($answer -and $answer -notmatch '^[Yy]') { return $false }
-    & winget install -e --id Python.Python.3.12 --scope user --accept-source-agreements --accept-package-agreements
+    & winget install -e --id Python.Python.3.12 --scope user --source winget --accept-source-agreements --accept-package-agreements
     return ($LASTEXITCODE -eq 0)
 }
 
@@ -123,7 +123,7 @@ function Invoke-Stage {
         if (Install-PythonWithWinget) { $PythonInfo = Find-Python }
     }
     if (-not $PythonInfo) {
-        Write-Host 'Python 3.12 or 3.13 is required.' -ForegroundColor Yellow
+        Write-Host 'Python 3.12 or newer with venv and ensurepip is required.' -ForegroundColor Yellow
         Write-Host 'Install it from https://www.python.org/downloads/windows/ (tick "Add python.exe to PATH"),'
         Write-Host 'or run:  winget install -e --id Python.Python.3.12 --scope user'
         Write-Host 'then run this installer again.'
