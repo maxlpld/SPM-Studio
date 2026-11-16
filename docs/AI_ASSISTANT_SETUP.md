@@ -78,6 +78,52 @@ a system service, and an existing Ollama configuration is not changed.
   Claude Code's `plan` permission mode / Codex `read-only` sandbox; with the tools button on, Claude Code may
   edit files (`acceptEdits`) and Codex runs with `workspace-write`, inside the SPM Studio scripts folder.
 
+## Literature sources: Consensus and Zotero (Settings › Literature)
+
+Both are optional, off by default and read-only. They are offered to agent backends (Pi, Claude Code, Codex);
+a direct API connection is chat-only and cannot call them.
+
+### Zotero
+
+| Choice | What is needed | Where the data goes |
+|---|---|---|
+| **Zotero app on this computer** (recommended) | Zotero 7 or later running, with *Settings › Advanced › Allow other applications on this computer to communicate with Zotero* ticked | Stays on the computer (`http://127.0.0.1:23119/api`, read-only). |
+| **zotero.org account** | Numeric library ID and a private key with read-only library access (zotero.org › Settings › Security) | Requests go to `api.zotero.org`. The key is kept in the operating system's keyring, never in a settings file; without a keyring set the environment variable `ZOTERO_API_KEY`. |
+
+*Test connection* checks it. The assistant then has four read-only tools — search, one item (abstract, notes,
+attachments), collections, indexed full text — through a small MCP server
+(`python -m spm_studio.ai.literature --mcp`) and through the same module as a command line
+(`python -m spm_studio.ai.literature search "kelvin probe" --limit 10`), which works with every agent.
+Nothing can be added, changed or deleted in Zotero.
+
+### Consensus
+
+Consensus is reached through its hosted MCP server, `https://mcp.consensus.app/mcp`, with your own Consensus
+sign-in (OAuth in the browser). SPM Studio registers that address with the agent and never sees the password
+or the token:
+
+| Assistant | What *Apply* does | Sign in |
+|---|---|---|
+| Claude Code | `claude mcp add --scope user --transport http consensus https://mcp.consensus.app/mcp` | *Sign in to Consensus…* opens Claude Code: `/mcp` › *consensus* › *Authenticate*. |
+| Codex | `codex mcp add consensus --url https://mcp.consensus.app/mcp` | *Sign in to Consensus…* runs `codex mcp login consensus`. |
+| Pi installed by SPM Studio | Writes the server into SPM Studio's private Pi folder (`mcp.json`); needs Pi 0.99 or later. | *Sign in to Consensus…* opens Pi: `/mcp`, then authenticate *consensus*. |
+| Your own Pi | Nothing is written (your `~/.pi` is never changed): the entries are copied to the clipboard for `~/.pi/agent/mcp.json`. | In your Pi: `/mcp`. |
+
+If your university provides Consensus, sign in with your university e-mail: the licence is attached to the
+account. A Zotero library linked inside your Consensus account is used by Consensus itself; connecting Zotero
+in SPM Studio as well lets the assistant read your library directly.
+
+To disconnect: untick the source and click *Apply* (the registration is removed from the agent).
+
+## Guides the assistant reads before it builds something
+
+Every folder the assistant may write to contains a `README.md`: the scripts folder, and `profiles`,
+`export_presets`, `themes`, `colormaps`, `plot_styles` and `shortcuts` in the customization folder. Each one
+states how the files of that folder must be built (required keys, allowed values, a complete example, the
+checks to run). The assistant's instructions list these guides and tell it to read the one of a folder before
+creating or changing anything there, and to give every script a `README.md` (shown by the *Read me* button
+of the Analysis panel). The guides are installed and updated automatically; a guide you edited is kept.
+
 ## Safety rules (all backends)
 
 - Analysis of saved data only — the assistant is instructed never to send commands to microscopes,

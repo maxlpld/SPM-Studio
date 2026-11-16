@@ -215,18 +215,41 @@ def _manifest_style(info):
         return None
 
 
-ARRANGEMENTS=('row','triangle','inverted_triangle')
+ARRANGEMENTS=('row','triangle','inverted_triangle','grid')
+MAX_PANELS=12
 
 
-def layout_cells(n, width, height, margin, gap, arrangement='row'):
+def grid_shape(n, columns=0):
+    """(columns, rows) of a grid of ``n`` panels; ``columns=0`` picks a near-square grid."""
+    import math
+    n=max(1,int(n))
+    columns=int(columns or 0)
+    if columns<=0:columns=math.ceil(math.sqrt(n))
+    columns=max(1,min(columns,n))
+    return columns,math.ceil(n/columns)
+
+
+def layout_cells(n, width, height, margin, gap, arrangement='row', columns=0):
     """Panel rectangles (x, y, w, h) in page pixels.
 
     * 1 or 2 panels, or ``row``: side by side.
     * ``triangle`` (3 panels): one centred on top, two below  ▲
     * ``inverted_triangle`` (3 panels): two on top, one centred below  ▼
+    * ``grid`` (v0.0.5, any number of panels): ``columns`` per row (0 = automatic); an incomplete
+      last row is centred.
     Panel order: top → bottom, left → right.
     """
     uw=width-2*margin;uh=height-2*margin
+    if arrangement=='grid':
+        cols,rows=grid_shape(n,columns)
+        cw=(uw-gap*(cols-1))/cols;rh=(uh-gap*(rows-1))/rows
+        cells=[]
+        for i in range(n):
+            r,c=divmod(i,cols)
+            in_row=min(cols,n-r*cols)
+            offset=(uw-(in_row*cw+(in_row-1)*gap))/2
+            cells.append((margin+offset+c*(cw+gap),margin+r*(rh+gap),cw,rh))
+        return cells
     if n==3 and arrangement in ('triangle','inverted_triangle'):
         cw=(uw-gap)/2;rh=(uh-gap)/2
         centre=(margin+(uw-cw)/2)
@@ -238,8 +261,20 @@ def layout_cells(n, width, height, margin, gap, arrangement='row'):
     return [(margin+i*(cw+gap),margin,cw,uh) for i in range(n)]
 
 
+def _panel_scan(scan, spec, cache):
+    """The scan a panel reads: the active one, or another file named by ``spec['scan_path']``."""
+    other=spec.get('scan_path')
+    if not other or (scan is not None and Path(other).resolve()==Path(scan.path).resolve()):
+        return scan
+    key=str(Path(other).resolve())
+    if key not in cache:
+        from .io import read_scan
+        cache[key]=read_scan(key)
+    return cache[key]
+
+
 def export_publication(scan, panels, destination, preset, *, plot_config=None, transparent=False,
-                       arrangement='row', panel_letters=None):
+                       arrangement='row', panel_letters=None, columns=0):
     """``transparent`` leaves the page background unpainted (PNG alpha, PDF and SVG without a
     white rectangle); JPEG has no alpha and stays white."""
     from PySide6.QtCore import QRectF, QSizeF, QSize, QRect, Qt
@@ -249,8 +284,13 @@ def export_publication(scan, panels, destination, preset, *, plot_config=None, t
     suffix=dest.suffix.lower()
     if suffix not in ('.png','.jpg','.jpeg','.pdf','.svg'):
         raise ValueError('Publication layout supports PNG, JPG, PDF and SVG')
-    if len(panels) not in (1,2,3):raise ValueError('Select one, two or three publication panels')
+    if not 1<=len(panels)<=MAX_PANELS:raise ValueError(f'Select 1 to {MAX_PANELS} publication panels')
     if arrangement not in ARRANGEMENTS:raise ValueError(f'Unknown arrangement {arrangement!r}')
+    if len(panels)>3 and arrangement!='grid':arrangement='grid'   # row/triangle exist for up to 3 images
+    main_scan=scan
+    scan_cache={}
+    # Panels of other scans (v0.0.5) are read once, before any painting starts.
+    panel_scans=[_panel_scan(main_scan,spec,scan_cache) for spec in panels]
     if panel_letters is None:panel_letters=len(panels)>1
     dest.parent.mkdir(parents=True,exist_ok=True)
     dpi=int(preset['dpi'])
@@ -260,12 +300,13 @@ def export_publication(scan, panels, destination, preset, *, plot_config=None, t
         painter.setRenderHint(QPainter.RenderHint.Antialiasing,True)
         margin=dpi/25.4*float(preset['margin_mm']);gap=dpi/25.4*4 if len(panels)>1 else 0
         font_size=dpi/72*float(preset['font_size_pt'])
-        cells=layout_cells(len(panels),w,h,margin,gap,arrangement)
+        cells=layout_cells(len(panels),w,h,margin,gap,arrangement,columns)
         letter_size=font_size*1.35
         letter_strip=letter_size*1.25 if panel_letters and len(panels)>1 else 0.
         side_reserve=max(30, font_size*2.8)
         below_reserve=font_size*2.20
         for i,spec in enumerate(panels):
+            scan=panel_scans[i]
             cx,cy,cw,ch=cells[i]
             cell=QRectF(cx,cy+letter_strip,cw,max(24.,ch-letter_strip))
             side=spec.get('colorbar_position','right')
@@ -414,9 +455,10 @@ def export_publication(scan, panels, destination, preset, *, plot_config=None, t
     # v31: page cropped exactly to the drawn content (no empty bands at the
     # top/bottom or on the outer left/right edges); same pixels per mm.
     render_info=render_tight(dest,draw,w,h,dpi,transparent=transparent)
+    scan=main_scan
     try:source_fingerprint=fingerprint(scan.path)
     except OSError:source_fingerprint=None
-    metadata={'schema_version':1,'source':str(scan.path),'fingerprint':source_fingerprint,'export_preset':preset,'transparent_background':bool(transparent),'tight_crop':render_info,'arrangement':arrangement,'panel_letters':bool(panel_letters),'panels':[{k:(str(v) if isinstance(v,Path) else (v.__dict__ if isinstance(v,ImageStyle) else [getattr(s,'__dict__',s) for s in v] if k=='steps' else v)) for k,v in panel.items() if k not in ('data','decorate')} for panel in panels]}
+    metadata={'schema_version':1,'source':str(scan.path),'columns':int(columns or 0),'fingerprint':source_fingerprint,'export_preset':preset,'transparent_background':bool(transparent),'tight_crop':render_info,'arrangement':arrangement,'panel_letters':bool(panel_letters),'panels':[{k:(str(v) if isinstance(v,Path) else (v.__dict__ if isinstance(v,ImageStyle) else [getattr(s,'__dict__',s) for s in v] if k=='steps' else v)) for k,v in panel.items() if k not in ('data','decorate')} for panel in panels]}
     dest.with_name(dest.name+'.provenance.json').write_text(json.dumps(metadata,indent=2,default=str)+'\n',encoding='utf-8')
     return dest
 

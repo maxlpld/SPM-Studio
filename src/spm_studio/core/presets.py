@@ -110,7 +110,66 @@ def validate_export(d):
             raise ValueError(f'Invalid export preset {k}')
     if output['width_mm'] <= output['margin_mm']*2 or output['height_mm'] <= output['margin_mm']*2:
         raise ValueError('Margins are larger than page')
+    # v0.0.5: an export profile can also remember the whole figure (panels, grid, options).
+    if d.get('layout') is not None:
+        output['layout'] = validate_export_layout(d['layout'])
     return output
+
+
+MAX_EXPORT_PANELS = 12
+EXPORT_ARRANGEMENTS = ('row', 'triangle', 'inverted_triangle', 'grid')
+_PANEL_TEXT = ('source', 'channel', 'trace', 'scan', 'result', 'title', 'unit', 'colorbar_position',
+               'colorbar_source', 'scale_bar_color', 'scale_bar_position')
+_PANEL_BOOL = ('show_colorbar', 'show_scale_bar')
+
+
+def validate_export_layout(layout):
+    """Optional ``layout`` block of an export profile (see export_presets/README.md).
+
+    ``panels`` lists what each image shows. ``source`` is ``channel`` (a scan channel, matched by
+    name on whatever scan is open) or ``result`` (an analysis figure, matched by file name).
+    ``scan`` is ``current`` or the file name of another listed scan.
+    """
+    if not isinstance(layout, dict):
+        raise ValueError('layout must be an object')
+    out = {}
+    arrangement = str(layout.get('arrangement', 'grid'))
+    if arrangement not in EXPORT_ARRANGEMENTS:
+        raise ValueError('layout.arrangement must be one of ' + ', '.join(EXPORT_ARRANGEMENTS))
+    out['arrangement'] = arrangement
+    columns = layout.get('columns', 0)
+    if type(columns) is not int or not 0 <= columns <= MAX_EXPORT_PANELS:
+        raise ValueError(f'layout.columns must be 0 (automatic) to {MAX_EXPORT_PANELS}')
+    out['columns'] = columns
+    for key in ('panel_letters', 'transparent'):
+        out[key] = bool(layout.get(key, False))
+    formats = layout.get('formats', ['svg'])
+    if (not isinstance(formats, list) or not formats or
+            any(f not in ('svg', 'pdf', 'png', 'jpg') for f in formats)):
+        raise ValueError('layout.formats must list svg, pdf, png and/or jpg')
+    out['formats'] = list(dict.fromkeys(formats))
+    panels = layout.get('panels', [])
+    if not isinstance(panels, list) or not 1 <= len(panels) <= MAX_EXPORT_PANELS:
+        raise ValueError(f'layout.panels must list 1 to {MAX_EXPORT_PANELS} panels')
+    clean = []
+    for panel in panels:
+        if not isinstance(panel, dict):
+            raise ValueError('Each layout panel must be an object')
+        item = {}
+        for key in _PANEL_TEXT:
+            if key in panel:
+                if not isinstance(panel[key], str) or len(panel[key]) > 400:
+                    raise ValueError(f'layout panel {key} must be text')
+                item[key] = panel[key]
+        for key in _PANEL_BOOL:
+            if key in panel:
+                item[key] = bool(panel[key])
+        if item.get('source', 'channel') not in ('channel', 'result'):
+            raise ValueError('layout panel source must be channel or result')
+        item.setdefault('source', 'channel')
+        clean.append(item)
+    out['panels'] = clean
+    return out
 
 
 def read_json(path, validator):

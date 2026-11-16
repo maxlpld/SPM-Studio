@@ -93,12 +93,15 @@ def install_factory_customization():
     source = bundled_studio_root() / 'customization'
     destination = customization_dir()
     if not source.is_dir():return destination
+    # v0.0.5: a factory file the user removed in Settings › Library stays removed.
+    removed=removed_factory_items()
     for item in source.iterdir():
         if item.is_file() and not (destination/item.name).exists():
             shutil.copy2(item,destination/item.name)
         elif item.is_dir():
             folder=destination/item.name;folder.mkdir(parents=True,exist_ok=True)
             for entry in item.iterdir():
+                if f'{item.name}/{entry.name}' in removed:continue
                 if entry.is_file() and not (folder/entry.name).exists():
                     shutil.copy2(entry,folder/entry.name)
     return destination
@@ -508,9 +511,8 @@ def upgrade_factory_profiles_v7():
             shutil.copy2(replacement,old)
             notes.append('Updated original KPFM profile (backup kept)')
         else:
-            notes.append('Preserved customized KPFM.json; v7 KPFM also available as KPFM_v7.json')
-            alternate=dest/'KPFM_v7.json'
-            if not alternate.exists():shutil.copy2(replacement,alternate)
+            # v0.0.5: no second "KPFM_v7" profile any more; the customized file is kept as it is.
+            notes.append('Preserved customized KPFM.json')
     marker.write_text('Factory profile migration completed; personal profiles preserved.\n',encoding='utf-8')
     return notes
 
@@ -842,4 +844,176 @@ def migrate_themes_v080():
             shutil.copy2(path, backup)
         path.unlink()
         notes.append(f'{name}: replaced by the new Graphite / Porcelain themes (backup kept)')
+    return notes
+
+
+# ----------------------------------------------------------------------------- v0.0.5
+GITHUB_URL = 'https://github.com/maxlpld/SPM-Studio'
+AUTHOR_NAME = 'maxlpld'
+AUTHOR_URL = 'https://github.com/maxlpld'
+
+# Guide installed in every user folder: (source relative to the bundled tree, destination folder
+# relative to its user root, root kind). The Assistant is told to read the guide of a folder
+# before it creates or edits anything in that folder.
+GUIDES = (
+    ('scripts/README.md', '', 'scripts'),
+    ('customization/profiles/README.md', 'profiles', 'customization'),
+    ('customization/export_presets/README.md', 'export_presets', 'customization'),
+    ('customization/themes/README.md', 'themes', 'customization'),
+    ('customization/colormaps/README.md', 'colormaps', 'customization'),
+    ('customization/plot_styles/README.md', 'plot_styles', 'customization'),
+    ('customization/shortcuts/README.md', 'shortcuts', 'customization'),
+)
+
+
+def guide_sources() -> "Path":
+    """Folder holding the bundled guides: the source tree when present, else the package copy."""
+    root = bundled_studio_root()
+    if (root / 'customization' / 'profiles' / 'README.md').is_file():
+        return root
+    return Path(__file__).resolve().parents[1] / 'resources' / 'guides'
+
+
+def ensure_guides():
+    """Make sure every scripts / customization folder holds its ``README.md`` guide.
+
+    A missing guide is installed. A guide that is still an unmodified copy of an earlier
+    release is refreshed; a guide the user edited is never overwritten. Returns notes.
+    """
+    import hashlib
+    import json
+    import shutil
+    notes = []
+    source_root = guide_sources()
+    state_file = config_dir() / 'guides_installed.json'
+    try:
+        state = json.loads(state_file.read_text(encoding='utf8'))
+        if not isinstance(state, dict):
+            state = {}
+    except (OSError, ValueError):
+        state = {}
+    changed = False
+    for relative, folder, kind in GUIDES:
+        source = source_root / relative
+        if not source.is_file():
+            continue
+        target_dir = (scripts_dir() if kind == 'scripts' else customization_dir()) / folder
+        target_dir.mkdir(parents=True, exist_ok=True)
+        target = target_dir / 'README.md'
+        new_bytes = source.read_bytes()
+        new_digest = hashlib.sha256(new_bytes).hexdigest()
+        key = f'{kind}/{folder}'.rstrip('/')
+        if not target.exists():
+            shutil.copy2(source, target)
+            notes.append(f'Installed guide {target}')
+        else:
+            current = hashlib.sha256(target.read_bytes()).hexdigest()
+            if current != new_digest and current == state.get(key):
+                shutil.copy2(source, target)      # untouched copy of an older release
+                notes.append(f'Updated guide {target}')
+            elif current != new_digest:
+                continue                          # edited by the user (or pre-0.0.5 file): keep
+        if state.get(key) != new_digest:
+            state[key] = new_digest
+            changed = True
+    if changed:
+        try:
+            state_file.parent.mkdir(parents=True, exist_ok=True)
+            state_file.write_text(json.dumps(state, indent=2) + '\n', encoding='utf8')
+        except OSError:
+            pass
+    return notes
+
+
+def guide_for(folder) -> "Path | None":
+    """The guide an agent (or a person) should read before changing ``folder``."""
+    folder = Path(folder)
+    for name in ('README.md', 'README_SCRIPT.md', 'README_CUSTOMIZATION.md'):
+        if (folder / name).is_file():
+            return folder / name
+    return None
+
+
+def module_readme(module_path) -> "Path | None":
+    """README of one analysis tool (``<tool>/README.md``, any case), if it has one."""
+    folder = Path(module_path)
+    if folder.is_file():
+        folder = folder.parent
+    try:
+        for entry in sorted(folder.iterdir()):
+            if entry.is_file() and entry.name.lower() in ('readme.md', 'readme.txt', 'readme'):
+                return entry
+    except OSError:
+        return None
+    return None
+
+
+# ---- items the user removed in Settings › Library must not come back at the next start
+def _removed_file() -> Path:
+    return customization_dir() / '.removed_factory_items.json'
+
+
+def removed_factory_items() -> set:
+    import json
+    try:
+        data = json.loads(_removed_file().read_text(encoding='utf8'))
+        return {str(x) for x in data} if isinstance(data, list) else set()
+    except (OSError, ValueError):
+        return set()
+
+
+def mark_factory_item_removed(relative: str, removed: bool = True):
+    """Remember (or forget) that ``<folder>/<file>`` of the customization tree was removed."""
+    import json
+    items = removed_factory_items()
+    relative = str(relative).replace('\\', '/')
+    if removed:
+        items.add(relative)
+    else:
+        items.discard(relative)
+    try:
+        _removed_file().write_text(json.dumps(sorted(items), indent=2) + '\n', encoding='utf8')
+    except OSError:
+        pass
+
+
+def cleanup_kpfm_profiles_v005():
+    """Keep one KPFM profile.
+
+    Installations upgraded from the internal v6 builds could end up with ``KPFM.json`` (the old
+    profile) *and* ``KPFM_v7.json`` (the current one). The current factory profile becomes
+    ``KPFM.json``; both previous files are kept in ``profiles/.profile_backups_v005``.
+    """
+    import shutil
+    dest = customization_dir() / 'profiles'
+    dest.mkdir(parents=True, exist_ok=True)
+    marker = dest / '.kpfm_cleanup_v005'
+    if marker.exists():
+        return []
+    notes = []
+    duplicate = dest / 'KPFM_v7.json'
+    current = dest / 'KPFM.json'
+    factory = bundled_studio_root() / 'customization' / 'profiles' / 'KPFM.json'
+    if duplicate.is_file():
+        backup = dest / '.profile_backups_v005'
+        backup.mkdir(parents=True, exist_ok=True)
+        if current.is_file():
+            shutil.copy2(current, backup / 'KPFM_previous.json')
+        shutil.copy2(duplicate, backup / 'KPFM_v7.json')
+        replacement = factory if factory.is_file() else duplicate
+        # The profile keeps the plain name "KPFM" whatever the file it came from said.
+        try:
+            import json
+            data = json.loads(replacement.read_text(encoding='utf8'))
+            data['name'] = 'KPFM'
+            current.write_text(json.dumps(data, indent=2, ensure_ascii=False) + '\n', encoding='utf8')
+        except (OSError, ValueError):
+            shutil.copy2(replacement, current)
+        duplicate.unlink()
+        notes.append('Profiles: kept one KPFM profile (the current one); the previous files are in '
+                     'profiles/.profile_backups_v005')
+    try:
+        marker.write_text('Single KPFM profile since SPM Studio 0.0.5.\n', encoding='utf8')
+    except OSError:
+        pass
     return notes

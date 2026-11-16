@@ -68,11 +68,16 @@ def version(executable: str) -> str:
         return ''
 
 
-def build_args(agent: str, session: str, tools: bool, system_text: str = '') -> list[str]:
+def build_args(agent: str, session: str, tools: bool, system_text: str = '',
+               allowed_tools=()) -> list[str]:
     if agent == 'claude-code':
         args = ['-p', '--output-format', 'stream-json', '--verbose', '--include-partial-messages',
                 # plan = read-only analysis; acceptEdits = may write files in its working folder
                 '--permission-mode', 'acceptEdits' if tools else 'plan']
+        if allowed_tools:
+            # v0.0.5: the read-only literature servers (Consensus, Zotero) the user connected in
+            # Settings › Literature may be called without a prompt; a non-interactive turn cannot ask.
+            args += ['--allowedTools', ','.join(allowed_tools)]
         if session:
             args += ['--resume', session]
         if system_text:

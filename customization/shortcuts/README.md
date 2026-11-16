@@ -1,6 +1,6 @@
 # Editable keyboard shortcut profiles
 
-Choose a shortcut profile in **Options → Keyboard shortcuts…**. Select an action,
+Choose a shortcut profile in **Settings (gear button) › General › Keyboard shortcuts…**. Select an action,
 press the new keys in the editor, then click Assign. Your change is applied and
 saved immediately. Import/Export JSON and Save as… are available in the same
 window. The search field filters the live action reference; it always reflects
@@ -34,3 +34,7 @@ Profiles are saved in `~/.config/spm-studio/customization/shortcuts/` and the
 selected profile persists across application restarts. Shortcut files are data,
 not Python code. Global GNOME shortcuts can override application shortcuts:
 choose another combination if Ubuntu handles a key first.
+
+## Share
+
+**Settings › Library › Keyboard shortcuts › Export…** writes one `.zip`; a colleague uses **Import…**.

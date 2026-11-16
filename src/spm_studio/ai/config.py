@@ -22,7 +22,11 @@ DEFAULT = {'backend': 'none', 'pi_executable': '', 'provider': 'openai', 'model'
            'chat_tools': True, 'chat_tools_ack': False,
            # v0.8.2: Pi installed by SPM Studio (private Node/Pi/agent folder, never ~/.pi),
            # Claude Code / Codex CLI executable, and the port of the in-app Judge proxy.
-           'pi_managed': False, 'agent_executable': '', 'judge_proxy_port': 11436}
+           'pi_managed': False, 'agent_executable': '', 'judge_proxy_port': 11436,
+           # v0.0.5: literature sources for the agent (Settings › Literature). The Zotero API key is
+           # never stored here (OS keyring, see ai/literature.py).
+           'consensus_enabled': False, 'zotero_mode': 'off', 'zotero_library_id': '',
+           'zotero_library_type': 'user'}
 
 
 def base_dir() -> Path:
@@ -46,6 +50,8 @@ def load() -> dict:
             result[key] = found[key]
     if result['backend'] not in BACKENDS:result['backend']='none'
     if result['provider'] not in PROVIDERS:result['provider']='openai'
+    if result['zotero_mode'] not in ('off','local','web'):result['zotero_mode']='off'
+    if result['zotero_library_type'] not in ('user','group'):result['zotero_library_type']='user'
     return result
 
 
@@ -56,6 +62,10 @@ def save(conf:dict) -> None:
     if clean['judge'] not in {'none', 'local'}:raise ValueError('Unsupported Judge')
     if clean['routing'] not in {'manual','eco','balanced','performance'}:raise ValueError('Invalid routing')
     if clean['autonomy'] not in {'ask','workspace'}:raise ValueError('Invalid autonomy')
+    if clean['zotero_mode'] not in {'off','local','web'}:raise ValueError('Invalid Zotero mode')
+    if clean['zotero_library_type'] not in {'user','group'}:raise ValueError('Invalid Zotero library type')
+    if clean['zotero_library_id'] and not str(clean['zotero_library_id']).isdigit():
+        raise ValueError('The Zotero library ID is a number')
     atomic_json(base_dir()/'settings.json', clean)
 
 
@@ -127,6 +137,26 @@ def spm_context_file(workspace) -> Path:
         contract=paths.bundled_studio_root()/'scripts'/'README_SCRIPT.md'
     import sys as _sys
     python=_sys.executable
+    custom=paths.customization_dir()
+    # v0.0.5: every folder has a guide; the agent must read it before creating or editing there.
+    try:paths.ensure_guides()
+    except OSError:pass
+    def _guide(folder):
+        found=paths.guide_for(folder)
+        return str(found) if found else '(no guide yet)'
+    guides='\n'.join(f'- {label}: `{folder}` — guide: `{_guide(folder)}`' for label,folder in (
+        ('Analysis tools (scripts)',scripts),
+        ('Profiles (channels, processing, colormaps, titles)',custom/'profiles'),
+        ('Export profiles (figure page, layout, panels)',custom/'export_presets'),
+        ('Themes (interface colours, font)',custom/'themes'),
+        ('Colormaps (RGB tables)',custom/'colormaps'),
+        ('Plot styles (analysis plots)',custom/'plot_styles'),
+        ('Keyboard shortcuts',custom/'shortcuts')))
+    try:
+        from .literature import agent_context as _literature_context
+        literature=_literature_context(load(),python)
+    except Exception:
+        literature=''
     text=f"""# You are the AI assistant embedded in SPM Studio
 
 SPM Studio is the user's desktop application for scanning-probe-microscopy (STM/AFM/KPFM) analysis.
@@ -139,6 +169,19 @@ You run inside its Assistant panel (Pi, Claude Code or Codex), with file and she
   folder and shows a new or changed tool in its Tools list within a few seconds — NO restart needed.
 - Exact module contract (read it before writing a tool): {contract}
 - User customization (themes, colormaps, profiles, figure presets): {paths.customization_dir()}
+  General rules for all of them: {paths.customization_dir()/'README_CUSTOMIZATION.md'}
+
+## Read the guide of a folder BEFORE you create or change anything in it
+Each folder below contains a `README.md` that states exactly how its files must be built to work in
+SPM Studio (required keys, allowed values, a complete example, how to check the result). When the user
+asks for a new script, a new profile, an export profile, a theme, a colormap, a plot style or shortcuts:
+1. read that folder's guide first, every time (it may have changed with an update);
+2. build the file exactly as the guide says, in that folder;
+3. run the checks the guide lists and fix what they report;
+4. tell the user where the file is and how to select it in the app.
+{guides}
+New or changed files in these folders are picked up without restarting SPM Studio (tools within a few
+seconds; profiles and export profiles when the user opens the list again or uses Settings › Library › Refresh).
 - SPM Studio's own source code (only if the user explicitly asks to patch the app; a restart is then
   required — say so): {paths.bundled_studio_root()/'src'/'spm_studio'}
 
@@ -163,13 +206,15 @@ The user runs a tool by selecting it in Tools (an open scan is required) and cli
 ## Rules
 - Create a NEW folder per tool; never overwrite another tool without being asked. Back up a file
   (`name.bak`) before editing an existing one.
+- Every tool folder must contain a `README.md` (what the tool does, the method and its limits, each
+  parameter, the files it writes). The app shows it with the “Read me” button of the Analysis panel.
 - Validate JSON and Python syntax yourself with SPM Studio's own Python, which also runs the tools:
   `"{python}" -m json.tool module.json` and `"{python}" -m py_compile module.py`.
 - Offline analysis of saved data only: never send commands to microscopes, Nanonis, heaters,
   vacuum or any laboratory hardware.
 - Do not touch ~/.pi, ~/.claude, ~/.codex, Ollama, credentials or files outside the folders above unless asked.
 - When finished, say clearly what you created and that it is now in the Tools list.
-"""
+{literature}"""
     target=private_dir(base_dir())/'spm_context.md'
     target.write_text(text,encoding='utf8')
     return target
