@@ -61,6 +61,9 @@ class PiSetupWizard(QDialog):
         self.resize(720, 640)
         self.worker = None
         self.models = []
+        self._manual_model_choices = False
+        self._updating_model_choices = False
+        self._test_ok = False
         self.profile_choice = None
         self.judge_ok = False
         self.proxy = None
@@ -170,7 +173,7 @@ class PiSetupWizard(QDialog):
               1: bool(pi_setup.auth_status()),
               2: bool(self._fast() and (self._smart() or not self.use_router.isChecked())),
               3: self._judge_choice() != 'local' or self.judge_ok,
-              4: bool(self.summary)}.get(i, True)
+              4: self._test_ok}.get(i, True)
         self.next.setEnabled(ok and not busy)
 
     def _next(self):
@@ -363,6 +366,8 @@ class PiSetupWizard(QDialog):
             if status and len(status) > len(current):
                 self._log('✓ Connected: ' + ', '.join(status))
                 self.models = []                    # new provider → refresh model list later
+                self._manual_model_choices = False
+                self._test_ok = False
         self._update_nav()
 
     def _login(self, provider):
@@ -405,9 +410,11 @@ class PiSetupWizard(QDialog):
         page = QWidget()
         v = QVBoxLayout(page)
         v.addWidget(_title('3 · Choose the answering models'))
-        v.addWidget(_hint('Only models your connected accounts can use are listed. With routing, everyday questions '
-                          'go to the Fast model and complex coding to the Smart model; the second choice in each '
-                          'row is used automatically if the first is unavailable.'))
+        v.addWidget(_hint('Pi lists models for connected providers, but an individual model can still be '
+                          'unavailable to a subscription. Recommended defaults prefer compatible newer '
+                          'models; a real test checks access. You can always customise the choices below.'))
+        self.model_guidance = _hint('Sign in first, then load model recommendations.')
+        v.addWidget(self.model_guidance)
         self.use_router = QCheckBox('Use smart routing (Fast / Smart)')
         self.use_router.toggled.connect(self._router_toggled)
         v.addWidget(self.use_router)
@@ -416,7 +423,7 @@ class PiSetupWizard(QDialog):
         for combo in (self.fast1, self.fast2, self.smart1, self.smart2):
             combo.setEditable(True)
             combo.setMinimumWidth(260)
-            combo.currentTextChanged.connect(lambda _=None: self._update_nav())
+            combo.currentTextChanged.connect(self._on_model_edited)
         self.fast_label = QLabel('Fast')
         grid.addWidget(self.fast_label, 0, 0)
         grid.addWidget(self.fast1, 0, 1)
@@ -436,6 +443,9 @@ class PiSetupWizard(QDialog):
         self.economics.addItem('Performance — prefer the Smart model', 'sport')
         row.addWidget(self.economics)
         row.addStretch(1)
+        recommend = QPushButton('Use recommended setup')
+        recommend.clicked.connect(self._use_recommended_models)
+        row.addWidget(recommend)
         refresh = QPushButton('Reload model list')
         refresh.clicked.connect(self._load_models)
         row.addWidget(refresh)
@@ -443,31 +453,94 @@ class PiSetupWizard(QDialog):
         v.addStretch(1)
         return page
 
+    def _on_model_edited(self, _=None):
+        if not self._updating_model_choices:
+            self._manual_model_choices = True
+        self._test_ok = False
+        self._update_nav()
+
     def _router_toggled(self, on):
+        if not self._updating_model_choices:
+            self._manual_model_choices = True
         for w in (self.smart1, self.smart2, self.smart_label, self.economics):
             w.setEnabled(on)
         self.fast_label.setText('Fast' if on else 'Model')
+        self._test_ok = False
+        self._update_nav()
+
+    def _use_recommended_models(self):
+        self._manual_model_choices = False
+        self._apply_model_choices(self.models, pi_setup.auth_status())
+
+    def _apply_model_choices(self, models, auth):
+        # The CLI model catalog is not a guarantee of account entitlement.
+        # Only offer default candidates from providers with saved authentication.
+        visible = [m for m in models if m.get('provider') in auth]
+        self.models = visible
+        available = [''] + [f"{m['provider']}/{m['id']}" for m in visible]
+        recommended = pi_setup.recommend_answering_models(visible, auth)
+        fields = (self.fast1, self.fast2, self.smart1, self.smart2)
+
+        if self._manual_model_choices:
+            # A deliberate expert choice survives Reload, including custom IDs.
+            selected = [c.currentText() for c in fields]
+        else:
+            fast, smart = recommended['fast'], recommended['smart']
+            selected = [
+                '/'.join(fast[0]) if fast else '',
+                '/'.join(fast[1]) if len(fast) > 1 else '',
+                '/'.join(smart[0]) if smart else '',
+                '/'.join(smart[1]) if len(smart) > 1 else '',
+            ]
+
+        self._updating_model_choices = True
+        try:
+            for combo, value in zip(fields, selected):
+                combo.blockSignals(True)
+                combo.clear()
+                combo.addItems(available)
+                combo.setEditText(value)
+                combo.blockSignals(False)
+            if not self._manual_model_choices:
+                can_route = bool(recommended['router'] and self.use_router.isEnabled())
+                self.use_router.setChecked(can_route)
+                self.economics.setCurrentIndex(self.economics.findData('default'))
+        finally:
+            self._updating_model_choices = False
+        self._router_toggled(self.use_router.isChecked())
+
+        if not auth:
+            self.model_guidance.setText('No connected provider. Go back to Sign in first.')
+        elif not visible:
+            self.model_guidance.setText('No models found for the connected accounts. '
+                                        'Try Reload model list or sign in again in Pi.')
+        elif not recommended['fast']:
+            self.model_guidance.setText('None of Pi\'s listed models passed the conservative '
+                                        'subscription compatibility filter. Try Pi /model and '
+                                        'Reload; you can also enter a custom model manually.')
+        elif self._manual_model_choices:
+            self.model_guidance.setText('Using your custom selections. '
+                                        'Click Use recommended setup to reset them.')
+        else:
+            self.model_guidance.setText('Suggested models selected from your connected provider. '
+                                        'Live testing is still required to confirm access. '
+                                        'Smart routing is enabled only with distinct Fast/Smart models.')
+        self._test_ok = False
         self._update_nav()
 
     def _load_models(self):
         def done(models):
-            self.models = models or []
-            entries = [''] + [f"{m['provider']}/{m['id']}" for m in self.models]
-            for combo in (self.fast1, self.fast2, self.smart1, self.smart2):
-                keep = combo.currentText()
-                combo.blockSignals(True)
-                combo.clear()
-                combo.addItems(entries)
-                combo.setEditText(keep)
-                combo.blockSignals(False)
-            self._log(f'{len(self.models)} models available.' if self.models else
-                      'Pi listed no models — check the sign-in step, or type a model as provider/model-id.')
-            self._update_nav()
+            self._apply_model_choices(models or [], pi_setup.auth_status())
+            self._log(f"{len(self.models)} models listed by Pi for connected accounts." if self.models else
+                      'Pi listed no models for your connected accounts. Check sign-in or reload.')
         router = any('pi-shift-router' in p for p in pi_setup.installed_packages())
-        self.use_router.setEnabled(router)
-        self.use_router.setChecked(router)
-        self._router_toggled(router)
-        self._run(lambda log, p, c: pi_setup.list_models(), done, 'Asking Pi which models your accounts can use…')
+        self._updating_model_choices = True
+        try:
+            self.use_router.setEnabled(router)
+        finally:
+            self._updating_model_choices = False
+        self._run(lambda log, p, c: pi_setup.list_models(), done,
+                  'Asking Pi which models your accounts can use…')
 
     @staticmethod
     def _split(text):
@@ -673,6 +746,8 @@ class PiSetupWizard(QDialog):
         return page
 
     def _apply_and_test(self):
+        self._test_ok = False
+        self._update_nav()
         router = self.use_router.isChecked()
         fast, smart = self._fast(), self._smart()
         if not router:
@@ -696,6 +771,7 @@ class PiSetupWizard(QDialog):
 
         def done(result):
             ok, text = result
+            self._test_ok = bool(ok)
             s = self.summary
             head = (f"Answering model: <b>{s['default']}</b>" + (
                 f"<br>Router on · Judge: <b>{s['judge']}</b> (classifier only)" if s.get('router') else
@@ -706,6 +782,7 @@ class PiSetupWizard(QDialog):
             else:
                 self.test_label.setText(head + '<br><br>⚠ The test message failed:<br><code>' +
                                         text.replace('<', '&lt;') + '</code><br><br>Go Back to check the sign-in '
-                                        'or the model names, then run the test again. You can also Finish now.')
+                                        'or the model names, then run the test again. '
+                                        'Finish remains disabled until the test passes.')
             self._update_nav()
         self._run(lambda log, p, c: pi_setup.smoke_test(), done, 'Sending a test message through Pi…')
