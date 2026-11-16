@@ -67,7 +67,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ['3.12', '3.13']      # supported Python versions
+        python-version: ['3.12', '3.13', '3.14', '3.15'] # Python >=3.12
     uses: ./.github/workflows/test-suite.yml
     with:
       os: ubuntu-latest
