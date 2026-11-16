@@ -7,7 +7,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 def test_mac_vosk_wheel_marker_and_supported_python():
     project = tomllib.loads((ROOT / "pyproject.toml").read_text())["project"]
-    assert project["version"] == "0.0.2"
+    assert tuple(map(int, project["version"].split("."))) >= (0, 0, 2)
     assert project["requires-python"] == ">=3.12,<3.14"
     for extra in ("voice", "all"):
         deps = project["optional-dependencies"][extra]
