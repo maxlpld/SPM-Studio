@@ -10,7 +10,7 @@
 
 ## Requirements
 
-- Ubuntu 24.04 / 26.04, Python **3.12 or 3.13** with `venv` and pip, run as your normal user (never `sudo`).
+- Ubuntu 24.04 / 26.04, Python **3.12 or newer** with `venv` and pip, run as your normal user (never `sudo`).
 - Internet for the first dependency installation (PySide6, NumPy, SciPy, Matplotlib …), about 1 GiB free disk space.
 - Qt system libraries, if not already present:
 
