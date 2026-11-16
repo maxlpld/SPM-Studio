@@ -44,7 +44,7 @@ DEFAULT_PROXY_PORT = 11436
 # subscription sign-in for its own apps, so SPM Studio routes Claude subscribers
 # to the official Claude Code connection (or an Anthropic API key) instead.
 SUBSCRIPTIONS = [
-    ('openai-codex', 'ChatGPT Plus / Pro (Codex)', '/login openai-codex'),
+    ('openai', 'ChatGPT Plus / Pro (Sign in with ChatGPT)', '/login openai'),
     ('github-copilot', 'GitHub Copilot', '/login github-copilot'),
 ]
 API_KEY_PROVIDERS = [  # (auth.json key, label, env var, key page)
@@ -418,6 +418,64 @@ def login_script(provider: str) -> Path:
 
 
 # -------------------------------------------------------------------------- models
+def recommend_answering_models(models: list[dict], auth: dict[str, str]) -> dict:
+    """Offer conservative, provider-aware defaults, never guess an unauthenticated model.
+
+    Pi's catalog contains models that a signed-in account might not be entitled
+    to use. In particular the modern 'openai' provider serves both API keys and
+    ChatGPT OAuth; legacy GPT-4 catalog entries do NOT work with ChatGPT OAuth.
+    These are suggestions only: the wizard must validate with a real Pi call.
+    """
+    usable = []
+    seen = set()
+    for entry in models:
+        provider, model = entry.get('provider', ''), entry.get('id', '')
+        if provider not in auth or not model or (provider, model) in seen:
+            continue
+        if provider == 'openai' and auth[provider] == 'oauth':
+            # The ChatGPT login supports modern GPT-5/6-family models, not
+            # older GPT-4 API models. Do not invent unlisted IDs.
+            if not re.match(r'^gpt-[56](?:[.\-]|$)', model, flags=re.I):
+                continue
+        seen.add((provider, model))
+        usable.append((provider, model))
+
+    def priority(provider):
+        # Prefer an already-connected subscription over a metered API key.
+        subscription = auth.get(provider) == 'oauth'
+        return (0 if subscription else 1,
+                0 if provider in ('openai', 'openai-codex') else 1,
+                provider)
+
+    providers = sorted({p for p, _ in usable}, key=priority)
+    if not providers:
+        return {'fast': [], 'smart': [], 'router': False}
+
+    provider = providers[0]
+    choices = [name for p, name in usable if p == provider]
+
+    def latest(name):
+        version = re.search(r'gpt-(\d+)(?:\.(\d+))?', name, flags=re.I)
+        version_score = (int(version[1]), int(version[2] or 0)) if version else (0, 0)
+        return (version_score,
+                1 if 'codex' in name.lower() else 0,
+                0 if any(x in name.lower() for x in ('mini', 'nano', 'small')) else 1,
+                name)
+
+    ranked = sorted(choices, key=latest, reverse=True)
+    smart = (provider, ranked[0])
+    # Small/mini models are appropriate for routine tasks, if actually listed.
+    cheap = sorted((m for m in choices if any(
+        x in m.lower() for x in ('mini', 'nano', 'small', 'flash', 'haiku'))),
+        key=latest, reverse=True)
+    fast = (provider, cheap[0]) if cheap else smart
+    fast_fallbacks = [(provider, m) for m in cheap[1:] if m != fast[1]][:1]
+    smart_fallbacks = [(provider, m) for m in ranked if m not in {smart[1], fast[1]}][:1]
+    return {'fast': [fast, *fast_fallbacks],
+            'smart': [smart, *smart_fallbacks],
+            'router': fast != smart}
+
+
 def parse_list_models(text: str) -> list[dict]:
     """Parse ``pi --list-models`` (a table: provider, model, context, …)."""
     models, seen = [], set()
