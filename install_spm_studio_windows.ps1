@@ -118,18 +118,18 @@ function Invoke-Smoke {
 }
 
 function Invoke-Stage {
-    $py = Find-Python
-    if (-not $py) {
-        if (Install-PythonWithWinget) { $py = Find-Python }
+    $PythonInfo = Find-Python
+    if (-not $PythonInfo) {
+        if (Install-PythonWithWinget) { $PythonInfo = Find-Python }
     }
-    if (-not $py) {
+    if (-not $PythonInfo) {
         Write-Host 'Python 3.12 or 3.13 is required.' -ForegroundColor Yellow
         Write-Host 'Install it from https://www.python.org/downloads/windows/ (tick "Add python.exe to PATH"),'
         Write-Host 'or run:  winget install -e --id Python.Python.3.12 --scope user'
         Write-Host 'then run this installer again.'
         exit 2
     }
-    Write-Host "Python: $($py.Version) ($($py.Path))"
+    Write-Host "Python: $($PythonInfo.Version) ($($PythonInfo.Path))"
     $drive = (Get-Item $env:LOCALAPPDATA).PSDrive
     if ($drive.Free -lt 1.5GB) { Fail 'At least 1.5 GB of free disk space is needed.' }
     if ((Test-Path (Join-Path $Release 'READY')) -and (Test-Path $Py)) {
@@ -143,9 +143,13 @@ function Invoke-Stage {
     Copy-Item -Recurse -Path $Root -Destination $App
     Get-ChildItem -Path $App -Recurse -Directory -Filter '__pycache__' | Remove-Item -Recurse -Force
     Write-Host 'Creating the private Python environment...'
-    & $py.Path -m venv $Venv
+    & $PythonInfo.Path -m venv $Venv
     if ($LASTEXITCODE -ne 0) { Fail 'python -m venv failed' }
+    # "$Py" must remain the virtual environment's executable, not the
+    # hashtable returned by Find-Python (PowerShell variables ignore case).
+    if (-not (Test-Path -LiteralPath $Py -PathType Leaf)) { Fail 'Virtual environment Python executable missing.' }
     & $Py -m pip install --upgrade pip
+    if ($LASTEXITCODE -ne 0) { Fail 'pip upgrade failed; nothing was activated.' }
     & $Py -m pip install -e "$App[all]"
     if ($LASTEXITCODE -ne 0) { Fail 'pip install failed (see messages above); nothing was activated.' }
     Invoke-Smoke
@@ -191,8 +195,8 @@ function Invoke-DryRun {
     Write-Host "Start menu entry:   $StartMenu"
     if (-not $NoDesktopShortcut) { Write-Host "Desktop shortcut:   $DesktopLnk" }
     Write-Host "Command launcher:   $Launcher"
-    $py = Find-Python
-    if ($py) { Write-Host "Python found:       $($py.Version) ($($py.Path))" }
+    $PythonInfo = Find-Python
+    if ($PythonInfo) { Write-Host "Python found:       $($PythonInfo.Version) ($($PythonInfo.Path))" }
     else { Write-Host 'Python found:       none (the installer can install Python 3.12 with winget)' }
     if (Test-Path $Releases) {
         Get-ChildItem $Releases -Directory | Where-Object { $_.FullName -ne $Release -and (Test-Path (Join-Path $_.FullName 'READY')) } |
