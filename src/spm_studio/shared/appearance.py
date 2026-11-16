@@ -273,6 +273,10 @@ def style_dock_titlebar(dock):
     bar = QWidget(dock)
     bar.setObjectName('dockTitleBar')
     bar.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+    # Qt may shrink the custom QDockWidget title bar below its layout's
+    # size hint (on Windows, macOS and Xvfb), clipping the 28px close
+    # button to ~25px. Reserve enough vertical room for its hit target.
+    bar.setMinimumHeight(DOCK_CLOSE_BUTTON + 12)
     row = QHBoxLayout(bar)
     row.setContentsMargins(10, 4, 6, 4)
     row.setSpacing(6)
