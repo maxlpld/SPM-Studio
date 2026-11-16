@@ -93,7 +93,7 @@ function Invoke-Smoke {
     New-Item -ItemType Directory -Path $tmp | Out-Null
     $saved = @{}
     $vars = @{ QT_QPA_PLATFORM = 'offscreen'; XDG_DATA_HOME = "$tmp\data"; XDG_CONFIG_HOME = "$tmp\config";
-               XDG_CACHE_HOME = "$tmp\cache"; PYTHONIOENCODING = 'utf-8' }
+               XDG_CACHE_HOME = "$tmp\cache"; PYTHONIOENCODING = 'utf-8'; PYTHONUTF8 = '1' }
     foreach ($k in $vars.Keys) { $saved[$k] = [Environment]::GetEnvironmentVariable($k); [Environment]::SetEnvironmentVariable($k, $vars[$k]) }
     try {
         & $Py -c "import spm_studio, spm_studio.ai.pi_setup, spm_studio.ai.judge_proxy; from pathlib import Path; print('Standalone SPM Studio source:', Path(spm_studio.__file__).resolve())"
@@ -161,7 +161,7 @@ function New-Shortcut([string]$Path) {
     $shell = New-Object -ComObject WScript.Shell
     $lnk = $shell.CreateShortcut($Path)
     $lnk.TargetPath = $PyW
-    $lnk.Arguments = '-m spm_studio'
+    $lnk.Arguments = '-X utf8 -m spm_studio'
     $lnk.WorkingDirectory = $env:USERPROFILE
     $lnk.IconLocation = (Join-Path $App 'assets\spm-studio.ico') + ',0'
     $lnk.Description = 'SPM Studio - scientific image and data analysis with optional AI assistant'
@@ -173,7 +173,7 @@ function Invoke-Activate {
     Invoke-Smoke
     New-Item -ItemType Directory -Force -Path $BinDir | Out-Null
     Set-Content -Path (Join-Path $Base 'current.txt') -Value $Version -Encoding ASCII
-    $cmd = "@echo off`r`nrem Managed by the SPM Studio installer`r`n`"$Py`" -m spm_studio %*`r`n"
+    $cmd = "@echo off`r`nrem Managed by the SPM Studio installer`r`n`"$Py`" -X utf8 -m spm_studio %*`r`n"
     [IO.File]::WriteAllText($Launcher, $cmd, [Text.Encoding]::ASCII)
     New-Shortcut $StartMenu
     if (-not $NoDesktopShortcut) { New-Shortcut $DesktopLnk }
