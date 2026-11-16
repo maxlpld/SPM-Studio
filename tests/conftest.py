@@ -2,7 +2,7 @@ import sys
 from pathlib import Path
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'src'))
 
-# Keep Qt's C++ application alive throughout Linux and Windows GUI test sessions.
+# Keep Qt's C++ application alive throughout Linux, Windows and macOS GUI test sessions.
 # GUI tests can otherwise release the last QApplication reference before
 # Python has finished disposing of Qt widgets and their deferred events.
 import gc
@@ -11,7 +11,7 @@ import pytest
 
 @pytest.fixture(scope="session", autouse=True)
 def _qt_session_lifetime():
-    if sys.platform not in ("linux", "win32") or not (
+    if sys.platform not in ("linux", "win32", "darwin") or not (
         os.environ.get("DISPLAY") or os.environ.get("QT_QPA_PLATFORM") == "offscreen"
     ):
         yield
