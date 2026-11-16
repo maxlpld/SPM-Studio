@@ -85,6 +85,13 @@ jobs:
       - name: GUI smoke test (Windows/macOS)
         if: runner.os != 'Linux'
         run: python -X faulthandler -m spm_studio --smoke-test
+      # Reproduce Windows' traditional cp1252 default used by Anaconda and
+      # non-UTF-8 machines. This caught the v0.0.5 assistant-context failure.
+      - name: Windows GUI smoke with UTF-8 mode disabled
+        if: runner.os == 'Windows'
+        env:
+          PYTHONUTF8: '0'
+        run: python -X utf8=0 -X faulthandler -m spm_studio --smoke-test
       - name: Test suite (Linux/Xvfb)
         if: runner.os == 'Linux'
         run: xvfb-run -a env QT_QPA_PLATFORM=xcb QT_OPENGL=software LIBGL_ALWAYS_SOFTWARE=1 python -X faulthandler -m pytest -vv -rs
