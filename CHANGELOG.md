@@ -7,6 +7,12 @@ so write it for users. Add new versions **at the top**.
 The internal builds that preceded the GitHub project (0.7.0 – 0.8.3) are documented in
 [`docs/DEVELOPMENT_HISTORY.md`](docs/DEVELOPMENT_HISTORY.md).
 
+## 0.0.3 — 2026-11-16
+
+- **Fixed Windows installation from PowerShell.** Python detection now keeps its interpreter-information hashtable separate from the private virtual environment's `python.exe` path. This resolves the `System.Collections.Hashtable is not recognized` failure when installing with Python 3.12 or 3.13, including Anaconda Python.
+- Improved cross-platform Qt GUI test shutdown cleanup on Linux, Windows and macOS, preventing native shutdown crashes after otherwise successful tests.
+- Kept SPM analysis tools, the optional AI assistant and user data unchanged. An existing incomplete `0.0.2` installation does not block the new `0.0.3` installation because releases are staged in separate directories.
+
 ## 0.0.2 — 2026-11-15
 
 - Fixed installation on macOS by selecting Vosk 0.3.44 (its macOS Universal2 wheel) while retaining Vosk 0.3.45 on other platforms.
