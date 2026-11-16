@@ -96,7 +96,7 @@ def make_snapshot(run_dir, scan, channel, direction, selected_data, parameters, 
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle('SPM Studio — Scientific image & data analysis')
+        self.setWindowTitle('SPM Studio')
         self.resize(1340,860)
         self.setAcceptDrops(True)
         self.settings=QSettings('SPM Studio','SPM Studio AI 0.7')
@@ -194,6 +194,11 @@ class MainWindow(QMainWindow):
         self._module_upgrade_messages += paths.upgrade_factory_customization()
         self._module_upgrade_messages += paths.upgrade_factory_customization_v051()
         self._module_upgrade_messages += paths.migrate_themes_v080()
+        # v0.0.5: one KPFM profile, and a README.md guide in every scripts / customization folder
+        # (read by people and by the assistant before a script or profile is created).
+        self._module_upgrade_messages += paths.cleanup_kpfm_profiles_v005()
+        try:self._module_upgrade_messages += paths.ensure_guides()
+        except OSError as exc:self._module_upgrade_messages.append(f'Guides not installed: {exc}')
         self._shortcut_actions={}
         self._shortcut_dialog=None
         self._shortcut_bindings=DEFAULT_BINDINGS.copy()
@@ -377,6 +382,19 @@ class MainWindow(QMainWindow):
         self.ai_toolbar_button.setToolTip('Show / hide the AI assistant (dockable, detachable)')
         set_icon(self.ai_toolbar_button,'ai')
         self.ai_toolbar_button.clicked.connect(self.toggle_ai_assistant)
+        # v0.0.5: the menu bar is gone. Logs get a visible toggle, and everything that had no other
+        # place lives behind one gear button (Settings).
+        self.logs_toolbar_button=tool_button('Logs','logs','Show / hide the Logs panel (run output and result files)',
+                                             checkable=True)
+        self.logs_toolbar_button.setObjectName('LogsToggleV005')
+        self.logs_toolbar_button.clicked.connect(self._toggle_logs)
+        self.settings_button=tool_button('','gear','Settings: library, literature sources, theme, shortcuts, '
+                                         'assistant, updates, about',icon_only=True)
+        self.settings_button.setObjectName('SettingsGearV005')
+        self.settings_button.setAccessibleName('Settings')
+        from PySide6.QtCore import QSize as _QSize
+        self.settings_button.setIconSize(_QSize(20,20))
+        self.settings_button.clicked.connect(lambda:self.open_settings())
         for w in (self.open_button,self.folder_button):self.topbar.addWidget(w)
         self.topbar.addStretch(1)
         self.topbar.addWidget(self.scan_profile_label)
@@ -387,7 +405,10 @@ class MainWindow(QMainWindow):
         self.topbar.addWidget(self.export_tool)
         self.topbar.addWidget(separator())
         self.topbar.addWidget(self.compare_tool)
+        self.topbar.addWidget(self.logs_toolbar_button)
         self.topbar.addWidget(self.ai_toolbar_button)
+        self.topbar.addWidget(separator())
+        self.topbar.addWidget(self.settings_button)
         # v26: the Bias figure button leaves the top bar; the composer stays in the Analysis menu.
         self.bias_figure_button.hide()
         # Legacy widgets stay alive (shortcuts, tests, profiles) but are not duplicated on screen.
@@ -550,6 +571,7 @@ class MainWindow(QMainWindow):
         from spm_studio.shared.appearance import style_dock_titlebar
         style_dock_titlebar(dock)
         self.log_dock=dock
+        dock.visibilityChanged.connect(lambda _visible:self.logs_toolbar_button.setChecked(self.log_dock.isVisible()))
         self.statusBar().showMessage('Ready  ·  Ctrl+O open  ·  ↑↓ scans  ·  ←→ channels')
 
     # ---- updates (GitHub releases; see core/updates.py)
@@ -579,12 +601,53 @@ class MainWindow(QMainWindow):
         self._update_button.clicked.connect(lambda:self.open_update_dialog(result))
 
     def _about_spm_studio(self):
-        from spm_studio.core.updates import current_version
-        v=current_version()   # installed package metadata, else pyproject.toml (single source of truth)
-        QMessageBox.about(self, 'About SPM Studio',
-            f'<b>SPM Studio {v}</b><br>Scientific image &amp; data analysis for STM · AFM · KPFM'
-            '<br><br>Themes, colormaps, profiles, figure presets and shortcuts are plain files: '
-            'File › Import, or Settings › Open customization folder.')
+        self.open_settings('about')
+
+    # ---- v0.0.5: Settings window (gear button), Logs toggle, library reloads
+    def open_settings(self,page='general'):
+        from .settings_dialog import SettingsDialog
+        dialog=SettingsDialog(self,page)
+        self._settings_dialog=dialog
+        try:
+            dialog.exec()
+        finally:
+            self._settings_dialog=None
+            dialog.deleteLater()
+
+    def _toggle_logs(self):
+        self.log_dock.setVisible(not self.log_dock.isVisible())
+        self.logs_toolbar_button.setChecked(self.log_dock.isVisible())
+
+    def reload_library(self,kind):
+        """Re-read one kind of user files after Settings › Library changed it (no restart needed)."""
+        if kind=='scripts':
+            self._scripts_sig=self._scripts_signature()
+            self._live_refresh_modules()
+        elif kind=='profiles':
+            key=combo_key(self.profile_combo)
+            self._load_profiles()
+            if key in self.profiles:set_combo_key(self.profile_combo,key)
+        elif kind=='exports':
+            key=combo_key(self.export_preset_combo)
+            self._load_export_presets()
+            if key in self.export_presets:set_combo_key(self.export_preset_combo,key)
+        elif kind=='themes':
+            self._populate_theme_menu()
+        elif kind=='colormaps':
+            palette=self.inspector.palette
+            key=combo_key(palette)
+            palette.blockSignals(True)     # re-listing must not change the colormap of the open scan
+            try:
+                self._load_colormaps()
+                index=palette.findData(key)
+                if index>=0:palette.setCurrentIndex(index)
+            finally:
+                palette.blockSignals(False)
+        elif kind=='plots':
+            ensure_bundled_styles(paths.customization_dir()/'plot_styles')
+            self.viewer.plot_profile=self._plot_profile_for_run()
+        elif kind=='shortcuts':
+            self._reload_shortcuts_from_disk()
 
     def restore_builtin_tools(self):
         """Replace the lattice / molecule tools by the versions shipped with this release (backup first)."""
@@ -661,8 +724,15 @@ class MainWindow(QMainWindow):
         return action
 
     def _create_actions(self):
-        """v0.8 menus: each command appears once, grouped by what it acts on."""
+        """Commands, their editable shortcuts and the shortcut help table.
+
+        v0.0.5: the menu bar itself is hidden (File / Scan / Selection … duplicated the buttons of
+        the window). The actions stay registered on the window, so every keyboard shortcut keeps
+        working; commands that had no button are in Settings (gear button of the top bar).
+        """
         bar=self.menuBar()
+        bar.setNativeMenuBar(False)
+        bar.setVisible(False)
         # ---- File
         menu_file=bar.addMenu('&File')
         self._action(menu_file,'Open scans…','file.open',self.open_file)
@@ -971,6 +1041,9 @@ class MainWindow(QMainWindow):
         presets={'STM':dict(DEFAULT_PROFILE),
                  'KPFM':{**DEFAULT_PROFILE,'name':'KPFM','channel_contains':'Bias','visible_channels':['Z','Bias']},
                  'Multipass':{**DEFAULT_PROFILE,'name':'Multipass','channel_contains':'OC','visible_channels':['Z','OC']}}
+        # v0.0.5: a built-in profile removed in Settings › Library stays out of the list.
+        removed=paths.removed_factory_items()
+        presets={k:v for k,v in presets.items() if f'profiles/{k}.json' not in removed}
         profiles=paths.customization_dir()/'profiles'
         profiles.mkdir(parents=True,exist_ok=True)
         for p in sorted(profiles.glob('*.json')):
@@ -1198,31 +1271,56 @@ class MainWindow(QMainWindow):
         crawler.start()
         self._log(f'Indexing {folder} (no image data loaded yet)…')
 
-    def export_scan_selection(self):
-        """Copy the scans still listed (after 'Remove selected scan') into the sibling
-        ``<dataset>_scan_recap`` folder and continue the session there, so later figure exports
-        and script results land next to the selected scans. Original files are never touched."""
+    def export_scan_selection(self,destination=None):
+        """Copy the scans still listed (after 'Remove selected scan') into a folder and continue the
+        session there, so later figure exports and script results land next to the selected scans.
+        Original files are never touched.
+
+        v0.0.5: the folder is chosen by the user (any location, any name, new or existing). The
+        proposal is still the sibling ``<dataset>_scan_recap``. ``destination`` skips the dialog."""
         import shutil
         files=[Path(p) for p in dict.fromkeys(self._source_paths) if Path(p).is_file()]
         if not files:
             self._log('Open a dataset and keep the scans you want before exporting the selection',important=True)
             return
         source=Path(self._session_folder) if self._session_folder else files[0].parent
-        recap=paths.scan_recap_folder(source)
-        if recap==source:
+        if destination is None:
+            from .recap_dialog import RecapFolderDialog
+            proposal=paths.scan_recap_folder(source)
+            if proposal==source:proposal=source.parent/(source.name+'_copy')
+            remembered=str(self.settings.value('recap_location',''))
+            if remembered and Path(remembered).is_dir():proposal=Path(remembered)/proposal.name
+            dialog=RecapFolderDialog(proposal,len(files),self)
+            try:
+                if dialog.exec()!=dialog.DialogCode.Accepted:return
+                recap=dialog.folder()
+            finally:
+                dialog.deleteLater()
+            if recap is None:return
+            self.settings.setValue('recap_location',str(recap.parent))
+        else:
+            recap=Path(destination)
+        try:same=recap.resolve()==source.resolve()
+        except OSError:same=recap==source
+        if same:
             self._log(f'Already working in {recap}; nothing to copy',important=True)
             return
-        recap.mkdir(parents=True,exist_ok=True)
-        copied=[]
-        for file in files:
-            target=recap/file.name
-            if file.resolve()==target.resolve():continue
-            shutil.copy2(file,target)
-            copied.append(target)
-        manifest={'format':'spm-studio-scan-recap-v1','source_folder':str(source),
-                  'exported':datetime.now().isoformat(timespec='seconds'),
-                  'scans':[f.name for f in files]}
-        (recap/'scan_recap.json').write_text(json.dumps(manifest,indent=2)+'\n',encoding='utf-8')
+        try:
+            recap.mkdir(parents=True,exist_ok=True)
+            copied=[]
+            for file in files:
+                target=recap/file.name
+                if file.resolve()==target.resolve():continue
+                shutil.copy2(file,target)
+                copied.append(target)
+            manifest={'format':'spm-studio-scan-recap-v1','source_folder':str(source),
+                      'exported':datetime.now().isoformat(timespec='seconds'),
+                      'scans':[f.name for f in files]}
+            (recap/'scan_recap.json').write_text(json.dumps(manifest,indent=2)+'\n',encoding='utf-8')
+        except OSError as exc:
+            self._log(f'Could not copy the scans to {recap}: {exc}',important=True)
+            QMessageBox.warning(self,'Copy failed',f'Could not copy the scans to\n{recap}\n\n{exc}')
+            return
         self._log(f'Exported {len(copied)} selected scan(s) to {recap}; the session now works in that folder',important=True)
         self._remember_scan_view()
         self._clear_active_scan()
@@ -2973,18 +3071,30 @@ class MainWindow(QMainWindow):
             folder=visible_root/section
             if folder.is_dir():
                 for suffix in exportable:reports.extend(str(f) for f in folder.glob('*'+suffix))
+        # v0.0.5: other scans of the Files list can be placed in the same figure.
+        current_path=str(Path(self.scan.path).resolve())
+        others=[]
+        for other in dict.fromkeys(self._source_paths):
+            try:
+                if Path(other).is_file() and str(Path(other).resolve())!=current_path:
+                    others.append((f'Other scan · {Path(other).name}',str(other)))
+            except OSError:
+                continue
         dialog=PublicationDialog(self.scan,dict.fromkeys(reports),two_columns=two_columns,
                                   selected_channel=key[1],selected_trace=key[2],
                                   channel_titles=self.all_channel_titles(),preset=preset,
                                   layout_name=combo_key(self.export_preset_combo),parent=self,
                                   transparent=self.export_transparent(),
                                   arrangement=str(self.settings.value('export_triple_arrangement','triangle')),
-                                  formats=[f for f in str(self.settings.value('export_formats_v34','svg')).split(',') if f])
+                                  formats=[f for f in str(self.settings.value('export_formats_v34','svg')).split(',') if f],
+                                  other_scans=others,scan_loader=read_scan)
+        # A profile saved from the dialog is listed and selected at once (no restart).
+        dialog.profileSaved.connect(self._export_profile_saved)
         if dialog.exec()!=dialog.DialogCode.Accepted:return
         formats=dialog.formats() or ['svg']
         self.settings.setValue('export_formats_v34',','.join(formats))
         self.set_export_transparent(dialog.transparent_background())
-        self.settings.setValue('export_triple_arrangement',dialog.arrangement())
+        if dialog._n_panels()==3:self.settings.setValue('export_triple_arrangement',dialog.arrangement())
         selected=dialog.selection()
         if not selected:return
         preset=dialog.resolved_preset()
@@ -3001,12 +3111,22 @@ class MainWindow(QMainWindow):
             if spec['kind']!='channel':continue
             channel=spec['channel']
             direction=spec['trace']
+            from ..core.plot_settings import default_viewer_palette
+            if spec.get('scan_path'):
+                # Panel of another listed scan: use the display already set on that scan, if any.
+                other=spec['scan_path']
+                candidates=[(other,channel,direction)]
+                try:candidates.append((str(Path(other).resolve()),channel,direction))
+                except OSError:pass
+                found=next((c for c in candidates if c in self.styles or c in self.pipelines),candidates[0])
+                spec['steps']=self.pipelines.get(found,[])
+                spec['style']=self.styles.get(found) or replace(ImageStyle(),colormap=default_viewer_palette(channel,self._plot_profile_for_run()))
+                continue
             if direction not in self.scan.channels[channel].traces:
                 self._log(f'{channel} does not have a {direction} trace',important=True)
                 return
             selection=(str(self.scan.path),channel,direction)
             spec['steps']=self.pipelines.get(selection,[])
-            from ..core.plot_settings import default_viewer_palette
             spec['style']=self.styles.get(selection) or replace(ImageStyle(),colormap=default_viewer_palette(channel,self._plot_profile_for_run()))
             # Respect active preview annotations without adding any axis labels.
             if channel==key[1] and direction==key[2]:
@@ -3053,11 +3173,16 @@ class MainWindow(QMainWindow):
             task=Task(self._job_token+1,export_publication_formats,self.scan,selected,
                       Path(destination),preset,formats,plot_config=self._plot_profile_for_run(),
                       transparent=dialog.transparent_background(),
-                      arrangement=dialog.arrangement() if len(selected)==3 else 'row',
-                      panel_letters=dialog.letters_enabled())
+                      arrangement=dialog.arrangement() if len(selected)>=2 else 'row',
+                      panel_letters=dialog.letters_enabled(),columns=dialog.columns())
         self._start_task(task,lambda _,path:[self._export_done(p) for p in (path if isinstance(path,(list,tuple)) else [path])],
                          lambda _,exc:self._log(f'Export failed:\n{exc}',important=True))
         self._log(f'Publication export requested: {destination}')
+
+    def _export_profile_saved(self,name):
+        self._load_export_presets()
+        set_combo_key(self.export_preset_combo,name)
+        self._log(f'Export profile saved: {name} (figure list of the top bar; share it from Settings › Library)',important=True)
 
     def _export_done(self,dest):
         note=''
@@ -3150,7 +3275,7 @@ class MainWindow(QMainWindow):
             # Old user-owned script folders can outlive package upgrades.
             if mod.id=='batch_scan_report' or 'physically informed' in mod.name.casefold():
                 continue
-            item=QListWidgetItem(f'{mod.name}'+('  ◌' if mod.status!='operational' else ''))
+            item=QListWidgetItem(mod.name)   # v0.0.5: no status glyph beside the name (it is in the tooltip)
             item.setData(Qt.ItemDataRole.UserRole,mod.id)
             item.setToolTip(f'{mod.category} · {mod.description} · {mod.status}')
             self.browser.tools.addItem(item)
@@ -3472,6 +3597,7 @@ class MainWindow(QMainWindow):
         self._run_files=[]
         self._run_started=time.monotonic()
         self.logs.state.setText('Preparing snapshot…')
+        self.module_panel.set_run_state('preparing',f'Preparing {mod.name}…')
         self.logs.cancel.setEnabled(True)
         self.log_dock.show()
         self.logs.tabs.setCurrentIndex(0)
@@ -3486,6 +3612,7 @@ class MainWindow(QMainWindow):
         if token!=self._job_token:return
         self.logs.cancel.setEnabled(False)
         self.logs.state.setText('Failed to prepare')
+        self.module_panel.set_run_state('failed','Could not prepare the run — see Logs')
         self._log(error,important=True)
 
     def _snapshot_prepared(self,token,context):
@@ -3517,6 +3644,7 @@ class MainWindow(QMainWindow):
         if mod.mode=='legacy':
             p.closeWriteChannel()  # input() fails with EOF rather than hanging forever.
         self.logs.state.setText(f'Running {mod.name}…')
+        self.module_panel.set_run_state('running',f'Running {mod.name}…')
         self._log(f'▶ {mod.name} in {context.parent}')
 
     def _read_stdout(self):
@@ -3545,6 +3673,7 @@ class MainWindow(QMainWindow):
                 elif kind=='progress':
                     self.logs.progress.setValue(round(float(obj.get('value',0))))
                     self.logs.state.setText(obj.get('message','Running…'))
+                    self.module_panel.set_run_state('progress',str(obj.get('message') or 'Running…'),obj.get('value',0))
                 elif kind=='result_file':
                     path=obj.get('path','')
                     self._add_result(path,obj.get('title','Output'))
@@ -3577,6 +3706,8 @@ class MainWindow(QMainWindow):
         ok=exit_code==0 and status==QProcess.ExitStatus.NormalExit
         self.logs.state.setText(('Completed' if ok else 'Failed/cancelled')+f' · {elapsed:.1f} s')
         self.logs.progress.setValue(100 if ok else 0)
+        self.module_panel.set_run_state('done' if ok else 'failed',
+                                        (f'Completed in {elapsed:.1f} s' if ok else 'Failed or cancelled — see Logs'))
         self._log(f'■ Exit code {exit_code} after {elapsed:.1f}s; folder: {self._run_context.parent}',important=not ok)
         # Every tool gets the same Images / Plots / Data layout. Organize *after*
         # execution, to avoid invalidating paths while the script is running.
@@ -3613,6 +3744,7 @@ class MainWindow(QMainWindow):
             self._job_token+=1
             self.logs.cancel.setEnabled(False)
             self.logs.state.setText('Preparation cancelled (pending result ignored)')
+            self.module_panel.set_run_state('idle')
 
     def _add_result(self,path,title):
         if not path:return

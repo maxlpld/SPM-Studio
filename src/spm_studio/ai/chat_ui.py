@@ -138,11 +138,16 @@ class AssistantDock(QDockWidget):
         self.conversation.setPlaceholderText('Ask about your scans, analyses and scripts.')
         cl.addWidget(self.conversation,1)
         from PySide6.QtWidgets import QProgressBar
-        busy=QWidget();bl=QHBoxLayout(busy);bl.setContentsMargins(0,0,0,0);bl.setSpacing(8)
-        self.busy_bar=QProgressBar();self.busy_bar.setRange(0,0);self.busy_bar.setFixedWidth(90)
+        # v0.0.5: a full-width strip (label above an 18 px bar) instead of a 90 px hairline.
+        from PySide6.QtWidgets import QFrame
+        busy=QFrame();busy.setObjectName('activityStrip')
+        bl=QVBoxLayout(busy);bl.setContentsMargins(10,8,10,10);bl.setSpacing(6)
+        self.busy_label=QLabel('');self.busy_label.setWordWrap(True)
+        self.busy_bar=QProgressBar();self.busy_bar.setRange(0,0)
+        self.busy_bar.setObjectName('AssistantBusyBarV005')
+        self.busy_bar.setProperty('role','activity')
         self.busy_bar.setTextVisible(False)
-        self.busy_label=QLabel('');self.busy_label.setObjectName('muted')
-        bl.addWidget(self.busy_bar);bl.addWidget(self.busy_label,1)
+        bl.addWidget(self.busy_label);bl.addWidget(self.busy_bar)
         self.busy_row=busy;busy.hide()
         cl.addWidget(busy)
         self._busy_started=0.;self._busy_detail=''
@@ -767,7 +772,9 @@ class AssistantDock(QDockWidget):
         instr=('Build ONE new SPM Studio API 1.0 analysis module. Write module.json, module.py, README.md '
               'inside the CURRENT WORKING DIRECTORY. Do not modify files outside this directory. '
               'Do not send commands to laboratory hardware or Nanonis; analysis is OFFLINE ONLY. '
-              'See the exact module contract: '+str(self._module_contract())+'. '
+              'FIRST read the checklist '+str(self._module_guide())+' and the exact module contract '
+              +str(self._module_contract())+', and follow both. The README.md is required: it is what the '
+              'user reads with the "Read me" button of the Analysis panel. '
               'Use only non-destructive analysis of saved data. Run syntax validation and write a brief test report. '
               'Never install global dependencies or change Pi settings. User request:\n'+prompt)
         self._task_autoinstall=self.autoinstall.isChecked()
@@ -785,6 +792,12 @@ class AssistantDock(QDockWidget):
         self.build.setEnabled(False);self.stop_task.setEnabled(True)
         self._log('Started staged module development at '+str(stage))
         self.task.start()
+
+    @staticmethod
+    def _module_guide():
+        from spm_studio.core import paths
+        user=paths.scripts_dir()/'README.md'
+        return user if user.is_file() else paths.bundled_studio_root()/'scripts'/'README.md'
 
     @staticmethod
     def _module_contract():

@@ -41,6 +41,28 @@ def run(win) -> int:
         for wanted in ('File', 'Scan', 'Selection', 'Analysis', 'View', 'Settings', 'Help'):
             assert wanted in titles, titles
         assert win._theme_menu.actions(), 'theme menu empty'
+        # v0.0.5: the menus only carry the shortcuts; the bar itself is hidden.
+        assert not win.menuBar().isVisible(), 'menu bar should be hidden'
+        assert win.windowTitle() == 'SPM Studio', win.windowTitle()
+        assert not win.settings_button.icon().isNull(), 'gear button has no icon'
+
+    def settings():
+        from spm_studio.ui.settings_dialog import SettingsDialog, PAGES
+        from spm_studio.core import paths
+        dialog = SettingsDialog(win)
+        for key, _label, _icon in PAGES:
+            dialog.show_page(key); app.processEvents()
+        for index in range(dialog.kind_combo.count()):
+            dialog.kind_combo.setCurrentIndex(index); app.processEvents()
+            assert dialog.items.count() > 0, dialog.kind_combo.itemData(index)
+        dialog.close(); dialog.deleteLater()
+        for folder in ('profiles', 'export_presets', 'themes', 'colormaps', 'plot_styles', 'shortcuts'):
+            assert (paths.customization_dir() / folder / 'README.md').is_file(), folder
+        assert (paths.scripts_dir() / 'README.md').is_file()
+        assert not (paths.customization_dir() / 'profiles' / 'KPFM_v7.json').exists()
+        win.log_dock.show(); app.processEvents()
+        assert win.log_dock.spm_close_button.width() >= 26
+        win.log_dock.hide()
 
     def assistant():
         win.ai_dock.show(); app.processEvents()
@@ -132,7 +154,8 @@ def run(win) -> int:
             image = _render_svg(svg, 200)
             assert image.width() == 200
 
-    for name, fn in (('themes', themes), ('menus', menus), ('assistant panel', assistant),
+    for name, fn in (('themes', themes), ('menus', menus), ('settings window', settings),
+                     ('assistant panel', assistant),
                      ('results options', options), ('live tool detection', live_tools), ('export-panel figures', script_figures),
                      ('svg result preview', results_view)):
         _check(name, fn, failures)

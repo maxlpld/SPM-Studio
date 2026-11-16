@@ -7,6 +7,42 @@ so write it for users. Add new versions **at the top**.
 The internal builds that preceded the GitHub project (0.7.0 – 0.8.3) are documented in
 [`docs/DEVELOPMENT_HISTORY.md`](docs/DEVELOPMENT_HISTORY.md).
 
+## 0.0.5 — 2026-11-16
+
+### Interface
+
+- **The menu bar is gone.** *File · Scan · Selection · Analysis · View · Settings · Help* repeated the buttons of the window. Every keyboard shortcut still works. Commands that had no button are now in **Settings**, opened with the new **gear button** at the right of the top bar. A **Logs** button next to it shows and hides the Logs panel.
+- **Close buttons of the Logs and Assistant panels are easy to see and to click** (18 px cross in a 28 px button, instead of a few pixels).
+- **Readable progress bars.** While a script runs, a full-width bar with the current step and percentage appears right under *Run analysis*; the bar of the Logs panel is larger; the Assistant shows a full-width “working” strip.
+- **Read me button** at the top of the Analysis panel: opens the `README.md` of the selected script (what it does, the method, its parameters and outputs), when the script has one.
+- The Tools list no longer shows a dotted ring beside script names. The window title is **SPM Studio**.
+- **Copy listed scans to a folder…** now asks where: choose the location and the name of the folder (new or existing). The proposal is still `<dataset>_scan_recap`.
+
+### Settings window
+
+- **General**: theme, results and figures, shortcuts, assistant, updates, tools maintenance, folders, link to the project on GitHub.
+- **Library**: one place for analysis scripts, profiles, export profiles, themes, colormaps, plot styles and shortcut files. **Import** a file or a folder, **Edit** (the file is checked before it is saved), **Duplicate**, **Remove** (moved to a `removed` folder, never deleted), and **Export…** the selection as one `.zip` that a colleague installs with *Import file…*. Lists in the main window follow at once; no restart.
+- **Literature**: connect **Consensus** and **Zotero** for the assistant (see below).
+- **About**: version, author (maxlpld), buttons to open the project on GitHub, report a problem and read the release notes.
+
+### Export
+
+- **Custom figures are fully customisable**: 1 to 12 images, in a row, a triangle or a **grid with the number of columns you choose**; each image can be a channel of the open scan, a channel of **another scan of the list**, or an analysis result / plot, with its own title, unit, colourbar and scale bar.
+- **Save as export profile…** stores the whole figure (page, arrangement, every image) under a name. It is in the figure list immediately and rebuilds the same figure on any scan. Export profiles are shared like everything else, from *Settings › Library*.
+
+### Assistant
+
+- **Consensus** ([consensus.app](https://consensus.app/)): the assistant can search the peer-reviewed literature through Consensus’ own connection, signed in with your Consensus account (a university e-mail uses your institution’s licence; a Zotero library linked inside Consensus is used by Consensus). SPM Studio never sees the password.
+- **Zotero, directly**: the assistant can search your own library, read abstracts, notes and indexed PDF text — from the Zotero app on this computer (Zotero 7 or later, no account needed, nothing leaves the computer) or from zotero.org with a read-only key kept in the system keyring. It works with or without Consensus, and is strictly read-only.
+- Both are off until you enable them in *Settings › Literature*. They need an agent assistant (Pi, Claude Code or Codex); a direct API connection is chat-only.
+- **A guide in every folder.** The scripts folder and each customization folder (profiles, export profiles, themes, colormaps, plot styles, shortcuts) now contain a `README.md` that states exactly how its files are built, with a complete example and how to check the result. The assistant is told to read the guide of a folder before it creates or changes anything there, and to write a `README.md` for every script it builds.
+
+### Profiles
+
+- Only one **KPFM** profile remains. Installations that had both *KPFM* and *KPFM v7* keep the current one as *KPFM*; the previous files are saved in `profiles/.profile_backups_v005`.
+
+SPM processing and the analysis scripts are unchanged; existing scans, results, profiles and settings are kept.
+
 ## 0.0.4 — 2026-11-16
 
 - **Improved first-time Pi assistant setup:** the Models step now proposes Fast/Smart defaults from models listed by connected providers, prefers subscription authentication, and filters out old GPT-4 models that are incompatible with ChatGPT OAuth. Users can override all choices, keep custom choices on refresh, or restore recommendations.

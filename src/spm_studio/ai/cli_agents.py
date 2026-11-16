@@ -99,7 +99,14 @@ class CliAgentBackend(QObject):
         if self.agent == 'codex' and system and not self._session:
             message = '[SPM Studio context — instructions for the assistant]\n' + system + '\n\n[User message]\n' + message
             system = ''
-        args = prefix + build_args(self.agent, self._session, self.tools, system if self.agent == 'claude-code' else '')
+        try:
+            from .config import load as _load_conf
+            from .literature import allowed_tools as _allowed
+            allowed = _allowed(_load_conf())
+        except Exception:
+            allowed = []
+        args = prefix + build_args(self.agent, self._session, self.tools,
+                                   system if self.agent == 'claude-code' else '', allowed_tools=allowed)
         env = QProcessEnvironment.systemEnvironment()
         for key, value in pu.command_env().items():
             if key == 'PATH':

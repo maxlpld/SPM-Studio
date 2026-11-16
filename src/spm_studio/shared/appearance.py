@@ -176,6 +176,14 @@ ICONS = {
     'tools': '<path d="M14.5 5.5a4 4 0 0 0 4 5.5l-8 8a2 2 0 0 1-3-3l8-8a4 4 0 0 0-1-2.5z"/>',
     'layers': '<path d="M12 4 3.5 8.5 12 13l8.5-4.5z"/><path d="M3.5 13 12 17.5 20.5 13"/>',
     'history': '<path d="M4 12a8 8 0 1 0 2.4-5.7"/><path d="M4 4v4h4"/><path d="M12 8v4l3 2"/>',
+    # v0.0.5: a real cog for the Settings button, plus library / literature glyphs.
+    'gear': '<path d="M10.19 5.24 L10.56 2.91 L13.44 2.91 L13.81 5.24 L15.50 5.94 L17.41 4.56 L19.44 6.59 L18.06 8.50 L18.76 10.19 L21.09 10.56 L21.09 13.44 L18.76 13.81 L18.06 15.50 L19.44 17.41 L17.41 19.44 L15.50 18.06 L13.81 18.76 L13.44 21.09 L10.56 21.09 L10.19 18.76 L8.50 18.06 L6.59 19.44 L4.56 17.41 L5.94 15.50 L5.24 13.81 L2.91 13.44 L2.91 10.56 L5.24 10.19 L5.94 8.50 L4.56 6.59 L6.59 4.56 L8.50 5.94z"/><circle cx="12" cy="12" r="3.1"/>',
+    'logs': '<rect x="3.5" y="4.5" width="17" height="15" rx="1.5"/><path d="M7 9.5l3 2.5-3 2.5"/><path d="M12.5 15h4.5"/>',
+    'book': '<path d="M5 4.5h10.5A2.5 2.5 0 0 1 18 7v12.5H7.2A2.2 2.2 0 0 1 5 17.3z"/><path d="M5 17.3A2.2 2.2 0 0 1 7.2 15H18"/><path d="M8.5 8.5h6"/>',
+    'import': '<path d="M12 4v11"/><path d="M7.5 10.5 12 15l4.5-4.5"/><path d="M5 13.5v5A1.5 1.5 0 0 0 6.5 20h11a1.5 1.5 0 0 0 1.5-1.5v-5"/>',
+    'folder': '<path d="M3.5 7.5A1.5 1.5 0 0 1 5 6h4l2 2h8a1.5 1.5 0 0 1 1.5 1.5v8A1.5 1.5 0 0 1 19 19H5a1.5 1.5 0 0 1-1.5-1.5z"/>',
+    'link': '<path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1"/><path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/>',
+    'save': '<path d="M5 4.5h11l3.5 3.5v11.5H5z"/><path d="M8 4.5v5h7v-5"/><rect x="8" y="13.5" width="8" height="6"/>',
     'mic': '<rect x="9" y="3.5" width="6" height="11" rx="3"/><path d="M5.5 11v1a6.5 6.5 0 0 0 13 0v-1"/><path d="M12 18v2.5M8.5 20.5h7"/>',
 }
 
@@ -243,19 +251,53 @@ def set_icon(widget, name, *, color_token=None):
     return widget
 
 
+DOCK_CLOSE_ICON = 18      # px, glyph of the dock close cross
+DOCK_CLOSE_BUTTON = 28    # px, clickable area
+
+
 def style_dock_titlebar(dock):
-    """Many dark themes render Qt's default dock title-bar icons as a near-
-    invisible dot. Drop the separate float button (keep Movable/Closable;
-    callers needing float keep their own explicit button) and give the
-    remaining close button a crisp, theme-coloured 'X' that also follows
-    live theme changes."""
-    from PySide6.QtWidgets import QDockWidget, QAbstractButton
+    """Dock header with a clearly visible close button (Logs, Assistant).
+
+    Qt draws the built-in dock close button at the style's small-icon size and
+    ignores ``setIconSize``, which left a cross that was hard to see and to
+    hit. v0.0.5 therefore installs its own title bar: the panel title and one
+    normal tool button (``DOCK_CLOSE_ICON`` px glyph in a ``DOCK_CLOSE_BUTTON``
+    px target) that follows the theme. Dragging the bar still moves the dock;
+    a detached (floating) panel keeps the operating system's own window frame.
+    The separate float button stays removed (callers needing float keep their
+    own explicit button).
+    """
+    from PySide6.QtWidgets import QDockWidget, QWidget, QHBoxLayout, QLabel
     from PySide6.QtCore import QSize, Qt
     dock.setFeatures(dock.features() & ~QDockWidget.DockWidgetFeature.DockWidgetFloatable)
-    for btn in dock.findChildren(QAbstractButton, options=Qt.FindChildOption.FindDirectChildrenOnly):
-        set_icon(btn, 'close')
-        btn.setIconSize(QSize(13, 13))
-        btn.setToolTip('Close')
+    bar = QWidget(dock)
+    bar.setObjectName('dockTitleBar')
+    bar.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+    row = QHBoxLayout(bar)
+    row.setContentsMargins(10, 4, 6, 4)
+    row.setSpacing(6)
+    title = QLabel(dock.windowTitle(), bar)
+    title.setObjectName('dockTitleLabel')
+    close = tool_button('', 'close', 'Close this panel', icon_only=True, parent=bar)
+    close.setObjectName('dockCloseButton')
+    close.setIconSize(QSize(DOCK_CLOSE_ICON, DOCK_CLOSE_ICON))
+    close.setFixedSize(QSize(DOCK_CLOSE_BUTTON, DOCK_CLOSE_BUTTON))
+    close.setAccessibleName('Close panel')
+    close.clicked.connect(dock.close)
+    row.addWidget(title, 1)
+    row.addWidget(close)
+    dock.windowTitleChanged.connect(title.setText)
+
+    def sync(floating):
+        # A detached panel keeps the window frame of the operating system (move, resize, close),
+        # exactly as before; the custom bar is only used while the panel is docked.
+        dock.setTitleBarWidget(None if floating else bar)
+
+    dock.topLevelChanged.connect(sync)
+    sync(dock.isFloating())
+    dock.spm_close_button = close
+    dock.spm_title_bar = bar
+    return close
 
 
 def _refresh_icons():
@@ -452,12 +494,25 @@ QDockWidget {{ color: @fg; }}
 QDockWidget::title {{ background: @sidebar; text-align: left; padding: 6px 10px; border-bottom: 1px solid @border; font-weight: 600; }}
 QDockWidget::close-button, QDockWidget::float-button {{ border: 0; background: transparent; padding: 2px; icon-size: 14px; }}
 QDockWidget::close-button:hover, QDockWidget::float-button:hover {{ background: @hover; border-radius: {rs}px; }}
+QWidget#dockTitleBar {{ background: @sidebar; border-bottom: 1px solid @border; }}
+QLabel#dockTitleLabel {{ font-weight: 600; }}
+QToolButton#dockCloseButton {{ padding: 0; border: 1px solid transparent; border-radius: {rs}px; background: transparent; }}
+QToolButton#dockCloseButton:hover {{ background: @hover; border-color: @border_strong; }}
+QToolButton#dockCloseButton:pressed {{ background: @pressed; }}
 QStatusBar {{ background: @sidebar; color: @muted; border-top: 1px solid @border; font-size: {small}px; }}
 QStatusBar::item {{ border: 0; }}
 QStatusBar QLabel {{ color: @muted; }}
 QToolTip {{ background: @raised; color: @fg; border: 1px solid @border_strong; border-radius: {rs}px; padding: 5px 8px; }}
-QProgressBar {{ background: @hover; border: 0; border-radius: 3px; text-align: center; color: @muted; max-height: 6px; font-size: {small}px; }}
-QProgressBar::chunk {{ background: @accent; border-radius: 3px; }}
+QProgressBar {{ background: @hover; border: 1px solid @border; border-radius: 6px; text-align: center; color: @fg;
+    min-height: 12px; max-height: 12px; font-size: {small}px; font-weight: 600; }}
+QProgressBar::chunk {{ background: @accent; border-radius: 5px; }}
+/* v0.0.5: the bars shown while a script runs or the assistant works are tall enough to read */
+QProgressBar[role="activity"] {{ min-height: 18px; max-height: 18px; border-radius: 9px; }}
+QProgressBar[role="activity"]::chunk {{ border-radius: 8px; }}
+QFrame#activityStrip {{ background: @accent_soft; border: 1px solid @border; border-radius: {r}px; }}
+QFrame#activityStrip QLabel {{ color: @fg; font-weight: 600; }}
+QToolButton#SettingsGearV005 {{ padding: 5px; min-width: 26px; }}
+QLabel#aboutTitle {{ font-size: {px + 8}px; font-weight: 700; }}
 QMessageBox QLabel {{ min-height: 20px; }}
 QDialogButtonBox {{ background: transparent; padding-top: 6px; }}
 QToolBar {{ background: transparent; border: 0; spacing: 4px; padding: 2px; }}

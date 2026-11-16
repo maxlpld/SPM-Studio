@@ -57,15 +57,16 @@ class BrowserPanel(QWidget):
         self.remove_file_button.setEnabled(False)
         self.export_selection_button=QPushButton('Copy to recap folder…')
         self.export_selection_button.setObjectName('ExportScanSelectionV26')
-        self.export_selection_button.setToolTip('Copy every scan still listed here into a sibling folder named '
-                                                '<dataset>_scan_recap and continue working in that folder '
+        self.export_selection_button.setToolTip('Copy every scan still listed here into a folder you choose (location and '
+                                                'name; a new folder is created) and continue working in that folder '
                                                 '(exports and script results are saved there). Nothing is deleted.')
         self.export_selection_button.clicked.connect(self.exportSelectionRequested.emit)
         self.export_selection_button.setEnabled(False)
         # Both commands also exist in File and in the right-click menu: one compact '…' here.
         self.file_menu=QMenu(self)
         self._remove_action=self.file_menu.addAction('Remove from list (file kept on disk)',self.request_remove_selected)
-        self._recap_action=self.file_menu.addAction('Copy listed scans to a recap folder…',self.exportSelectionRequested.emit)
+        self._recap_action=self.file_menu.addAction('Copy listed scans to a folder…',self.exportSelectionRequested.emit)
+        self._recap_action.setToolTip('Choose the location and the name of the folder')
         self.more_button=QToolButton()
         self.more_button.setObjectName('FilesMoreV08')
         self.more_button.setProperty('flat',True);self.more_button.setProperty('iconOnly',True)

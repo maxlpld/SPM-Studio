@@ -10,7 +10,7 @@
 </p>
 
 <p align="center">
-  <img alt="Version 0.0.4" src="https://img.shields.io/badge/version-0.0.4-57758B">
+  <img alt="Version 0.0.5" src="https://img.shields.io/badge/version-0.0.5-57758B">
   <img alt="Python 3.12–3.13" src="https://img.shields.io/badge/python-3.12--3.13-3776AB">
   <img alt="Linux, Windows, macOS" src="https://img.shields.io/badge/platform-Linux%20%7C%20Windows%20%7C%20macOS-555555">
   <img alt="MIT licence" src="https://img.shields.io/badge/licence-MIT-2E7D32">
@@ -84,11 +84,12 @@ its archive.
 - **macOS:** `~/Applications/SPM Studio.app` (Launchpad / Spotlight), or `~/.local/bin/spm-studio`.
 - **Windows:** Start menu or desktop › *SPM Studio*.
 
-Then **File › Open** a `.sxm` or `.gwy` file, or open a folder of scans in the browser panel.
+Then click **Open** for a `.sxm` or `.gwy` file, or **Dataset** for a folder of scans. Everything else is one
+click away: the **gear button** at the right of the top bar opens *Settings*.
 
 ## Updating
 
-- **In the app:** *Settings › Check for updates…* (also in *Help*) shows your version, the newest one and
+- **In the app:** *Settings (gear button) › Check for updates…* shows your version, the newest one and
   **what is new**; *Install update* runs the installer for you. SPM Studio also checks quietly once a day
   (one request to GitHub; nothing about you or your data is sent; switch it off in the same dialog) and
   shows “⬆ … available — what's new?” in the status bar. Nothing is ever installed without you clicking.
@@ -165,13 +166,20 @@ You can also run the same uninstaller from an extracted release archive. Details
 - Gwyddion colour gradients (also those of your own Gwyddion installation) and Matplotlib colour maps.
 
 **Customisation by importing files** — themes, colour maps, profiles, figure presets, plot styles and
-keyboard shortcuts are plain JSON/CSV files (*File › Import*, or *Settings › Open customization folder*).
-See [`customization/README_CUSTOMIZATION.md`](customization/README_CUSTOMIZATION.md) and
-[`docs/MODULE_API.md`](docs/MODULE_API.md) for writing your own tools.
+keyboard shortcuts are plain JSON/CSV files. **Settings › Library** imports a file or a folder, edits,
+duplicates and removes them, and **exports** any selection (scripts included) as one `.zip` that a colleague
+installs with *Import file…*; nothing needs a restart. Every folder contains a `README.md` guide that says
+exactly how its files are built — the assistant reads it before it creates a script or a profile for you.
+See [`customization/README_CUSTOMIZATION.md`](customization/README_CUSTOMIZATION.md),
+[`scripts/README.md`](scripts/README.md) and [`docs/MODULE_API.md`](docs/MODULE_API.md) for writing your own tools.
+
+**Export profiles** — in *Export*, *Custom* takes 1 to 12 images (channels, other scans of the list, analysis
+results and plots) in a row, a triangle or a grid; **Save as export profile…** keeps the whole figure under a
+name for later scans.
 
 ## AI assistant (optional)
 
-The **Assistant** button in the header (or *View › Assistant*) opens a panel that can dock on the right,
+The **Assistant** button in the header opens a panel that can dock on the right,
 float to another screen and keep its history. The first time, it offers five starting points:
 
 | Choice | For whom | What SPM Studio does |
@@ -190,6 +198,20 @@ float to another screen and keep its history. The first time, it offers five sta
 - **Limits:** neither Pi's coding tools nor Python plugins are an operating-system sandbox, and a generated
   tool is not scientifically validated by passing a syntax check. Read
   [`SECURITY.md`](SECURITY.md) and [`VERIFY_AND_TEST.md`](VERIFY_AND_TEST.md) before enabling coding tools.
+
+### Literature: Consensus and Zotero
+
+*Settings › Literature* lets the assistant answer with references instead of from memory. Both sources are
+off until you enable them, both are read-only, and both need an agent assistant (Pi, Claude Code or Codex).
+
+- **Consensus** ([consensus.app](https://consensus.app/)) searches peer-reviewed papers. The assistant uses
+  Consensus' own connection with **your** Consensus account: sign in with your university e-mail to use your
+  institution's licence. A Zotero library linked inside Consensus is used by Consensus. SPM Studio never sees
+  the password.
+- **Zotero** gives the assistant your own library: search, abstracts, notes and indexed PDF text. Choose the
+  **Zotero app on this computer** (Zotero 7 or later with *Settings › Advanced › Allow other applications on
+  this computer to communicate with Zotero*; no account, nothing leaves the computer) or a **zotero.org**
+  library with a read-only key kept in the system keyring. It works without Consensus.
 
 Setup details: [`docs/AI_ASSISTANT_SETUP.md`](docs/AI_ASSISTANT_SETUP.md).
 
@@ -238,8 +260,8 @@ install_*/uninstall_*  per-OS installers and uninstallers; get-spm-studio.* = on
 docs/                  specifications, module API, validation reports, releasing guide
 ```
 
-Publishing a version: `python tools/release_tools.py bump 0.0.4`, write the notes in `CHANGELOG.md`,
-commit, then `git tag v0.0.4 && git push origin main v0.0.4`. GitHub Actions tests it and publishes the release;
+Publishing a version: `python tools/release_tools.py bump 0.0.5`, write the notes in `CHANGELOG.md`,
+commit, then `git tag v0.0.5 && git push origin main v0.0.5`. GitHub Actions tests it and publishes the release;
 every installed SPM Studio then offers it. Full guide: [`docs/RELEASING.md`](docs/RELEASING.md).
 First upload of this repository: [`GITHUB_FIRST_UPLOAD.md`](GITHUB_FIRST_UPLOAD.md).
 

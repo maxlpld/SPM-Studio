@@ -2,7 +2,7 @@
 from __future__ import annotations
 from PySide6.QtWidgets import (QWidget,QFormLayout,QVBoxLayout,QHBoxLayout,QLabel,QLineEdit,QComboBox,
  QCheckBox,QSpinBox,QDoubleSpinBox,QPushButton,QFileDialog,QScrollArea,
- QGroupBox,QListWidget,QColorDialog,QGridLayout,QPlainTextEdit,QSlider)
+ QGroupBox,QListWidget,QColorDialog,QGridLayout,QPlainTextEdit,QSlider,QFrame,QProgressBar)
 from PySide6.QtCore import Signal,Qt,QRectF
 import json
 from pathlib import Path
@@ -54,7 +54,23 @@ class ModulePanel(QWidget):
         except Exception:
             pass
         self.run_button.clicked.connect(self.runRequested)
-        layout.addWidget(self.heading)
+        # v0.0.5: the tool's own README, one click away at the top of the panel.
+        header=QHBoxLayout()
+        header.setContentsMargins(0,0,0,0);header.setSpacing(8)
+        header.addWidget(self.heading,1)
+        self._readme_path=None
+        self.readme_button=QPushButton('Read me')
+        self.readme_button.setObjectName('ToolReadmeButtonV005')
+        self.readme_button.setToolTip('Open the README of this tool: what it does, the method, its parameters and outputs')
+        try:
+            from spm_studio.shared.appearance import set_icon
+            set_icon(self.readme_button,'book')
+        except Exception:
+            pass
+        self.readme_button.clicked.connect(self.open_readme)
+        self.readme_button.hide()
+        header.addWidget(self.readme_button,0,Qt.AlignmentFlag.AlignTop)
+        layout.addLayout(header)
         layout.addWidget(self.description)
         # v34: every tool can render its results with the display set up on the scan.
         self.display_group=QGroupBox('Figure')
@@ -253,6 +269,24 @@ class ModulePanel(QWidget):
         layout.addWidget(self.line_info)
         layout.addWidget(self.status)
         layout.addWidget(self.run_button)
+        # v0.0.5: a readable progress bar right under Run (the small one in Logs was easy to miss).
+        self.activity=QFrame()
+        self.activity.setObjectName('activityStrip')
+        activity_layout=QVBoxLayout(self.activity)
+        activity_layout.setContentsMargins(10,8,10,10);activity_layout.setSpacing(6)
+        self.activity_label=QLabel('')
+        self.activity_label.setWordWrap(True)
+        self.activity_bar=QProgressBar()
+        self.activity_bar.setObjectName('ToolRunProgressV005')
+        self.activity_bar.setProperty('role','activity')
+        self.activity_bar.setRange(0,100)
+        self.activity_bar.setTextVisible(True)
+        self.activity_bar.setFormat('%p %')
+        activity_layout.addWidget(self.activity_label)
+        activity_layout.addWidget(self.activity_bar)
+        self.activity.hide()
+        layout.addWidget(self.activity)
+        self._activity_token=0
         # Persisted scientific records, deliberately separate from widget settings.
         self.results_group=QGroupBox('Saved runs')
         results_layout=QVBoxLayout(self.results_group)
@@ -288,8 +322,44 @@ class ModulePanel(QWidget):
         layout.addStretch()
         self.run_button.setEnabled(False)
 
+    # ---- v0.0.5: README button and run progress
+    def open_readme(self):
+        if self._readme_path is None:return
+        from .settings_dialog import GuideDialog
+        name=self.module.name if self.module is not None else self._readme_path.parent.name
+        GuideDialog(self._readme_path,'Read me — '+name,self.window()).exec()
+
+    def _update_readme(self,mod):
+        from spm_studio.core import paths
+        self._readme_path=None
+        if mod is not None and getattr(mod,'mode','')!='legacy':
+            try:self._readme_path=paths.module_readme(mod.path)
+            except OSError:self._readme_path=None
+        self.readme_button.setVisible(self._readme_path is not None)
+
+    def set_run_state(self,state,text='',value=None):
+        """``state``: preparing · running · progress · done · failed · idle."""
+        from PySide6.QtCore import QTimer
+        self._activity_token+=1
+        token=self._activity_token
+        if state=='idle':
+            self.activity.hide();return
+        self.activity.show()
+        if text:self.activity_label.setText(text)
+        if state in ('preparing','running'):
+            self.activity_bar.setRange(0,0)            # busy until the tool reports a percentage
+        elif state=='progress':
+            self.activity_bar.setRange(0,100)
+            self.activity_bar.setValue(max(0,min(100,int(round(float(value or 0))))))
+        elif state in ('done','failed'):
+            self.activity_bar.setRange(0,100)
+            self.activity_bar.setValue(100 if state=='done' else 0)
+            QTimer.singleShot(5000 if state=='done' else 12000,
+                              lambda:self.activity.hide() if token==self._activity_token else None)
+
     def set_module(self,mod,channel_names=None,selected_channel=''):
         self.module=mod
+        self._update_readme(mod)
         self.widgets={}
         self.masks=[]
         self.mask_history=[]
