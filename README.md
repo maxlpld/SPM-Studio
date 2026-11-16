@@ -10,7 +10,7 @@
 </p>
 
 <p align="center">
-  <img alt="Version 0.0.5" src="https://img.shields.io/badge/version-0.0.5-57758B">
+  <img alt="Version 0.0.6" src="https://img.shields.io/badge/version-0.0.6-57758B">
   <img alt="Python 3.12+" src="https://img.shields.io/badge/python-3.12%2B-3776AB">
   <img alt="Linux, Windows, macOS" src="https://img.shields.io/badge/platform-Linux%20%7C%20Windows%20%7C%20macOS-555555">
   <img alt="MIT licence" src="https://img.shields.io/badge/licence-MIT-2E7D32">
@@ -260,8 +260,8 @@ install_*/uninstall_*  per-OS installers and uninstallers; get-spm-studio.* = on
 docs/                  specifications, module API, validation reports, releasing guide
 ```
 
-Publishing a version: `python tools/release_tools.py bump 0.0.5`, write the notes in `CHANGELOG.md`,
-commit, then `git tag v0.0.5 && git push origin main v0.0.5`. GitHub Actions tests it and publishes the release;
+Publishing a version: `python tools/release_tools.py bump 0.0.6`, write the notes in `CHANGELOG.md`,
+commit, then `git tag v0.0.6 && git push origin main v0.0.6`. GitHub Actions tests it and publishes the release;
 every installed SPM Studio then offers it. Full guide: [`docs/RELEASING.md`](docs/RELEASING.md).
 First upload of this repository: [`GITHUB_FIRST_UPLOAD.md`](GITHUB_FIRST_UPLOAD.md).
 
