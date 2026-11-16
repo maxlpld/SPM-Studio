@@ -282,13 +282,23 @@ class PiSetupWizard(QDialog):
     def _install_git(self):
         if pu.winget():
             if QMessageBox.question(self, 'Install Git for Windows?',
-                                    'Run "winget install Git.Git" (official package)? A Windows installer window '
-                                    'may ask for confirmation.') != QMessageBox.StandardButton.Yes:
+                                    'Install Git.Git from the official winget source? A Windows installer '
+                                    'window may ask for confirmation.') != QMessageBox.StandardButton.Yes:
                 return
+            # Pin the source: otherwise a broken/untrusted msstore source can stop
+            # winget before it installs Git.Git from the working winget repository.
+            def finished(code):
+                self._check_install()
+                if code != 0:
+                    self._log('Git installation failed. Try from a normal PowerShell window: '
+                              'winget install -e --id Git.Git --source winget '
+                              '--accept-source-agreements --accept-package-agreements')
+                    self._log('Or install Git Bash manually from https://git-scm.com/download/win '
+                              'then restart SPM Studio.')
             self._run(lambda log, p, c: pi_setup.run_streaming(
-                [pu.winget(), 'install', '-e', '--id', 'Git.Git', '--accept-source-agreements',
-                 '--accept-package-agreements'], log, timeout=1800, cancel=c),
-                lambda code: self._check_install(), 'Installing Git for Windows…')
+                [pu.winget(), 'install', '-e', '--id', 'Git.Git', '--source', 'winget',
+                 '--accept-source-agreements', '--accept-package-agreements'],
+                log, timeout=1800, cancel=c), finished, 'Installing Git for Windows…')
         else:
             webbrowser.open('https://git-scm.com/download/win')
 
