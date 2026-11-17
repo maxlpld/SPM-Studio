@@ -129,7 +129,8 @@ def test_fresh_installation_never_creates_a_second_kpfm_profile(home):
 # ------------------------------------------------------------------------ library
 def test_library_lists_exports_imports_and_removes(home, tmp_path):
     from spm_studio.core import library, paths
-    assert {'scripts', 'profiles', 'exports', 'themes', 'colormaps', 'plots', 'shortcuts'} == set(library.KINDS)
+    assert {'scripts', 'profiles', 'exports', 'themes', 'colormaps', 'plots', 'shortcuts',
+            'latex_templates', 'slide_templates'} == set(library.KINDS)          # v0.0.8: templates
     names = {i.name for i in library.list_items('profiles')}
     assert {'KPFM.json', 'STM.json'} <= names and 'README.md' not in names
     assert all(i.valid for i in library.list_items('profiles'))
@@ -583,8 +584,8 @@ def test_settings_window_pages_and_library_actions(window, tmp_path, monkeypatch
     dialog = SettingsDialog(window, 'about')
     dialog.show()
     QApplication.processEvents()
-    assert [p[0] for p in PAGES] == ['general', 'library', 'literature', 'about']
-    assert dialog.stack.currentIndex() == 3
+    assert [p[0] for p in PAGES] == ['general', 'library', 'literature', 'documents', 'about']   # v0.0.8
+    assert dialog.stack.currentIndex() == 4
     author = dialog.findChild(type(dialog.about_version), 'AboutAuthorV005')
     assert 'maxlpld' in author.text() and 'https://github.com/maxlpld' in author.text()
     current = re.search(r'^version = "(\d+\.\d+\.\d+)"',

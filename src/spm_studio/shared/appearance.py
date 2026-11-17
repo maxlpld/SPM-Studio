@@ -185,6 +185,42 @@ ICONS = {
     'link': '<path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1"/><path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/>',
     'save': '<path d="M5 4.5h11l3.5 3.5v11.5H5z"/><path d="M8 4.5v5h7v-5"/><rect x="8" y="13.5" width="8" height="6"/>',
     'mic': '<rect x="9" y="3.5" width="6" height="11" rx="3"/><path d="M5.5 11v1a6.5 6.5 0 0 0 13 0v-1"/><path d="M12 18v2.5M8.5 20.5h7"/>',
+    # v0.0.8: LaTeX editor, presentation editor and Overleaf.
+    'latex': '<path d="M6 3.5h8.5L19 8v12.5H6z"/><path d="M14 3.5V8h5"/><path d="M8.5 12.5h2.2l1.3 4 1.6-6h2"/>',
+    'slides': '<rect x="3.5" y="4.5" width="17" height="11.5" rx="1.5"/><path d="M12 16v3.5M8.5 19.5h7"/><path d="M8 12.5l2.5-3 2 2 3-3.5"/>',
+    'overleaf': '<path d="M19.5 4.5C11 4.5 5 9 5 15.5c0 2.5 1.6 4 3.8 4 5.2 0 8.7-6.5 10.7-15z"/><path d="M5 19.5c2.2-4.4 5.4-7.6 9.5-10"/>',
+    'bold': '<path d="M7.5 5h5.5a3.25 3.25 0 0 1 0 6.5H7.5z"/><path d="M7.5 11.5h6.5a3.25 3.25 0 0 1 0 6.5H7.5z"/>',
+    'italic': '<path d="M14 5h-4M14 19h-4M13.5 5l-3 14"/>',
+    'underline': '<path d="M7.5 4.5v6a4.5 4.5 0 0 0 9 0v-6"/><path d="M6 20h12"/>',
+    'text': '<path d="M5 6.5V5h14v1.5"/><path d="M12 5v14"/><path d="M9.5 19h5"/>',
+    'formula': '<path d="M17.5 5.5h-9l5 6.5-5 6.5h9"/>',
+    'image': '<rect x="3.5" y="4.5" width="17" height="15" rx="1.5"/><circle cx="9" cy="9.5" r="1.6"/><path d="M20.5 15.5l-5-5-9 9"/>',
+    'video': '<rect x="3.5" y="6" width="12" height="12" rx="1.5"/><path d="M15.5 10.5l5-3v9l-5-3z"/>',
+    'gif': '<rect x="3.5" y="5.5" width="17" height="13" rx="1.5"/><path d="M10 10.5H8.2a1.2 1.2 0 0 0-1.2 1.2v.6A1.2 1.2 0 0 0 8.2 13.5H10v-1.4"/><path d="M12.5 10.5v3"/><path d="M15 13.5v-3h2.2M15 12h1.6"/>',
+    'shape': '<rect x="3.5" y="10" width="9" height="9.5" rx="1"/><circle cx="15.5" cy="8.5" r="5"/>',
+    'undo': '<path d="M9 7.5 4.5 12 9 16.5"/><path d="M5 12h9.5a5 5 0 0 1 0 10H12"/>',
+    'redo': '<path d="M15 7.5l4.5 4.5-4.5 4.5"/><path d="M19 12H9.5a5 5 0 0 0 0 10H12"/>',
+    'search': '<circle cx="10.5" cy="10.5" r="6"/><path d="M15 15l5 5"/>',
+    'play': '<path d="M8 5.5v13l10-6.5z"/>',
+    'list': '<path d="M9 7h11M9 12h11M9 17h11"/><circle cx="5" cy="7" r=".8"/><circle cx="5" cy="12" r=".8"/><circle cx="5" cy="17" r=".8"/>',
+    'numbered': '<path d="M10 7h10M10 12h10M10 17h10"/><path d="M4.5 5.5 6 5v4"/><path d="M4.5 14.5h2l-2 3h2"/>',
+    'table': '<rect x="3.5" y="5" width="17" height="14" rx="1.5"/><path d="M3.5 10h17M3.5 14.5h17M9.5 5v14M15 5v14"/>',
+    'align-left': '<path d="M4 6h16M4 10h10M4 14h16M4 18h10"/>',
+    'align-center': '<path d="M4 6h16M7 10h10M4 14h16M7 18h10"/>',
+    'align-right': '<path d="M4 6h16M10 10h10M4 14h16M10 18h10"/>',
+    'front': '<rect x="8.5" y="8.5" width="11" height="11" rx="1.2"/><path d="M15.5 8.5V5a.5.5 0 0 0-.5-.5H5a.5.5 0 0 0-.5.5v10c0 .3.2.5.5.5h3.5"/>',
+    'back-layer': '<rect x="4.5" y="4.5" width="11" height="11" rx="1.2"/><path d="M15.5 8.5H19a.5.5 0 0 1 .5.5v10a.5.5 0 0 1-.5.5H9a.5.5 0 0 1-.5-.5v-3.5"/>',
+    'sigma': '<path d="M17 5H7l6 7-6 7h10"/>',
+    'comment': '<path d="M5 5.5h14v10H10l-4 3.5v-3.5H5z"/>',
+    'fullscreen': '<path d="M4 9V4h5M15 4h5v5M20 15v5h-5M9 20H4v-5"/>',
+    'zoom-in': '<circle cx="10.5" cy="10.5" r="6"/><path d="M15 15l5 5M8 10.5h5M10.5 8v5"/>',
+    'zoom-out': '<circle cx="10.5" cy="10.5" r="6"/><path d="M15 15l5 5M8 10.5h5"/>',
+    'download': '<path d="M12 4v11"/><path d="M7.5 10.5 12 15l4.5-4.5"/><path d="M5 19.5h14"/>',
+    'upload': '<path d="M12 15V4"/><path d="M7.5 8.5 12 4l4.5 4.5"/><path d="M5 19.5h14"/>',
+    'file-plus': '<path d="M6 3.5h8.5L19 8v12.5H6z"/><path d="M14 3.5V8h5"/><path d="M12.5 11v6M9.5 14h6"/>',
+    'folder-plus': '<path d="M3.5 7.5A1.5 1.5 0 0 1 5 6h4l2 2h8a1.5 1.5 0 0 1 1.5 1.5v8A1.5 1.5 0 0 1 19 19H5a1.5 1.5 0 0 1-1.5-1.5z"/><path d="M12 10.5v5M9.5 13h5"/>',
+    'menu': '<path d="M4 7h16M4 12h16M4 17h16"/>',
+    'send-to': '<path d="M4 12h12"/><path d="M12 7l5 5-5 5"/><path d="M20 5v14"/>',
 }
 
 
@@ -528,6 +564,26 @@ QDialogButtonBox {{ background: transparent; padding-top: 6px; }}
 QToolBar {{ background: transparent; border: 0; spacing: 4px; padding: 2px; }}
 QToolBar::separator {{ background: @border; width: 1px; margin: 4px 4px; }}
 QCalendarWidget QWidget {{ alternate-background-color: @surface; }}
+/* v0.0.8: LaTeX editor, presentation editor, launchers */
+QFrame#docHeader {{ background: @sidebar; border: 0; border-bottom: 1px solid @border; }}
+QFrame#docRibbon {{ background: @surface; border: 0; border-bottom: 1px solid @border; }}
+QLabel#docTitle {{ font-size: {px + 1}px; font-weight: 600; }}
+QLabel#docKind {{ color: @muted; font-size: {small}px; font-weight: 600; letter-spacing: .4px; }}
+QFrame#docPanel {{ background: @surface; border: 1px solid @border; border-radius: {r}px; }}
+QLabel#panelTitle {{ color: @muted; font-size: {small}px; font-weight: 600; letter-spacing: .4px; padding: 2px 2px; }}
+QPlainTextEdit#latexCode {{ background: @input; border: 0; border-radius: 0; padding: 0; font-size: {px + 1}px; }}
+QWidget#lineGutter {{ background: @surface; }}
+QFrame#pdfPane {{ background: @bg; border: 0; }}
+QListWidget#slideThumbs {{ background: @sidebar; border: 0; border-right: 1px solid @border; border-radius: 0; padding: 6px; }}
+QListWidget#slideThumbs::item {{ border: 2px solid transparent; border-radius: {r}px; padding: 4px; margin: 2px; }}
+QListWidget#slideThumbs::item:selected {{ border-color: @accent; background: @accent_soft; }}
+QPlainTextEdit#speakerNotes {{ border: 0; border-top: 1px solid @border; border-radius: 0; }}
+QFrame#launcherCard {{ background: @surface; border: 1px solid @border; border-radius: {r + 2}px; }}
+QFrame#launcherCard:hover {{ border-color: @accent; }}
+QLabel#launcherTitle {{ font-size: {px + 1}px; font-weight: 600; }}
+QLabel#errorBadge {{ background: @danger; color: @accent_fg; border-radius: 8px; padding: 0 6px; font-size: {small}px; font-weight: 700; }}
+QLabel#warnBadge {{ background: @warning; color: @bg; border-radius: 8px; padding: 0 6px; font-size: {small}px; font-weight: 700; }}
+QFrame#findBar {{ background: @surface; border: 0; border-top: 1px solid @border; }}
 '''
     for key in sorted(COLOR_TOKENS, key=len, reverse=True):
         alias = {'background': 'bg', 'foreground': 'fg'}.get(key, key)

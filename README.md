@@ -10,7 +10,7 @@
 </p>
 
 <p align="center">
-  <img alt="Version 0.0.7" src="https://img.shields.io/badge/version-0.0.7-57758B">
+  <img alt="Version 0.0.8" src="https://img.shields.io/badge/version-0.0.8-57758B">
   <img alt="Python 3.12+" src="https://img.shields.io/badge/python-3.12%2B-3776AB">
   <img alt="Linux, Windows, macOS" src="https://img.shields.io/badge/platform-Linux%20%7C%20Windows%20%7C%20macOS-555555">
   <img alt="MIT licence" src="https://img.shields.io/badge/licence-MIT-2E7D32">
@@ -31,7 +31,7 @@ without AI.
 ## Contents
 
 [Installation](#installation) · [Launch](#launch) · [Updating](#updating) · [Uninstall](#uninstall) ·
-[Features](#features) · [AI assistant](#ai-assistant-optional) · [Scientific scope](#scientific-scope-and-limitations) ·
+[Features](#features) · [LaTeX & slides](#writing-papers-and-talks-latex-editor-presentation-editor-overleaf-optional) · [AI assistant](#ai-assistant-optional) · [Scientific scope](#scientific-scope-and-limitations) ·
 [Developers](#developers) · [Help and contributing](#help-bugs-and-contributing)
 
 ## Installation
@@ -180,6 +180,40 @@ See [`customization/README_CUSTOMIZATION.md`](customization/README_CUSTOMIZATION
 results and plots) in a row, a triangle or a grid; **Save as export profile…** keeps the whole figure under a
 name for later scans.
 
+## Writing papers and talks: LaTeX editor, presentation editor, Overleaf (optional)
+
+Switch them on in **Settings › Documents**; a **LaTeX** and/or a **Slides** button then appears in the header.
+Each opens a start screen (*new from a template* · *open* · *import* · *recent*) and then its own window, in
+the same design as the scan window. Projects are ordinary folders, created with the project name in a default
+place you choose in Settings (and changeable for every project).
+
+- **LaTeX editor** — in the spirit of Overleaf: project files, outline, a source editor with syntax colours,
+  completion of commands, `\ref`/`\cite` and file names, brackets and `\begin…\end`, find/replace; a
+  formatting bar (sections, bold, math, symbols, lists, figures, tables, references); a **live PDF** next to the
+  source, **Recompile** (Ctrl+Enter) and an **Auto-compile** button that rebuilds the PDF while you type;
+  errors and warnings with their line (click to jump) and *Ask the assistant to fix*; pdfLaTeX, XeLaTeX,
+  LuaLaTeX, latexmk or Tectonic; *Download source (.zip)*, *Download PDF*, *Save as*, *Save as template*.
+  Uses the TeX installation of your computer (TeX Live, MacTeX or MiKTeX).
+- **Presentation editor** — in the spirit of PowerPoint: slide thumbnails (drag to reorder), layouts, text
+  boxes, **LaTeX boxes** (type LaTeX, it is compiled and shown automatically), pictures, **animated GIFs**,
+  **videos**, shapes and arrows, themes (colours, fonts, title band, footer, slide numbers), speaker notes,
+  undo/redo, full-screen slide show with transitions, export to **PDF**, **PowerPoint (.pptx)** and PNG, import
+  of `.pptx` files.
+- **Connected to the scan window** — *Export…* asks where the figure goes: a folder, the LaTeX document (copied
+  to `figures/`, inserted with `\includegraphics` and a caption), a presentation (new or current slide) and/or
+  **Overleaf** (project and folder of your choice) — any combination at once. Analysis results and graphs of the
+  Logs panel can be sent the same way (right-click › *Send to…*), and both editors have a *From SPM Studio*
+  button.
+- **Overleaf** — through Overleaf's Git integration: paste a Git token and the address of your projects in
+  Settings, then upload figures into any folder, import a whole project into the LaTeX editor, and push/pull
+  your edits.
+- **Templates** — LaTeX and presentation templates are imported, created, edited, exported and shared in
+  *Settings › Library* like profiles; their folders contain a `README.md` explaining how to build one.
+- **The assistant helps here too**: it can read the open document, write and fix LaTeX, compile, build slides,
+  add LaTeX boxes and speaker notes — with every assistant, in plain chat too, and every change can be undone.
+
+Guide: [`docs/DOCUMENTS.md`](docs/DOCUMENTS.md).
+
 ## AI assistant (optional)
 
 The **Assistant** button in the header opens a panel that can dock on the right,
@@ -243,6 +277,7 @@ Check results on your own data before publishing them.
 | Python | 3.12 or newer with venv and ensurepip (installers validate the environment; package availability depends on the Python release and platform) |
 | Disk / network | about 1.5 GiB; internet for the one-time download of the Python packages (PySide6, NumPy, SciPy, …) |
 | AI assistant | optional; Node.js, Pi, Ollama etc. are installed only if you choose them |
+| LaTeX editor | optional; a TeX distribution (TeX Live, MacTeX or MiKTeX) or Tectonic. Overleaf sync needs Git |
 
 The releases are **source archives**, not compiled programs: the same archive serves every operating system,
 and the installer builds a private Python environment on your computer.

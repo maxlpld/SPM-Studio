@@ -1,0 +1,20 @@
+{
+  "format": "spm-slides-template-v1",
+  "name": "Classic 4:3",
+  "description": "4:3 slides for older projectors, light theme.",
+  "size": "4:3",
+  "theme": {
+    "background_color": "#FFFFFF",
+    "text_color": "#1A1D22",
+    "muted_color": "#5E6672",
+    "accent_color": "#0F7C6F",
+    "title_font": "Inter",
+    "body_font": "Inter",
+    "title_size": 34,
+    "body_size": 20,
+    "title_bar": false,
+    "title_bar_color": "#0F7C6F",
+    "footer": "",
+    "slide_numbers": true
+  }
+}

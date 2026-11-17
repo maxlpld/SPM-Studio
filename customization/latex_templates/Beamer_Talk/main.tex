@@ -1,0 +1,58 @@
+\documentclass[aspectratio=169,11pt]{beamer}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage{amsmath,amssymb}
+\usepackage{siunitx}
+\usepackage{booktabs}
+
+\definecolor{spmteal}{HTML}{0F7C6F}
+\definecolor{spmdark}{HTML}{1A1D22}
+\setbeamercolor{structure}{fg=spmteal}
+\setbeamercolor{frametitle}{fg=spmdark}
+\setbeamercolor{title}{fg=spmdark}
+\setbeamerfont{frametitle}{series=\bfseries}
+\setbeamertemplate{navigation symbols}{}
+\setbeamertemplate{footline}[frame number]
+\graphicspath{{figures/}}
+
+\title{ {{title}} }
+\author{ {{author}} }
+\institute{Institution}
+\date{ {{date}} }
+
+\begin{document}
+
+\begin{frame}
+  \titlepage
+\end{frame}
+
+\begin{frame}{Outline}
+  \tableofcontents
+\end{frame}
+
+\section{Motivation}
+\begin{frame}{Motivation}
+  \begin{itemize}
+    \item Why the question matters
+    \item What is not known yet
+    \item What we did
+  \end{itemize}
+\end{frame}
+
+\section{Results}
+\begin{frame}{Main result}
+  \begin{equation*}
+    \frac{\mathrm{d}I}{\mathrm{d}V} \propto \rho_s(eV)
+  \end{equation*}
+  Figures exported from SPM Studio are added as new frames.
+\end{frame}
+
+\begin{frame}{Summary}
+  \begin{itemize}
+    \item First take-home message
+    \item Second take-home message
+  \end{itemize}
+\end{frame}
+
+\end{document}

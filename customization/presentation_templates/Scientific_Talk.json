@@ -1,0 +1,172 @@
+{
+  "format": "spm-slides-template-v1",
+  "name": "Scientific talk",
+  "description": "Coloured title bar, footer, five starter slides (motivation, model, results, summary).",
+  "size": "16:9",
+  "theme": {
+    "background_color": "#FBFBF8",
+    "text_color": "#16181D",
+    "muted_color": "#5E6672",
+    "accent_color": "#1F5FA8",
+    "title_font": "Inter",
+    "body_font": "Inter",
+    "title_size": 30,
+    "body_size": 19,
+    "title_bar": true,
+    "title_bar_color": "#1F5FA8",
+    "footer": "Group meeting",
+    "slide_numbers": true
+  },
+  "slides": [
+    {
+      "layout": "title",
+      "items": [
+        {
+          "type": "text",
+          "x": 48,
+          "y": 170,
+          "w": 864,
+          "h": 90,
+          "role": "title",
+          "html": "<p align=\"center\" style=\"margin:0; font-family:'Inter'; font-size:42pt; font-weight:600; color:#16181D;\">Talk title</p>"
+        },
+        {
+          "type": "shape",
+          "x": 440,
+          "y": 268,
+          "w": 80,
+          "h": 4,
+          "shape": "rect",
+          "fill_color": "#1F5FA8",
+          "radius": 2
+        },
+        {
+          "type": "text",
+          "x": 48,
+          "y": 284,
+          "w": 864,
+          "h": 60,
+          "role": "subtitle",
+          "html": "<p align=\"center\" style=\"margin:0; font-family:'Inter'; font-size:20pt; font-weight:400; color:#5E6672;\">Name · Group · Institution · Date</p>"
+        }
+      ],
+      "notes": "Introduce yourself and the question in one sentence."
+    },
+    {
+      "layout": "title_content",
+      "items": [
+        {
+          "type": "text",
+          "x": 48,
+          "y": 36,
+          "w": 864,
+          "h": 72,
+          "role": "title",
+          "html": "<p align=\"left\" style=\"margin:0; font-family:'Inter'; font-size:30pt; font-weight:600; color:#16181D;\">Motivation</p>"
+        },
+        {
+          "type": "text",
+          "x": 48,
+          "y": 128,
+          "w": 864,
+          "h": 356,
+          "role": "body",
+          "html": "<ul style=\"margin:0; font-family:'Inter'; font-size:19pt; color:#16181D;\"><li>Why this system?</li><li>What is not understood yet?</li><li>What we measured</li></ul>"
+        }
+      ]
+    },
+    {
+      "layout": "formula",
+      "items": [
+        {
+          "type": "text",
+          "x": 48,
+          "y": 36,
+          "w": 864,
+          "h": 72,
+          "role": "title",
+          "html": "<p align=\"left\" style=\"margin:0; font-family:'Inter'; font-size:30pt; font-weight:600; color:#16181D;\">Model</p>"
+        },
+        {
+          "type": "latex",
+          "x": 48,
+          "y": 150,
+          "w": 864,
+          "h": 120,
+          "source": "\\[ \\frac{\\mathrm{d}I}{\\mathrm{d}V}(V) \\propto \\rho_s(E_F + eV) \\]",
+          "size": 30,
+          "color": "#16181D",
+          "display": true,
+          "align": "center"
+        },
+        {
+          "type": "text",
+          "x": 48,
+          "y": 300,
+          "w": 864,
+          "h": 180,
+          "role": "body",
+          "html": "<p align=\"left\" style=\"margin:0; font-family:'Inter'; font-size:19pt; font-weight:400; color:#16181D;\">The differential conductance maps the local density of states.</p>"
+        }
+      ]
+    },
+    {
+      "layout": "image_caption",
+      "items": [
+        {
+          "type": "text",
+          "x": 48,
+          "y": 36,
+          "w": 864,
+          "h": 72,
+          "role": "title",
+          "html": "<p align=\"left\" style=\"margin:0; font-family:'Inter'; font-size:30pt; font-weight:600; color:#16181D;\">Results</p>"
+        },
+        {
+          "type": "shape",
+          "x": 48,
+          "y": 124,
+          "w": 864,
+          "h": 320,
+          "shape": "rect",
+          "fill_color": "#E9ECEF",
+          "radius": 8,
+          "placeholder": true,
+          "html": "<p align=\"center\" style=\"margin:0; font-family:'Inter'; font-size:14pt; font-weight:400; color:#5E6672;\">Send a scan from SPM Studio (Export › Add to presentation)</p>"
+        },
+        {
+          "type": "text",
+          "x": 48,
+          "y": 452,
+          "w": 864,
+          "h": 44,
+          "role": "caption",
+          "html": "<p align=\"center\" style=\"margin:0; font-family:'Inter'; font-size:15pt; font-weight:400; color:#5E6672;\">Caption</p>"
+        }
+      ]
+    },
+    {
+      "layout": "title_content",
+      "items": [
+        {
+          "type": "text",
+          "x": 48,
+          "y": 36,
+          "w": 864,
+          "h": 72,
+          "role": "title",
+          "html": "<p align=\"left\" style=\"margin:0; font-family:'Inter'; font-size:30pt; font-weight:600; color:#16181D;\">Summary</p>"
+        },
+        {
+          "type": "text",
+          "x": 48,
+          "y": 128,
+          "w": 864,
+          "h": 356,
+          "role": "body",
+          "html": "<ul style=\"margin:0; font-family:'Inter'; font-size:19pt; color:#16181D;\"><li>First take-home message</li><li>Second take-home message</li><li>Outlook</li></ul>"
+        }
+      ]
+    }
+  ]
+}

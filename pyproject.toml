@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "spm-studio"
-version = "0.0.7"
+version = "0.0.8"
 description = "SPM Studio — Scientific image & data analysis"
 readme = "README.md"
 requires-python = ">=3.12"
@@ -19,7 +19,10 @@ analysis = ["scipy>=1.10", "matplotlib>=3.7"]
 # No audio or network access beyond a one-time, user-confirmed model download
 # (see spm_studio/ai/speech.py); transcription itself never touches the network.
 voice = ["vosk==0.3.44; sys_platform == 'darwin'", "vosk>=0.3.45; sys_platform != 'darwin'"]
-all = ["gwyfile>=0.3.0", "scipy>=1.10", "matplotlib>=3.7", "scikit-image>=0.21", "pandas>=2.0", "shapely>=2.0", "rich>=13.7", "tifffile>=2024.1", "keyring>=25", "vosk==0.3.44; sys_platform == 'darwin'", "vosk>=0.3.45; sys_platform != 'darwin'"]
+# v0.0.8: PowerPoint (.pptx) export / import of the presentation editor. Everything else of the LaTeX and
+# presentation editors uses Qt only (TeX itself comes from the computer's TeX Live / MacTeX / MiKTeX).
+documents = ["python-pptx>=1.0"]
+all = ["gwyfile>=0.3.0", "scipy>=1.10", "matplotlib>=3.7", "scikit-image>=0.21", "pandas>=2.0", "shapely>=2.0", "rich>=13.7", "tifffile>=2024.1", "keyring>=25", "python-pptx>=1.0", "vosk==0.3.44; sys_platform == 'darwin'", "vosk>=0.3.45; sys_platform != 'darwin'"]
 dev = ["pytest>=7", "pytest-qt>=4", "scipy>=1.10", "matplotlib>=3.7", "keyring>=25"]
 
 [project.scripts]

@@ -1,0 +1,35 @@
+% Single-file template: everything in one .tex file.
+\documentclass[11pt,a4paper]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[margin=2cm]{geometry}
+\usepackage{amsmath,amssymb}
+\usepackage{graphicx}
+\usepackage{siunitx}
+\usepackage{booktabs}
+\usepackage{hyperref}
+\graphicspath{{figures/}}
+
+\title{Lab notes — {{title}}}
+\author{ {{author}} }
+\date{ {{date}} }
+
+\begin{document}
+\maketitle
+
+\section*{Sample}
+Preparation, cleaning cycles, deposition.
+
+\section*{Measurements}
+\begin{tabular}{lll}
+  \toprule
+  Scan & Bias & Comment \\
+  \midrule
+   &  &  \\
+  \bottomrule
+\end{tabular}
+
+\section*{Figures}
+Exported scans are inserted below.
+
+\end{document}

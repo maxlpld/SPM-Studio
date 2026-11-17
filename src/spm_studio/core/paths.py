@@ -863,7 +863,39 @@ GUIDES = (
     ('customization/colormaps/README.md', 'colormaps', 'customization'),
     ('customization/plot_styles/README.md', 'plot_styles', 'customization'),
     ('customization/shortcuts/README.md', 'shortcuts', 'customization'),
+    # v0.0.8: templates of the LaTeX and presentation editors.
+    ('customization/latex_templates/README.md', 'latex_templates', 'customization'),
+    ('customization/presentation_templates/README.md', 'presentation_templates', 'customization'),
 )
+
+
+def install_factory_templates():
+    """v0.0.8: copy the bundled LaTeX / presentation templates (folders too) once.
+
+    A template the user removed (Settings › Library) stays removed; an existing one is never
+    overwritten. Returns notes.
+    """
+    import shutil
+    notes = []
+    removed = removed_factory_items()
+    for folder in ('latex_templates', 'presentation_templates'):
+        source = bundled_studio_root() / 'customization' / folder
+        if not source.is_dir():
+            continue
+        target = customization_dir() / folder
+        target.mkdir(parents=True, exist_ok=True)
+        for entry in sorted(source.iterdir()):
+            if f'{folder}/{entry.name}' in removed or (target / entry.name).exists():
+                continue
+            try:
+                if entry.is_dir():
+                    shutil.copytree(entry, target / entry.name)
+                else:
+                    shutil.copy2(entry, target / entry.name)
+                notes.append(f'Installed template {folder}/{entry.name}')
+            except OSError as exc:
+                notes.append(f'Template {entry.name} not installed: {exc}')
+    return notes
 
 
 def guide_sources() -> "Path":

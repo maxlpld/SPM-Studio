@@ -199,6 +199,9 @@ class MainWindow(QMainWindow):
         self._module_upgrade_messages += paths.cleanup_kpfm_profiles_v005()
         try:self._module_upgrade_messages += paths.ensure_guides()
         except OSError as exc:self._module_upgrade_messages.append(f'Guides not installed: {exc}')
+        # v0.0.8: LaTeX / presentation templates (folders) of the document editors.
+        try:self._module_upgrade_messages += paths.install_factory_templates()
+        except OSError as exc:self._module_upgrade_messages.append(f'Templates not installed: {exc}')
         self._shortcut_actions={}
         self._shortcut_dialog=None
         self._shortcut_bindings=DEFAULT_BINDINGS.copy()
@@ -206,6 +209,11 @@ class MainWindow(QMainWindow):
         self._update_crop_buttons()
         self._create_actions()
         self._create_ai_dock()
+        # v0.0.8: the hub links this window, the LaTeX / presentation editors and the assistant.
+        from spm_studio.documents.ui.hub import hub as _document_hub
+        self.documents=_document_hub()
+        self.documents.set_main_window(self)
+        self.refresh_document_buttons()
         self._load_shortcuts()
         self._setup_shortcut_watch()
         self.refresh_modules()
@@ -405,6 +413,15 @@ class MainWindow(QMainWindow):
         self.topbar.addWidget(self.export_tool)
         self.topbar.addWidget(separator())
         self.topbar.addWidget(self.compare_tool)
+        # v0.0.8: shown only when switched on in Settings › Documents.
+        self.latex_button=tool_button('LaTeX','latex','LaTeX editor: new project, open, import (Overleaf-like, live PDF)')
+        self.latex_button.setObjectName('OpenLatexEditorV008')
+        self.latex_button.clicked.connect(self.open_latex_editor)
+        self.slides_button=tool_button('Slides','slides','Presentation editor: new presentation, open, import')
+        self.slides_button.setObjectName('OpenSlidesEditorV008')
+        self.slides_button.clicked.connect(self.open_slides_editor)
+        self.topbar.addWidget(self.latex_button)
+        self.topbar.addWidget(self.slides_button)
         self.topbar.addWidget(self.logs_toolbar_button)
         self.topbar.addWidget(self.ai_toolbar_button)
         self.topbar.addWidget(separator())
@@ -572,7 +589,47 @@ class MainWindow(QMainWindow):
         style_dock_titlebar(dock)
         self.log_dock=dock
         dock.visibilityChanged.connect(lambda _visible:self.logs_toolbar_button.setChecked(self.log_dock.isVisible()))
+        # v0.0.8: a result (graph, figure) can be sent to the LaTeX editor, a presentation or Overleaf.
+        self.logs.outputs.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.logs.outputs.customContextMenuRequested.connect(self._result_menu)
         self.statusBar().showMessage('Ready  ·  Ctrl+O open  ·  ↑↓ scans  ·  ←→ channels')
+
+    # ---- v0.0.8: LaTeX editor, presentation editor, Overleaf (spm_studio/documents)
+    def refresh_document_buttons(self):
+        """Show the LaTeX / Slides buttons only when they are switched on in Settings › Documents."""
+        from spm_studio.documents import settings as doc_settings
+        conf=doc_settings.load()
+        self.latex_button.setVisible(bool(conf.get('latex_enabled')))
+        self.slides_button.setVisible(bool(conf.get('slides_enabled')))
+
+    def open_latex_editor(self):
+        self.documents.launch('latex',self)
+
+    def open_slides_editor(self):
+        self.documents.launch('slides',self)
+
+    def _result_menu(self,pos):
+        from PySide6.QtWidgets import QMenu
+        item=self.logs.outputs.itemAt(pos)
+        if item is None:return
+        path=item.data(Qt.ItemDataRole.UserRole)
+        if not path or not Path(path).is_file():return
+        menu=QMenu(self)
+        menu.addAction('Open',lambda:self._show_result(path))
+        from spm_studio.documents import settings as doc_settings
+        if doc_settings.any_enabled():
+            menu.addAction('Send to LaTeX / presentation / Overleaf…',lambda:self.send_result(path))
+        menu.addAction('Show in folder',lambda:self._open_directory(Path(path).parent))
+        menu.exec(self.logs.outputs.viewport().mapToGlobal(pos))
+
+    def send_result(self,path):
+        """Send an existing result file (graph, figure) to the document editors / Overleaf."""
+        files=[Path(path)]
+        stem=Path(path).with_suffix('')
+        for suffix in ('.pdf','.svg','.png'):
+            sibling=stem.with_suffix(suffix)
+            if sibling.is_file() and sibling not in files:files.append(sibling)
+        self.documents.send_files_dialog(files,self)
 
     # ---- updates (GitHub releases; see core/updates.py)
     def open_update_dialog(self,result=None):
@@ -3050,7 +3107,7 @@ class MainWindow(QMainWindow):
             self._log(f'Imported and activated colormap {out}')
         except Exception as exc:self._log(f'Invalid colormap: {exc}',important=True)
 
-    def export_current(self):
+    def export_current(self,targets=None):
         if self.scan is None:
             self._log('Open a scan before exporting',important=True)
             return
@@ -3155,7 +3212,25 @@ class MainWindow(QMainWindow):
         figure_filter=f"Figure: {chosen} ({' '.join('*.'+f for f in formats)})"
         filters=(figure_filter
                  + (';;Numerical NumPy (*.npy);;Numerical CSV (*.csv)' if len(selected)==1 and selected[0]['kind']=='channel' else ''))
-        destination,_=QFileDialog.getSaveFileName(self,f'Export publication figure as {chosen}',str(suggested),filters)
+        # v0.0.8: the figure can also (or only) go to the LaTeX editor, a presentation and/or Overleaf.
+        from spm_studio.documents import settings as doc_settings
+        send_to=None
+        if targets or doc_settings.any_enabled():
+            from spm_studio.documents.ui.send_dialog import SendDialog
+            preset=dict(targets or {})
+            if targets:preset.setdefault('folder',False)
+            send=SendDialog(self.documents,self,preset=preset,title='Export the figure to…')
+            if send.exec()!=send.DialogCode.Accepted:return
+            send_to=send.targets()
+            if not send_to.get('folder'):
+                import tempfile as _tempfile
+                staging=Path(_tempfile.mkdtemp(prefix='export_',dir=str(paths.cache_dir())))
+                suggested=staging/suggested.name
+        if send_to is not None and not send_to.get('folder'):
+            destination=str(suggested)
+            _=figure_filter
+        else:
+            destination,_=QFileDialog.getSaveFileName(self,f'Export publication figure as {chosen}',str(suggested),filters)
         if not destination:return
         for word,ext in (('NumPy','.npy'),('CSV','.csv')):
             if word in _ and Path(destination).suffix.lower()!=ext:
@@ -3175,7 +3250,12 @@ class MainWindow(QMainWindow):
                       transparent=dialog.transparent_background(),
                       arrangement=dialog.arrangement() if len(selected)>=2 else 'row',
                       panel_letters=dialog.letters_enabled(),columns=dialog.columns())
-        self._start_task(task,lambda _,path:[self._export_done(p) for p in (path if isinstance(path,(list,tuple)) else [path])],
+        def finished(_,path,send_to=send_to,caption=self.scan.path.stem):
+            produced=list(path) if isinstance(path,(list,tuple)) else [path]
+            for p in produced:self._export_done(p)
+            if send_to and any(send_to.get(k) for k in ('latex','slides','overleaf')):
+                self.documents.deliver(produced,send_to,caption=send_to.get('latex_caption') or '')
+        self._start_task(task,finished,
                          lambda _,exc:self._log(f'Export failed:\n{exc}',important=True))
         self._log(f'Publication export requested: {destination}')
 
@@ -3801,6 +3881,12 @@ class MainWindow(QMainWindow):
         event.acceptProposedAction()
 
     def closeEvent(self,event):
+        # v0.0.8: editors save their files first; a refused close keeps SPM Studio open.
+        try:
+            if hasattr(self,'documents') and not self.documents.close_all():
+                event.ignore();return
+        except RuntimeError:
+            pass
         self._stop_molecule_preview()
         try:
             self.ai_dock.save_state()

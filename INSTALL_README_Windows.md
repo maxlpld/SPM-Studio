@@ -91,6 +91,13 @@ The first time an agent opens it asks once whether it may work in
 `%USERPROFILE%\.local\share\spm-studio-ai\scripts` (the Tools folder). Say yes to let it create/edit analysis
 tools there. Full guide: `docs\AI_ASSISTANT_SETUP.md`.
 
+## LaTeX editor and presentation editor (optional, 0.0.8)
+
+Switch them on in *Settings › Documents*. The LaTeX editor compiles with **MiKTeX**
+(https://miktex.org/download — allow it to install missing packages on the fly) or TeX Live. Overleaf sync
+needs **Git for Windows** (https://git-scm.com/download/win). LaTeX boxes of the presentation editor use
+the same TeX installation. Details: [`docs/DOCUMENTS.md`](docs/DOCUMENTS.md).
+
 ## Push-to-talk voice input
 
 Hold the mic button or **F11**. The small (~40 MB) offline speech model is fetched once after you confirm;

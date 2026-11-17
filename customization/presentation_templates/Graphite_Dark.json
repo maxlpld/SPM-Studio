@@ -1,0 +1,20 @@
+{
+  "format": "spm-slides-template-v1",
+  "name": "Graphite dark",
+  "description": "Dark slides matching SPM Studio's Graphite theme; scans stand out.",
+  "size": "16:9",
+  "theme": {
+    "background_color": "#121417",
+    "text_color": "#E6E8EC",
+    "muted_color": "#99A1AE",
+    "accent_color": "#3FB8A6",
+    "title_font": "Inter",
+    "body_font": "Inter",
+    "title_size": 34,
+    "body_size": 20,
+    "title_bar": false,
+    "title_bar_color": "#3FB8A6",
+    "footer": "",
+    "slide_numbers": true
+  }
+}

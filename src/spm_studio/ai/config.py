@@ -153,12 +153,27 @@ def spm_context_file(workspace) -> Path:
         ('Themes (interface colours, font)',custom/'themes'),
         ('Colormaps (RGB tables)',custom/'colormaps'),
         ('Plot styles (analysis plots)',custom/'plot_styles'),
-        ('Keyboard shortcuts',custom/'shortcuts')))
+        ('Keyboard shortcuts',custom/'shortcuts'),
+        ('LaTeX templates (LaTeX editor)',custom/'latex_templates'),
+        ('Presentation templates (presentation editor)',custom/'presentation_templates')))
     try:
         from .literature import agent_context as _literature_context
         literature=_literature_context(load(),python)
     except Exception:
         literature=''
+    # v0.0.8: LaTeX and presentation editors (documents/protocol.py).
+    try:
+        from spm_studio.documents import protocol as _doc_protocol, settings as _doc_settings
+        _dc=_doc_settings.load()
+        documents=_doc_protocol.agent_context(bool(_dc.get('latex_enabled')),bool(_dc.get('slides_enabled')))
+        if documents:
+            documents+=(f"\n- LaTeX projects are folders under `{_doc_settings.latex_root(_dc)}` (each has a root .tex); "
+                        f"presentations are folders under `{_doc_settings.slides_root(_dc)}` (`<name>.spmdeck` JSON + `media/`). "
+                        f"With file tools you may also edit those files directly: the editors reload files changed on disk.\n"
+                        f"- Template folders: `{custom/'latex_templates'}` and `{custom/'presentation_templates'}` "
+                        f"(each has a README.md guide; read it before creating a template).")
+    except Exception:
+        documents=''
     text=f"""# You are the AI assistant embedded in SPM Studio
 
 SPM Studio is the user's desktop application for scanning-probe-microscopy (STM/AFM/KPFM) analysis.
@@ -216,7 +231,8 @@ The user runs a tool by selecting it in Tools (an open scan is required) and cli
   vacuum or any laboratory hardware.
 - Do not touch ~/.pi, ~/.claude, ~/.codex, Ollama, credentials or files outside the folders above unless asked.
 - When finished, say clearly what you created and that it is now in the Tools list.
-{literature}"""
+{literature}
+{documents}"""
     target=private_dir(base_dir())/'spm_context.md'
     target.write_text(text,encoding='utf8')
     return target

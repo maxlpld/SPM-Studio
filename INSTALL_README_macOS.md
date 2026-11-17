@@ -77,6 +77,13 @@ The scientific application needs **no** Pi, Ollama, API key or Node.js. To use t
 The first time an agent opens it asks once whether it may work in `~/.local/share/spm-studio-ai/scripts`
 (the Tools folder). Say yes to let it create/edit analysis tools there. Full guide: `docs/AI_ASSISTANT_SETUP.md`.
 
+## LaTeX editor and presentation editor (optional, 0.0.8)
+
+Switch them on in *Settings › Documents*. The LaTeX editor compiles with **MacTeX**
+(https://tug.org/mactex/, or `brew install --cask mactex-no-gui`); SPM Studio also looks in
+`/Library/TeX/texbin`. Overleaf sync needs Git (`xcode-select --install`). LaTeX boxes of the presentation
+editor use the same TeX installation. Details: [`docs/DOCUMENTS.md`](docs/DOCUMENTS.md).
+
 ## Push-to-talk voice input
 
 Hold the mic button or **F11** (on laptops: **fn + F11**, or disable the F11 *Show Desktop* shortcut in

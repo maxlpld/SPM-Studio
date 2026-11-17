@@ -1,0 +1,50 @@
+\documentclass[10pt,a4paper,twocolumn]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage[margin=1.8cm,columnsep=0.8cm]{geometry}
+\usepackage{amsmath,amssymb,bm}
+\usepackage{graphicx}
+\usepackage{siunitx}
+\usepackage{booktabs}
+\usepackage{authblk}
+\usepackage[font=small,labelfont=bf]{caption}
+\usepackage{xcolor}
+\usepackage[colorlinks=true,linkcolor=teal,citecolor=teal,urlcolor=teal]{hyperref}
+
+\graphicspath{{figures/}}
+
+\title{\textbf{ {{title}} }}
+\author[1]{ {{author}} }
+\affil[1]{Department, University, City, Country}
+\date{}
+
+\begin{document}
+\twocolumn[
+  \begin{@twocolumnfalse}
+    \maketitle
+    \begin{abstract}
+      One paragraph summarising the question, the method, the main result and its meaning.
+    \end{abstract}
+    \vspace{1em}
+  \end{@twocolumnfalse}
+]
+
+\section{Introduction}
+Scanning probe microscopy resolves surfaces at the atomic scale~\cite{binnig1982}.
+
+\section{Experimental details}
+Measurements at \SI{4.3}{\kelvin}, tip--sample bias \SI{-1.2}{\volt}, set-point \SI{50}{\pico\ampere}.
+
+\section{Results and discussion}
+Figures exported from SPM Studio appear here. Use \texttt{figure*} for a figure across both columns.
+
+\section{Conclusions}
+Conclude.
+
+\section*{Acknowledgements}
+Funding and help.
+
+\bibliographystyle{unsrt}
+\bibliography{references}
+\end{document}

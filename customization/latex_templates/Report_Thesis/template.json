@@ -1,0 +1,6 @@
+{
+  "name": "Report / thesis",
+  "description": "Book-like report with chapters in separate files, table of contents, list of figures, appendix.",
+  "main": "main.tex",
+  "category": "Documents"
+}
