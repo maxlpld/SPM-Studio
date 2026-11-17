@@ -18,7 +18,7 @@ This page is the reference.
 | Release | `.github/workflows/release.yml` | Tag → checks → tests on Linux/Windows/macOS → GitHub Release. |
 | Helpers | `tools/release_tools.py` | `bump`, `set-repo`, `show-repo`, `check-repo`, `check-tag`, `check-changelog`, `notes`, `archive`. |
 | Bootstrap | `get-spm-studio.sh`, `get-spm-studio.ps1` | Download a released version and run its own installer. |
-| Updater | `src/spm_studio/core/updates.py`, `ui/update_dialog.py` | Check, show notes, download, run the installer in a terminal. |
+| Updater | `src/spm_studio/core/updates.py`, `ui/update_dialog.py` | Check, show notes, download, run the installer inside the update window (progress bar, details, restart now/later). |
 
 **What a release contains.** `SPM-Studio-<version>.zip` (the repository's files, one archive for every
 operating system, top folder `SPM-Studio-<version>/`) and `SHA256SUMS.txt`. These are **source** archives,

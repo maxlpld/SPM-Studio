@@ -70,6 +70,14 @@ These features are optional and off until you set them up. Please read before en
 - **API keys** are taken from environment variables or stored in the operating system's keyring; without
   a keyring, keys you type are kept in memory for the current session only. Pi's own sign-ins live in Pi's
   configuration folder, outside this repository.
+- **Literature sources** (optional, Settings › Literature). Zotero is read-only: the database file is
+  opened read-only, the app and zotero.org are only asked to read. Consensus is signed in through its own
+  page in your browser (OAuth with PKCE, answer received on a loopback address); SPM Studio gets a token
+  limited to searching, never the password. The zotero.org key and the Consensus sign-in are stored in
+  the system keyring or, without one, in a file readable by your account only (`literature_secrets.json`,
+  mode 600) — unlike model API keys, they must survive a restart and be readable by the helper the agent
+  runs. Search words are sent to Consensus / zotero.org when the assistant looks something up; results
+  returned to the assistant are marked as data, not instructions.
 - **Third-party software** (Node.js, Pi, router/sub-agent packages, Claude Code, Codex CLI, Ollama and
   models) is downloaded from its publishers when you choose it; its security is the publishers'
   responsibility. The guided Pi setup verifies the Node.js download against its published SHA-256.

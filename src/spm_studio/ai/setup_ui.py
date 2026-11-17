@@ -1,15 +1,24 @@
-"""Native first-run choice and settings. Nothing is installed or signed in without consent.
+"""Assistant settings. Nothing is installed or signed in without consent.
 
-Five starting paths: reuse an existing Pi · let SPM Studio set up its own Pi
-(guided, automatic) · connect Claude Code or Codex CLI · direct cloud API ·
-configure later.
+v0.0.7 — two pages, like the Settings window:
+
+* **Quick start**: one card per way of getting an assistant, in plain words,
+  each with its own status and the one or two buttons it needs. A new user
+  picks “Set it up for me” and follows the guided setup; nothing else to know.
+* **Advanced**: everything for people who already have an AI workflow —
+  program paths, workspace, API connections and fallbacks, Fast/Smart routing,
+  the local Judge, how development tasks are confirmed.
+
+Both pages edit the same choice (``self.mode``): 0 own Pi · 1 Pi set up by
+SPM Studio · 2 Claude Code / Codex · 3 direct API · 4 off.
 """
 from __future__ import annotations
 import os,shutil
 from pathlib import Path
 from PySide6.QtCore import QProcess,Qt,QThread,Signal
 from PySide6.QtWidgets import (QDialog,QVBoxLayout,QHBoxLayout,QFormLayout,QGroupBox,QLabel,QPushButton,QWidget,
-    QComboBox,QLineEdit,QCheckBox,QStackedWidget,QFileDialog,QPlainTextEdit,QDialogButtonBox,QMessageBox,QListWidget)
+    QComboBox,QLineEdit,QCheckBox,QStackedWidget,QFileDialog,QPlainTextEdit,QDialogButtonBox,QMessageBox,QListWidget,
+    QListWidgetItem,QFrame)
 from .config import load,save,detect_pi,PROVIDERS,AGENT_BACKENDS
 from .providers import DEFAULT_URLS,endpoint
 from .security import CredentialStore
@@ -41,16 +50,33 @@ class SetupDialog(QDialog):
     def __init__(self,parent=None):
         super().__init__(parent)
         self.setWindowTitle('AI assistant')
-        self.resize(660,670)
+        self.setObjectName('AssistantSetupV007')
+        self.resize(900,720)
         self.conf=load();self.credentials=CredentialStore()
         self.process=None
         self.survey=None
         self.benchmark=None
-        layout=QVBoxLayout(self)
+        self._detected={}            # agent → executable found (looked up once per dialog)
+        self._versions={}            # executable → version text
+        outer=QVBoxLayout(self)
+        outer.setSpacing(10)
+        body=QHBoxLayout();body.setSpacing(14)
+        self.nav=QListWidget()
+        self.nav.setObjectName('SettingsNavigationV005')
+        self.nav.setFixedWidth(170)
+        self.sections=QStackedWidget()
+        body.addWidget(self.nav);body.addWidget(self.sections,1)
+        outer.addLayout(body,1)
+        from PySide6.QtWidgets import QScrollArea
+        advanced=QWidget()
+        layout=QVBoxLayout(advanced)
+        layout.setContentsMargins(4,0,10,8)
         layout.setSpacing(10)
-        title=QLabel('Connect the assistant');title.setObjectName('heading')
+        title=QLabel('Advanced');title.setObjectName('heading')
         layout.addWidget(title)
-        hint=QLabel('Optional — every scientific tool works without AI.');hint.setObjectName('hint')
+        hint=QLabel('For an existing AI workflow: choose the program and its path, the workspace, API connections '
+                    'and fallbacks, Fast/Smart routing and how development tasks are confirmed.')
+        hint.setObjectName('hint');hint.setWordWrap(True)
         layout.addWidget(hint)
         # Four starting paths as one segmented choice (the combo stays as the model).
         self.mode=QComboBox()
@@ -126,11 +152,231 @@ class SetupDialog(QDialog):
         self.info=QLabel('Chat runs without tools. Coding tasks ask for permission first.')
         self.info.setObjectName('hint')
         self.info.setWordWrap(True);layout.addWidget(self.info)
+        layout.addStretch(1)
+        self._build_quick_page()
+        for label,icon_name,widget in (('Quick start','ai',self.quick_page),('Advanced','settings',advanced)):
+            item=QListWidgetItem(label)
+            try:
+                from spm_studio.shared.appearance import icon,ICONS
+                if icon_name in ICONS:item.setIcon(icon(icon_name))
+            except Exception:pass
+            self.nav.addItem(item)
+            scroll=QScrollArea();scroll.setWidgetResizable(True);scroll.setFrameShape(QFrame.Shape.NoFrame)
+            scroll.setWidget(widget)
+            self.sections.addWidget(scroll)
+        self.nav.currentRowChanged.connect(self.sections.setCurrentIndex)
+        bottom=QHBoxLayout()
+        self.next_step=QLabel('');self.next_step.setObjectName('hint');self.next_step.setWordWrap(True)
+        bottom.addWidget(self.next_step,1)
         buttons=QDialogButtonBox(QDialogButtonBox.StandardButton.Save|QDialogButtonBox.StandardButton.Cancel)
-        buttons.button(QDialogButtonBox.StandardButton.Save).setProperty('primary',True)
-        buttons.accepted.connect(self._save);buttons.rejected.connect(self.reject);layout.addWidget(buttons)
+        self.save_button=buttons.button(QDialogButtonBox.StandardButton.Save)
+        self.save_button.setProperty('primary',True)
+        buttons.accepted.connect(self._save);buttons.rejected.connect(self.reject)
+        bottom.addWidget(buttons)
+        outer.addLayout(bottom)
         self._restore()
         self._mode_changed(self.mode.currentIndex())
+        # Expert setups open on the page that shows their fields; everyone else on Quick start.
+        self.nav.setCurrentRow(1 if self.mode.currentIndex()==3 else 0)
+
+    # ---- v0.0.7: Quick start page (cards)
+    CARDS=(
+        # key, mode index, agent, title, description
+        ('managed',1,'','Set it up for me',
+         'Best if you are new to AI assistants. SPM Studio installs its own assistant (Pi), helps you sign in with '
+         'ChatGPT, GitHub Copilot or an API key, and chooses the models. About 5 minutes; nothing else on your '
+         'computer is changed.'),
+        ('claude-code',2,'claude-code','I have a Claude subscription',
+         'Uses Claude Code with your Claude Pro, Max or Team account. You sign in on Anthropic’s page; SPM Studio '
+         'never sees your password.'),
+        ('codex',2,'codex','I have a ChatGPT subscription',
+         'Uses OpenAI Codex with your ChatGPT Plus or Pro account (or an OpenAI API key).'),
+        ('own-pi',0,'','I already use Pi',
+         'Uses the Pi agent installed on this computer exactly as you configured it. Nothing in it is changed.'),
+        ('api',3,'','I have an API key (chat only)',
+         'Chats directly with OpenAI, Anthropic, Gemini, OpenRouter or a local Ollama model. It answers questions '
+         'and looks up literature, but cannot create analysis tools.'),
+        ('off',4,'','No assistant',
+         'Keep it switched off. Every scientific tool works without it; come back any time from '
+         'Settings › General › AI assistant…'),
+    )
+
+    def _build_quick_page(self):
+        from PySide6.QtWidgets import QButtonGroup,QRadioButton
+        self.quick_page=QWidget()
+        v=QVBoxLayout(self.quick_page)
+        v.setContentsMargins(4,0,10,8);v.setSpacing(10)
+        title=QLabel('Set up the assistant');title.setObjectName('heading')
+        v.addWidget(title)
+        v.addWidget(self._hint_label('Optional — every scientific tool works without AI. Choose the line that fits '
+                                     'you; each one tells you what is still to do. Nothing is installed or signed in '
+                                     'without your click.'))
+        self.current_summary=QLabel('');self.current_summary.setObjectName('AssistantCurrentV007')
+        self.current_summary.setWordWrap(True)
+        v.addWidget(self.current_summary)
+        self._card_group=QButtonGroup(self);self._card_group.setExclusive(True)
+        self.cards={}
+        for number,(key,index,agent,heading,text) in enumerate(self.CARDS):
+            frame=QFrame();frame.setObjectName('choiceCard');frame.setProperty('selected',False)
+            box=QVBoxLayout(frame);box.setContentsMargins(12,10,12,10);box.setSpacing(4)
+            head=QHBoxLayout();head.setSpacing(8)
+            radio=QRadioButton(heading);radio.setObjectName('choiceTitle')
+            self._card_group.addButton(radio,number)
+            head.addWidget(radio)
+            if key=='managed':
+                badge=QLabel('Recommended');badge.setObjectName('badge');head.addWidget(badge)
+            head.addStretch(1)
+            box.addLayout(head)
+            box.addWidget(self._hint_label(text))
+            status=QLabel('');status.setWordWrap(True);status.setTextFormat(Qt.TextFormat.RichText)
+            status.setObjectName('choiceStatus');status.hide()
+            box.addWidget(status)
+            actions=QHBoxLayout();actions.setSpacing(6)
+            buttons={}
+            def add(name,label,slot,primary=False):
+                b=QPushButton(label)
+                if primary:b.setProperty('primary',True)
+                b.clicked.connect(slot);actions.addWidget(b);buttons[name]=b
+            if key=='managed':
+                add('wizard','Start guided setup…',lambda _=False:self._quick_wizard(),primary=True)
+            elif agent:
+                add('install','Install…',lambda _=False,a=agent:self._quick_agent(a,'install'))
+                add('login','Sign in…',lambda _=False,a=agent:self._quick_agent(a,'login'),primary=True)
+            elif key=='api':
+                add('configure','Enter the key…',lambda _=False:self._quick_configure_api())
+            elif key=='own-pi':
+                add('details','Path and workspace…',lambda _=False:self._quick_advanced(0))
+            actions.addStretch(1)
+            holder=QWidget();holder.setLayout(actions)
+            holder.setVisible(bool(buttons))
+            box.addWidget(holder)
+            self.cards[key]={'frame':frame,'radio':radio,'status':status,'buttons':buttons,'actions':holder,
+                             'mode':index,'agent':agent}
+            v.addWidget(frame)
+        self._card_group.idClicked.connect(self._card_chosen)
+        self.quick_note=QLabel('');self.quick_note.setObjectName('hint');self.quick_note.setWordWrap(True)
+        v.addWidget(self.quick_note)
+        v.addStretch(1)
+
+    def _card_key(self):
+        """Card matching the current choice (mode + agent)."""
+        index=self.mode.currentIndex()
+        if index==2:return self._agent_key() or 'claude-code'
+        return {0:'own-pi',1:'managed',3:'api',4:'off'}.get(index,'off')
+
+    def _card_chosen(self,number):
+        key,index,agent=self.CARDS[number][:3]
+        if agent:
+            self.agent_choice.setCurrentIndex(max(0,self.agent_choice.findData(agent)))
+        self.mode.setCurrentIndex(index)
+        self._mode_changed(index)
+
+    def _refresh_quick(self):
+        """Selection, per-card status and the “what to do next” line."""
+        if not hasattr(self,'cards'):return
+        from .cli_events import AGENTS,detect,version
+        from . import pi_setup
+        chosen=self._card_key()
+        for key,card in self.cards.items():
+            selected=key==chosen
+            if card['radio'].isChecked()!=selected:card['radio'].setChecked(selected)
+            if card['frame'].property('selected')!=selected:
+                card['frame'].setProperty('selected',selected)
+                card['frame'].style().unpolish(card['frame']);card['frame'].style().polish(card['frame'])
+            card['actions'].setVisible(selected and bool(card['buttons']))
+        ready=False;next_text=''
+        # Pi set up by SPM Studio
+        card=self.cards['managed']
+        entry=pi_setup.managed_pi_entry()
+        accounts=pi_setup.auth_status() if entry is not None else []
+        if entry is None:
+            card['status'].setText('○ Not installed yet.')
+            card['buttons']['wizard'].setText('Start guided setup…')
+            if chosen=='managed':next_text='Click “Start guided setup…” and follow the steps.'
+        elif not accounts:
+            card['status'].setText('✓ Installed &nbsp;·&nbsp; ○ no account connected yet.')
+            card['buttons']['wizard'].setText('Continue guided setup…')
+            if chosen=='managed':next_text='Click “Continue guided setup…” to sign in.'
+        else:
+            card['status'].setText('✓ Installed &nbsp;·&nbsp; ✓ signed in ('+', '.join(accounts)+')')
+            card['buttons']['wizard'].setText('Change setup…')
+            if chosen=='managed':ready=True
+        card['status'].setVisible(chosen=='managed' or entry is not None)
+        # Claude Code / Codex
+        for key in ('claude-code','codex'):
+            card=self.cards[key]
+            if chosen==key:
+                path=self.agent_path.text().strip() or detect(key)
+            else:
+                path=self._detected.get(key)
+                if path is None:
+                    path=self._detected[key]=detect(key)
+            label=AGENTS[key]['label']
+            if path:
+                if chosen==key and path not in self._versions:
+                    self._versions[path]=version(path)          # one "--version" call per program
+                v=self._versions.get(path,'')
+                card['status'].setText(f"✓ {label} is installed{' ('+v+')' if v else ''}. Sign in once if you have "
+                                       'not used it on this computer yet.')
+                card['buttons']['install'].setVisible(False)
+                if chosen==key:ready=True
+            else:
+                card['status'].setText(f'○ {label} is not installed yet.')
+                card['buttons']['install'].setVisible(True)
+                if chosen==key:next_text='Click “Install…”, then “Sign in…”.'
+            card['status'].setVisible(chosen==key or bool(path))
+        # own Pi
+        card=self.cards['own-pi']
+        found=self.pi_existing.text().strip()
+        card['status'].setText(('✓ Found: '+found) if found else '○ No Pi was found on this computer.')
+        card['status'].setVisible(chosen=='own-pi' or bool(found))
+        card['frame'].setVisible(bool(found) or chosen=='own-pi')
+        if chosen=='own-pi':
+            ready=bool(found)
+            if not found:next_text='No Pi found: choose “Set it up for me” instead, or give its path in Advanced.'
+        # direct API
+        card=self.cards['api']
+        connections=[c for c in self.conf.get('connections',[]) if isinstance(c,dict)]
+        card['status'].setText(('✓ '+', '.join(c.get('provider','')+' · '+c.get('model','') for c in connections[:3]))
+                               if connections else '○ No model connection yet.')
+        card['status'].setVisible(chosen=='api' or bool(connections))
+        if chosen=='api':
+            ready=bool(connections)
+            if not connections:next_text='Click “Enter the key…” to add a provider, a model and your key.'
+        if chosen=='off':ready=True
+        self.next_step.setText(next_text or ('Ready — click Save.' if ready else ''))
+        # what is in use now (saved), not what is being edited
+        c=load()
+        now={'pi':'Pi set up by SPM Studio' if c.get('pi_managed') else 'your own Pi','claude-code':'Claude Code',
+             'codex':'OpenAI Codex','none':'none (switched off)' if c.get('configured') else 'not set up yet'}.get(
+                 c.get('backend'),'direct API chat ('+str(c.get('provider',''))+')')
+        self.current_summary.setText('<b>Assistant in use now:</b> '+now)
+
+    def _quick_wizard(self):
+        self.mode.setCurrentIndex(1)
+        self._open_wizard()
+
+    def _quick_agent(self,agent,action):
+        self.agent_choice.setCurrentIndex(max(0,self.agent_choice.findData(agent)))
+        self.mode.setCurrentIndex(2)
+        self._refresh_agent(redetect=True)
+        if action=='install':self._install_agent()
+        else:self._login_agent()
+        self._detected.pop(agent,None)
+        self._refresh_quick()
+
+    def _quick_advanced(self,index):
+        self.mode.setCurrentIndex(index)
+        self.nav.setCurrentRow(1)
+
+    def _quick_configure_api(self):
+        self._quick_advanced(3)
+        self.provider.setFocus()
+
+    def _agent_note(self,text):
+        """Message about an agent install / sign-in: Advanced log and the Quick start page."""
+        self.agent_log.appendPlainText(text)
+        if hasattr(self,'quick_note'):self.quick_note.setText(str(text).strip().splitlines()[-1] if str(text).strip() else '')
 
     def _mode_changed(self,index):
         button=self._mode_group.button(index)
@@ -140,6 +386,7 @@ class SetupDialog(QDialog):
         self.info.setVisible(index!=4)
         if index==1:self._refresh_managed()
         if index==2:self._refresh_agent()
+        self._refresh_quick()
 
     def _create_pi_page(self,new=False):
         page=QGroupBox('Your installed Pi')
@@ -213,9 +460,15 @@ class SetupDialog(QDialog):
         wizard=PiSetupWizard(self)
         accepted=wizard.exec()==QDialog.DialogCode.Accepted
         self._refresh_managed()
+        self._refresh_quick()
         if accepted:
             self._wizard_summary=wizard.summary
             self.info.setText('Pi is configured. Press Save to start using it.')
+            # v0.0.7: a finished guided setup is saved and used at once — one step less for a new user.
+            from . import pi_setup
+            if pi_setup.managed_pi_entry() is not None and pi_setup.auth_status():
+                self.mode.setCurrentIndex(1)
+                self._save()
 
     # ---- Claude Code / Codex
     def _create_agent_page(self):
@@ -228,7 +481,7 @@ class SetupDialog(QDialog):
         row=QHBoxLayout()
         self.agent_choice=QComboBox()
         for key,meta in AGENTS.items():self.agent_choice.addItem(meta['label'],key)
-        self.agent_choice.currentIndexChanged.connect(lambda _=0:self._refresh_agent(redetect=True))
+        self.agent_choice.currentIndexChanged.connect(lambda _=0:(self._refresh_agent(redetect=True),self._refresh_quick()))
         row.addWidget(self.agent_choice);row.addStretch(1)
         v.addLayout(row)
         f=QHBoxLayout()
@@ -276,13 +529,13 @@ class SetupDialog(QDialog):
             script=pu.write_terminal_script(pi_setup.managed_root()/'launchers','install-claude-code',{},argv,
                                             'Installing Claude Code (official installer from claude.ai).')
             manual=pu.open_terminal(script)
-            self.agent_log.appendPlainText(('Run manually: '+cmd) if manual else
-                                           'Installer opened in a terminal. When it finishes, press Sign in….')
+            self._agent_note(('Run manually: '+cmd) if manual else
+                             'Installer opened in a terminal. When it finishes, press Sign in….')
             return
         if QMessageBox.question(self,'Install Codex CLI?','Install @openai/codex from npm for SPM Studio only '
                 '(private Node.js is downloaded first if needed)?')!=QMessageBox.StandardButton.Yes:return
         self._agent_job=_Job(self._install_codex_job,self)
-        self._agent_job.log.connect(self.agent_log.appendPlainText)
+        self._agent_job.log.connect(self._agent_note)
         self._agent_job.finished.connect(self._agent_job_finished)     # bound method: runs in the GUI thread
         self.agent_install.setEnabled(False)
         self._agent_job.start()
@@ -290,6 +543,8 @@ class SetupDialog(QDialog):
     def _agent_job_finished(self):
         self.agent_install.setEnabled(True)
         self._refresh_agent(redetect=True)
+        self._detected.clear()
+        self._refresh_quick()
 
     @staticmethod
     def _install_codex_job(log):
@@ -318,8 +573,8 @@ class SetupDialog(QDialog):
         script=pu.write_terminal_script(pi_setup.managed_root()/'launchers','sign-in-'+key,env,
                                         [program,*prefix,*meta['login']],meta['login_hint'])
         manual=pu.open_terminal(script)
-        self.agent_log.appendPlainText(('Run in a terminal: '+manual) if manual else
-                                       'Sign-in window opened. Come back here and press Save when done.')
+        self._agent_note(('Run in a terminal: '+manual) if manual else
+                         'Sign-in window opened. Come back here and press Save when done.')
 
     def _create_api_page(self):
         page=QGroupBox('Cloud API')
@@ -427,13 +682,13 @@ class SetupDialog(QDialog):
         new={'provider':provider,'model':model,'base':base}
         old=[x for x in self.conf.get('connections',[]) if isinstance(x,dict)
              and (x.get('provider'),x.get('model'))!=(provider,model)]
-        self.conf['connections']=old+[new];self._refresh_connections()
+        self.conf['connections']=old+[new];self._refresh_connections();self._refresh_quick()
 
     def _remove_connection(self):
         idx=self.connection_list.currentRow()
         if idx<0:return
         old=list(self.conf.get('connections',[]));old.pop(idx)
-        self.conf['connections']=old;self._refresh_connections()
+        self.conf['connections']=old;self._refresh_connections();self._refresh_quick()
 
     def _judge_models(self):
         self.detect_judge.setEnabled(False)

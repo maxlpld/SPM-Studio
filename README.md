@@ -10,7 +10,7 @@
 </p>
 
 <p align="center">
-  <img alt="Version 0.0.6" src="https://img.shields.io/badge/version-0.0.6-57758B">
+  <img alt="Version 0.0.7" src="https://img.shields.io/badge/version-0.0.7-57758B">
   <img alt="Python 3.12+" src="https://img.shields.io/badge/python-3.12%2B-3776AB">
   <img alt="Linux, Windows, macOS" src="https://img.shields.io/badge/platform-Linux%20%7C%20Windows%20%7C%20macOS-555555">
   <img alt="MIT licence" src="https://img.shields.io/badge/licence-MIT-2E7D32">
@@ -90,9 +90,12 @@ click away: the **gear button** at the right of the top bar opens *Settings*.
 ## Updating
 
 - **In the app:** *Settings (gear button) › Check for updates…* shows your version, the newest one and
-  **what is new**; *Install update* runs the installer for you. SPM Studio also checks quietly once a day
-  (one request to GitHub; nothing about you or your data is sent; switch it off in the same dialog) and
-  shows “⬆ … available — what's new?” in the status bar. Nothing is ever installed without you clicking.
+  **what is new**. *Install update* downloads, builds and tests the new version **inside that window**, with a
+  progress bar (*Show details* shows what the installer prints; no terminal opens). When it is done, choose
+  **Restart now** or **Later**. A failed or cancelled update leaves your current version untouched.
+  SPM Studio also checks quietly once a day (one request to GitHub; nothing about you or your data is sent;
+  switch it off in the same window) and shows “⬆ … available — what's new?” in the status bar. Nothing is
+  ever installed without you clicking.
 - **From a terminal:** `spm-studio --check-update` or `spm-studio --update`
   (Windows: `& "$env:LOCALAPPDATA\SPMStudio\bin\spm-studio.cmd" --update`), or run the install command again.
 
@@ -180,7 +183,10 @@ name for later scans.
 ## AI assistant (optional)
 
 The **Assistant** button in the header opens a panel that can dock on the right,
-float to another screen and keep its history. The first time, it offers five starting points:
+float to another screen and keep its history. Its settings (*Settings › General › AI assistant…*) have two
+pages: **Quick start** — one card per way of getting an assistant, each showing what is done and what is
+left to do — and **Advanced**, for people who bring their own AI workflow (program paths, workspace, API
+connections and fallbacks, routing, local Judge). The starting points:
 
 | Choice | For whom | What SPM Studio does |
 |---|---|---|
@@ -202,16 +208,21 @@ float to another screen and keep its history. The first time, it offers five sta
 ### Literature: Consensus and Zotero
 
 *Settings › Literature* lets the assistant answer with references instead of from memory. Both sources are
-off until you enable them, both are read-only, and both need an agent assistant (Pi, Claude Code or Codex).
+connected in that page, by SPM Studio itself — no terminal, no agent configuration — and then work with every
+assistant (Pi, Claude Code, Codex or a direct API chat), in ordinary chat too. Both are read-only and off
+until you connect them.
 
-- **Consensus** ([consensus.app](https://consensus.app/)) searches peer-reviewed papers. The assistant uses
-  Consensus' own connection with **your** Consensus account: sign in with your university e-mail to use your
-  institution's licence. A Zotero library linked inside Consensus is used by Consensus. SPM Studio never sees
-  the password.
-- **Zotero** gives the assistant your own library: search, abstracts, notes and indexed PDF text. Choose the
-  **Zotero app on this computer** (Zotero 7 or later with *Settings › Advanced › Allow other applications on
-  this computer to communicate with Zotero*; no account, nothing leaves the computer) or a **zotero.org**
-  library with a read-only key kept in the system keyring. It works without Consensus.
+- **Zotero** — click **Connect Zotero**. SPM Studio finds your library on this computer and reads it directly
+  (search, abstracts, notes, text of indexed PDFs). Nothing has to be enabled in Zotero, any Zotero version
+  works, and nothing leaves the computer. *Advanced* offers the Zotero app's own interface (version 7 or
+  later), a data folder in an unusual place, or a library on zotero.org with a read-only key.
+- **Consensus** ([consensus.app](https://consensus.app/)) — click **Sign in to Consensus**. The Consensus
+  sign-in page opens in your browser; sign in with **your** account (a university e-mail uses your
+  institution's licence) and come back: the page says *Connected*. A Zotero library linked inside Consensus
+  is used by Consensus. SPM Studio never sees the password; it receives a token limited to searching.
+
+Then simply ask: *“What does my Zotero library say about KPFM on graphene?”* or *“Find papers on tip
+functionalisation with CO.”*
 
 Setup details: [`docs/AI_ASSISTANT_SETUP.md`](docs/AI_ASSISTANT_SETUP.md).
 
@@ -260,8 +271,8 @@ install_*/uninstall_*  per-OS installers and uninstallers; get-spm-studio.* = on
 docs/                  specifications, module API, validation reports, releasing guide
 ```
 
-Publishing a version: `python tools/release_tools.py bump 0.0.6`, write the notes in `CHANGELOG.md`,
-commit, then `git tag v0.0.6 && git push origin main v0.0.6`. GitHub Actions tests it and publishes the release;
+Publishing a version: `python tools/release_tools.py bump 0.0.7`, write the notes in `CHANGELOG.md`,
+commit, then `git tag v0.0.7 && git push origin main v0.0.7`. GitHub Actions tests it and publishes the release;
 every installed SPM Studio then offers it. Full guide: [`docs/RELEASING.md`](docs/RELEASING.md).
 First upload of this repository: [`GITHUB_FIRST_UPLOAD.md`](GITHUB_FIRST_UPLOAD.md).
 

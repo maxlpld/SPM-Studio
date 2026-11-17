@@ -14,12 +14,12 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from PySide6.QtCore import Qt, QUrl, QSize
+from PySide6.QtCore import Qt, QUrl, QSize, QThread, Signal
 from PySide6.QtGui import QDesktopServices, QFontDatabase, QPixmap
 from PySide6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QListWidget,
                                QListWidgetItem, QStackedWidget, QWidget, QComboBox, QCheckBox, QGroupBox,
                                QFormLayout, QLineEdit, QPlainTextEdit, QTextBrowser, QFileDialog,
-                               QScrollArea, QFrame, QAbstractItemView, QApplication)
+                               QScrollArea, QFrame, QAbstractItemView, QProgressBar)
 
 from spm_studio.core import library, paths
 from spm_studio.shared.dialogs import MessageDialog, TextInputDialog
@@ -141,6 +141,54 @@ class TextEditDialog(QDialog):
             self.message.setStyleSheet('color: palette(bright-text);')
             return
         self.accept()
+
+
+class _Task(QThread):
+    """Run a plain function off the GUI thread; emits (task, result, error text).
+
+    The signal is always connected to a *bound method* of the dialog: PySide runs a plain function
+    or lambda connected to a signal in the emitting (worker) thread, where widgets must not be touched.
+    """
+    finished_with = Signal(object, object, str)
+
+    def __init__(self, fn, on_done, parent=None):
+        super().__init__(parent)
+        self.fn = fn
+        self.on_done = on_done
+
+    def run(self):
+        try:
+            self.finished_with.emit(self, self.fn(), '')
+        except Exception as exc:
+            self.finished_with.emit(self, None, str(exc))
+
+
+class _ConsensusSignIn(QThread):
+    """Browser sign-in to Consensus (ai/consensus.py) without blocking the window."""
+    opened = Signal(str)
+    done = Signal(str)
+    failed = Signal(str)
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        from spm_studio.ai import consensus
+        self.flow = consensus.SignIn()
+
+    def cancel(self):
+        self.flow.cancel()
+
+    def run(self):
+        from spm_studio.ai import consensus
+        try:
+            self.opened.emit(self.flow.start())
+            result = self.flow.wait(timeout=300)
+            self.done.emit(str(result.get('stored', 'stored')))
+        except consensus.ConsensusError as exc:
+            self.failed.emit(str(exc))
+        except Exception as exc:
+            self.failed.emit(f'{type(exc).__name__}: {exc}')
+        finally:
+            self.flow.close()
 
 
 # ---------------------------------------------------------------------------- dialog
@@ -565,57 +613,140 @@ class SettingsDialog(QDialog):
             GuideDialog(guide, 'How to build: ' + library.KINDS[self._kind()].label, self).exec()
 
     # --------------------------------------------------------------- Literature
+    # v0.0.7: both sources are connected here, by SPM Studio itself. No agent, terminal or
+    # configuration file is involved, and the assistant can use them in every chat mode.
     def _literature_page(self):
         from spm_studio.ai import literature
         from spm_studio.ai.config import load
         conf = load()
+        self._lit_tasks = []
+        self._signin = None
         page, layout = self._page(
             'Literature',
             'Let the assistant look things up in the published literature and in your own reference library. '
-            'It only reads; it can never change your library.')
-        self.literature_agent = _hint('')
-        layout.addWidget(self.literature_agent)
+            'It only reads; it can never change your library. Connect a source once here and it works with '
+            'every assistant, in ordinary chat too.')
 
+        # ---- Consensus
         box = QGroupBox('Consensus')
         v = QVBoxLayout(box)
         v.addWidget(_hint(
-            'consensus.app searches peer-reviewed papers. The assistant uses it through Consensus’ own connection '
-            f'({literature.CONSENSUS_MCP_URL}) with your Consensus account — sign in with your university e-mail to '
-            'use your institution’s licence. If you linked Zotero inside Consensus, Consensus uses it too. '
-            'SPM Studio never sees your password.'))
+            'consensus.app searches peer-reviewed papers. Sign in with your own Consensus account — your '
+            'university e-mail uses your institution’s licence — and, if you linked Zotero inside Consensus, '
+            'Consensus uses it too. The sign-in page opens in your browser; SPM Studio never sees your password.'))
+        self.consensus_state = QLabel('')
+        self.consensus_state.setObjectName('ConsensusStateV007')
+        self.consensus_state.setWordWrap(True)
+        v.addWidget(self.consensus_state)
+        row = QHBoxLayout()
+        self.consensus_signin = _icon_button('Sign in to Consensus', 'link',
+                                             'Opens the Consensus sign-in page in your browser')
+        self.consensus_signin.setObjectName('ConsensusSignInV007')
+        self.consensus_signin.setProperty('primary', True)
+        self.consensus_signin.clicked.connect(self._consensus_sign_in)
+        self.consensus_cancel = QPushButton('Cancel')
+        self.consensus_cancel.clicked.connect(self._consensus_cancel)
+        self.consensus_cancel.hide()
+        self.consensus_test = QPushButton('Test')
+        self.consensus_test.setToolTip('Check the connection to Consensus')
+        self.consensus_test.clicked.connect(self._consensus_test)
+        self.consensus_signout = QPushButton('Sign out')
+        self.consensus_signout.clicked.connect(self._consensus_sign_out)
+        for button in (self.consensus_signin, self.consensus_cancel, self.consensus_test, self.consensus_signout):
+            row.addWidget(button)
+        row.addStretch(1)
+        v.addLayout(row)
+        self.consensus_progress = QProgressBar()
+        self.consensus_progress.setProperty('role', 'activity')
+        self.consensus_progress.setRange(0, 0)
+        self.consensus_progress.setTextVisible(False)
+        self.consensus_progress.hide()
+        v.addWidget(self.consensus_progress)
+        self.consensus_status = _hint('')
+        self.consensus_status.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        v.addWidget(self.consensus_status)
         self.consensus_enabled = QCheckBox('Let the assistant use Consensus')
         self.consensus_enabled.setObjectName('ConsensusEnabledV005')
         self.consensus_enabled.setChecked(bool(conf.get('consensus_enabled')))
+        self.consensus_enabled.clicked.connect(lambda _=False: self._literature_apply())
         v.addWidget(self.consensus_enabled)
-        row = QHBoxLayout()
-        self.consensus_signin = _icon_button('Sign in to Consensus…', 'link',
-                                             'Opens the assistant in a terminal to authorise Consensus in your browser')
-        self.consensus_signin.clicked.connect(self._consensus_sign_in)
-        site = QPushButton('Open consensus.app')
-        site.clicked.connect(lambda: open_url('https://consensus.app/'))
-        row.addWidget(self.consensus_signin)
-        row.addWidget(site)
-        row.addStretch(1)
-        v.addLayout(row)
-        self.consensus_status = _hint('')
-        v.addWidget(self.consensus_status)
+        self.consensus_advanced = QGroupBox('Advanced: use an API key instead')
+        self.consensus_advanced.setCheckable(True)
+        self.consensus_advanced.setChecked(False)
+        adv = QVBoxLayout(self.consensus_advanced)
+        self.consensus_key_help = _hint('Only if your organisation gave you a Consensus API key (consensus.app › profile › '
+                                        'API & MCP Dashboard › Keys). Otherwise use “Sign in to Consensus”.')
+        adv.addWidget(self.consensus_key_help)
+        key_row = QHBoxLayout()
+        self.consensus_key = QLineEdit()
+        self.consensus_key.setEchoMode(QLineEdit.EchoMode.Password)
+        self.consensus_key.setPlaceholderText('Consensus API key')
+        self.consensus_key_save = QPushButton('Save key')
+        self.consensus_key_save.clicked.connect(self._consensus_save_key)
+        key_row.addWidget(self.consensus_key, 1)
+        key_row.addWidget(self.consensus_key_save)
+        adv.addLayout(key_row)
+        self._consensus_advanced_widgets = (self.consensus_key_help, self.consensus_key, self.consensus_key_save)
+        self.consensus_advanced.toggled.connect(self._consensus_advanced_toggled)
+        self._consensus_advanced_toggled(False)
+        v.addWidget(self.consensus_advanced)
         layout.addWidget(box)
 
+        # ---- Zotero
         box = QGroupBox('Zotero')
         v = QVBoxLayout(box)
-        v.addWidget(_hint('Your own references. Works with or without Consensus.'))
-        form = QFormLayout()
+        v.addWidget(_hint('Your own references: the assistant can search your library and read abstracts, notes and '
+                          'the text of indexed PDFs. Works with or without Consensus, and nothing leaves this computer.'))
+        self.zotero_state = QLabel('')
+        self.zotero_state.setObjectName('ZoteroStateV007')
+        self.zotero_state.setWordWrap(True)
+        v.addWidget(self.zotero_state)
+        row = QHBoxLayout()
+        self.zotero_connect = _icon_button('Connect Zotero', 'link', 'Find Zotero on this computer and connect it')
+        self.zotero_connect.setObjectName('ZoteroConnectV007')
+        self.zotero_connect.setProperty('primary', True)
+        self.zotero_connect.clicked.connect(self._zotero_connect)
+        self.zotero_test_button = QPushButton('Test')
+        self.zotero_test_button.clicked.connect(self._zotero_test)
+        self.zotero_disconnect = QPushButton('Disconnect')
+        self.zotero_disconnect.clicked.connect(self._zotero_disconnect)
+        for button in (self.zotero_connect, self.zotero_test_button, self.zotero_disconnect):
+            row.addWidget(button)
+        row.addStretch(1)
+        v.addLayout(row)
+        self.zotero_status = _hint('')
+        self.zotero_status.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        v.addWidget(self.zotero_status)
+
+        self.zotero_advanced = QGroupBox('Advanced: choose how Zotero is read')
+        self.zotero_advanced.setCheckable(True)
+        self.zotero_advanced.setChecked(conf.get('zotero_mode') in ('local', 'database', 'web'))
+        adv = QVBoxLayout(self.zotero_advanced)
+        self.zotero_advanced_body = QWidget()
+        form = QFormLayout(self.zotero_advanced_body)
+        form.setContentsMargins(0, 0, 0, 0)
         self.zotero_mode = QComboBox()
         self.zotero_mode.setObjectName('ZoteroModeV005')
         self.zotero_mode.addItem('Not connected', 'off')
-        self.zotero_mode.addItem('Zotero app on this computer (recommended)', 'local')
-        self.zotero_mode.addItem('zotero.org account (API key)', 'web')
+        self.zotero_mode.addItem('Automatic (recommended)', 'auto')
+        self.zotero_mode.addItem('Zotero database file — any version, Zotero may be closed', 'database')
+        self.zotero_mode.addItem('Zotero app — version 7 or later, must be running', 'local')
+        self.zotero_mode.addItem('zotero.org account — library on the web', 'web')
         self.zotero_mode.setCurrentIndex(max(0, self.zotero_mode.findData(conf.get('zotero_mode', 'off'))))
-        form.addRow('Connect to', self.zotero_mode)
-        self.zotero_local_help = _hint(
-            'Zotero 7 or later must be running. In Zotero: Settings › Advanced › tick “Allow other applications on '
-            'this computer to communicate with Zotero”. No account or key is needed and nothing leaves this computer.')
-        form.addRow('', self.zotero_local_help)
+        form.addRow('Read from', self.zotero_mode)
+        self.zotero_mode_help = _hint('')
+        form.addRow('', self.zotero_mode_help)
+        folder_row = QWidget()
+        fr = QHBoxLayout(folder_row)
+        fr.setContentsMargins(0, 0, 0, 0)
+        self.zotero_folder = QLineEdit(str(conf.get('zotero_data_dir', '')))
+        self.zotero_folder.setPlaceholderText('Found automatically — fill in only if your Zotero data is elsewhere')
+        browse = QPushButton('Browse…')
+        browse.clicked.connect(self._zotero_browse)
+        fr.addWidget(self.zotero_folder, 1)
+        fr.addWidget(browse)
+        form.addRow('Data folder', folder_row)
+        self.zotero_folder_row = (form.labelForField(folder_row), folder_row)
         self.zotero_type = QComboBox()
         self.zotero_type.addItem('My library', 'user')
         self.zotero_type.addItem('Group library', 'group')
@@ -630,64 +761,122 @@ class SettingsDialog(QDialog):
         for label, widget in (('Library', self.zotero_type), ('Library ID', self.zotero_id), ('API key', self.zotero_key)):
             form.addRow(label, widget)
             self.zotero_web_rows.append((form.labelForField(widget), widget))
-        self.zotero_web_help = _hint('Create the key at zotero.org › Settings › Security › “Create new private key” '
-                                     '(read-only is enough). It is kept in the system keyring, not in a settings file.')
-        form.addRow('', self.zotero_web_help)
-        v.addLayout(form)
+        adv.addWidget(self.zotero_advanced_body)
         row = QHBoxLayout()
-        test = QPushButton('Test connection')
-        test.clicked.connect(self._zotero_test)
+        self.zotero_save = QPushButton('Save and test')
+        self.zotero_save.setObjectName('LiteratureApplyV005')
+        self.zotero_save.clicked.connect(lambda: (self._literature_apply(), self._zotero_test()))
         keys = QPushButton('Open zotero.org key page')
         keys.clicked.connect(lambda: open_url('https://www.zotero.org/settings/security'))
         self.zotero_keys_button = keys
-        row.addWidget(test)
+        row.addWidget(self.zotero_save)
         row.addWidget(keys)
         row.addStretch(1)
-        v.addLayout(row)
-        self.zotero_status = _hint('')
-        v.addWidget(self.zotero_status)
+        self.zotero_advanced_buttons = QWidget()
+        self.zotero_advanced_buttons.setLayout(row)
+        adv.addWidget(self.zotero_advanced_buttons)
+        self.zotero_advanced.toggled.connect(self._zotero_advanced_toggled)
+        v.addWidget(self.zotero_advanced)
         layout.addWidget(box)
 
-        apply_row = QHBoxLayout()
         self.literature_result = _hint('')
-        apply_row.addWidget(self.literature_result, 1)
-        apply = QPushButton('Apply')
-        apply.setObjectName('LiteratureApplyV005')
-        apply.setProperty('primary', True)
-        apply.clicked.connect(self._literature_apply)
-        apply_row.addWidget(apply)
-        layout.addLayout(apply_row)
+        layout.addWidget(self.literature_result)
+        self.literature_agent = _hint('')
+        layout.addWidget(self.literature_agent)
         layout.addStretch(1)
         self.zotero_mode.currentIndexChanged.connect(lambda _=0: self._literature_sync())
+        self._zotero_advanced_toggled(self.zotero_advanced.isChecked())
         self._literature_sync()
+        self._literature_refresh_state()
         return page
 
-    def _backend(self) -> str:
-        from spm_studio.ai.config import load
-        return str(load().get('backend', 'none'))
+    # ---- shared state
+    def _consensus_advanced_toggled(self, on):
+        for widget in self._consensus_advanced_widgets:
+            widget.setVisible(bool(on))
+
+    def _zotero_advanced_toggled(self, on):
+        self.zotero_advanced_body.setVisible(bool(on))
+        self.zotero_advanced_buttons.setVisible(bool(on))
 
     def _literature_sync(self):
-        from spm_studio.ai.config import AGENT_BACKENDS
-        backend = self._backend()
-        agent = backend == 'pi' or backend in AGENT_BACKENDS
-        label = {'pi': 'Pi', 'claude-code': 'Claude Code', 'codex': 'Codex'}.get(backend, backend)
-        if agent:
-            self.literature_agent.setText(f'Current assistant: {label}. The sources below are registered with it when you click Apply.')
-        elif backend == 'none':
-            self.literature_agent.setText('No assistant is set up yet (General › AI assistant…). You can prepare the '
-                                          'sources now; they are used once an agent assistant is chosen.')
-        else:
-            self.literature_agent.setText('The current assistant is a direct API connection (chat only): it cannot call '
-                                          'tools. Choose Pi, Claude Code or Codex in General › AI assistant… to use these sources.')
         mode = self.zotero_mode.currentData()
-        self.zotero_local_help.setVisible(mode == 'local')
+        self.zotero_mode_help.setText({
+            'off': 'The assistant does not use Zotero.',
+            'auto': 'Asks the Zotero app when it is running and allows it, otherwise reads the database file. '
+                    'Nothing to set up.',
+            'database': 'Reads zotero.sqlite in your Zotero data folder, read-only. Works with every Zotero version, '
+                        'whether Zotero is open or not, and needs no setting in Zotero.',
+            'local': 'Zotero 7 or later must be running, with Settings › Advanced › “Allow other applications on this '
+                     'computer to communicate with Zotero” ticked. Also searches inside indexed PDFs.',
+            'web': 'Reads your library on zotero.org. Create a private key with read-only library access at '
+                   'zotero.org › Settings › Security; it is kept on this computer only.'}.get(mode, ''))
         for label_widget, widget in self.zotero_web_rows:
             widget.setVisible(mode == 'web')
             if label_widget is not None:
                 label_widget.setVisible(mode == 'web')
-        self.zotero_web_help.setVisible(mode == 'web')
         self.zotero_keys_button.setVisible(mode == 'web')
-        self.consensus_signin.setEnabled(agent)
+        folder_label, folder_widget = self.zotero_folder_row
+        folder_widget.setVisible(mode in ('auto', 'database'))
+        if folder_label is not None:
+            folder_label.setVisible(mode in ('auto', 'database'))
+
+    def _literature_refresh_state(self):
+        """Status lines of both sources, from what is stored (no network)."""
+        from spm_studio.ai import consensus, literature
+        from spm_studio.ai.config import load
+        conf = load()
+        signed = consensus.signed_in()
+        on = bool(conf.get('consensus_enabled'))
+        if signed and on:
+            self.consensus_state.setText('<b>● Connected.</b> The assistant can search Consensus.')
+        elif signed:
+            self.consensus_state.setText('<b>○ Signed in, but switched off.</b> Tick the box below to let the assistant use it.')
+        else:
+            self.consensus_state.setText('<b>○ Not connected.</b> Click “Sign in to Consensus”.')
+        self.consensus_signin.setText('Sign in again' if signed else 'Sign in to Consensus')
+        self.consensus_signout.setEnabled(signed)
+        self.consensus_test.setEnabled(signed)
+        self.consensus_enabled.setEnabled(signed)
+        self.consensus_enabled.setChecked(on and signed)
+        zotero_on = literature.zotero_enabled(conf)
+        self.zotero_state.setText('<b>● Connected.</b> The assistant can read your Zotero library.' if zotero_on else
+                                  '<b>○ Not connected.</b> Click “Connect Zotero”.')
+        self.zotero_connect.setText('Connect again' if zotero_on else 'Connect Zotero')
+        self.zotero_disconnect.setEnabled(zotero_on)
+        self.zotero_test_button.setEnabled(zotero_on)
+        backend = str(conf.get('backend', 'none'))
+        self.literature_agent.setText(
+            'No assistant is set up yet (General › AI assistant…): the sources are ready for when one is.'
+            if backend == 'none' else
+            'The assistant looks things up when you ask for literature, references or what is in your library — '
+            'for example: “What does my Zotero library say about KPFM on graphene?”')
+
+    def _restart_assistant(self):
+        """The assistant is told about a changed source from its next message."""
+        dock = getattr(self.window_, 'ai_dock', None)
+        if dock is None:
+            return
+        if getattr(dock, '_running', False):
+            self.literature_result.setText('The assistant uses the change after its current reply.')
+            return
+        try:
+            dock._open_backend()
+        except Exception as exc:
+            self._log('Assistant restart failed: ' + str(exc))
+
+    def _run_task(self, fn, on_done):
+        """Run ``fn()`` off the GUI thread; ``on_done(result, error_text)`` back in the GUI thread."""
+        task = _Task(fn, on_done, self)
+        self._lit_tasks.append(task)
+        task.finished_with.connect(self._task_finished)
+        task.start()
+        return task
+
+    def _task_finished(self, task, result, error):
+        if task in self._lit_tasks:
+            self._lit_tasks.remove(task)
+        task.on_done(result, error)
 
     def _literature_conf(self) -> dict:
         from spm_studio.ai.config import load
@@ -696,159 +885,202 @@ class SettingsDialog(QDialog):
         conf['zotero_mode'] = str(self.zotero_mode.currentData())
         conf['zotero_library_type'] = str(self.zotero_type.currentData())
         conf['zotero_library_id'] = self.zotero_id.text().strip()
+        conf['zotero_data_dir'] = self.zotero_folder.text().strip()
         return conf
 
     def _store_zotero_key(self) -> str:
         key = self.zotero_key.text().strip()
         if not key:
             return ''
-        from spm_studio.ai.security import CredentialStore
-        from spm_studio.ai import literature
-        note = CredentialStore().put(literature.ZOTERO_KEY_NAME, key)
+        from spm_studio.ai import lit_store, literature
+        note = lit_store.put(literature.ZOTERO_KEY_NAME, key)
         self.zotero_key.clear()
         self.zotero_key.setPlaceholderText('Stored — leave empty to keep it')
-        return note
-
-    def _zotero_test(self):
-        from spm_studio.ai import literature
-        conf = self._literature_conf()
-        if conf['zotero_mode'] == 'off':
-            self.zotero_status.setText('Choose how to connect first.')
-            return
-        note = self._store_zotero_key()
-        QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
-        try:
-            status = literature.zotero_status(conf)
-        finally:
-            QApplication.restoreOverrideCursor()
-        self.zotero_status.setText(('✓ ' if status['connected'] else '✗ ') + status['message'] +
-                                   (f'  ({note})' if note else ''))
-
-    def _run_agent_command(self, argv) -> tuple[bool, str]:
-        import subprocess
-        from spm_studio.ai import platform_util as pu
-        try:
-            program, prefix = pu.resolve_command(argv[0])
-            done = subprocess.run([program, *prefix, *argv[1:]], capture_output=True, text=True, timeout=90,
-                                  env=pu.command_env(), **pu.hidden_window())
-        except (OSError, ValueError, subprocess.SubprocessError) as exc:
-            return False, str(exc)
-        text = (done.stdout or '') + (done.stderr or '')
-        return done.returncode == 0, text.strip()[-400:]
-
-    def _agent_executable(self, conf) -> str:
-        from spm_studio.ai.cli_events import detect
-        return conf.get('agent_executable') or detect(conf['backend'])
+        return 'Key ' + note
 
     def _literature_apply(self):
-        from spm_studio.ai import literature
-        from spm_studio.ai.config import save, AGENT_BACKENDS
+        """Save what the page shows (used by the tick box and by “Save and test”)."""
+        from spm_studio.ai.config import save
         conf = self._literature_conf()
         if conf['zotero_mode'] == 'web' and not conf['zotero_library_id'].isdigit():
             self.literature_result.setText('The Zotero library ID is a number (zotero.org › Settings › Security).')
-            return
+            return False
         key_note = self._store_zotero_key()
         try:
             save(conf)
         except (OSError, ValueError) as exc:
             self.literature_result.setText('Not saved: ' + str(exc))
-            return
-        notes = ['Saved.'] + ([key_note + '.'] if key_note else [])
-        backend = conf['backend']
-        wanted = {literature.CONSENSUS_SERVER: bool(conf['consensus_enabled']),
-                  literature.ZOTERO_SERVER: conf['zotero_mode'] in ('local', 'web')}
-        QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
-        try:
-            if backend in AGENT_BACKENDS:
-                exe = self._agent_executable(conf)
-                if not exe:
-                    notes.append('The assistant program was not found (General › AI assistant…).')
-                else:
-                    for server, enabled in wanted.items():
-                        # Remove first so that a changed address or Python path is taken over.
-                        self._run_agent_command(literature.mcp_registration(backend, exe, server, remove=True))
-                        if enabled:
-                            ok, output = self._run_agent_command(literature.mcp_registration(backend, exe, server))
-                            notes.append(f'{server}: registered.' if ok else f'{server}: could not be registered ({output}).')
-            elif backend == 'pi':
-                if conf.get('pi_managed'):
-                    from spm_studio.ai import pi_setup
-                    try:
-                        target = literature.write_pi_mcp(pi_setup.agent_dir(), conf)
-                        notes.append(f'Pi: sources written to {target} (needs Pi 0.99 or later).')
-                    except OSError as exc:
-                        notes.append('Pi: could not write mcp.json: ' + str(exc))
-                else:
-                    import json
-                    entries = literature.pi_mcp_entries(conf)
-                    if entries:
-                        QApplication.clipboard().setText(json.dumps({'mcpServers': entries}, indent=2))
-                        notes.append('Your own Pi configuration is never changed by SPM Studio: the entries were copied '
-                                     'to the clipboard — paste them into ~/.pi/agent/mcp.json. Zotero also works '
-                                     'without that step.')
-        finally:
-            QApplication.restoreOverrideCursor()
-        if conf['consensus_enabled']:
-            notes.append('Consensus: click “Sign in to Consensus…” once.')
-        dock = getattr(self.window_, 'ai_dock', None)
-        if dock is not None and not getattr(dock, '_running', False):
-            try:
-                dock._open_backend()        # the assistant is told about the sources from its next message
-            except Exception as exc:
-                self._log('Assistant restart failed: ' + str(exc))
-        else:
-            notes.append('The assistant uses the new sources after its current reply.')
-        self.literature_result.setText(' '.join(notes))
-        self._log('Literature sources: ' + ' '.join(notes))
+            return False
+        self.literature_result.setText('Saved.' + (f' {key_note}.' if key_note else ''))
+        self._log('Literature sources saved')
+        self._literature_refresh_state()
+        self._restart_assistant()
+        return True
+
+    # ---- Consensus
+    def _consensus_busy(self, on: bool, text: str = ''):
+        self.consensus_progress.setVisible(on)
+        self.consensus_cancel.setVisible(on)
+        self.consensus_signin.setEnabled(not on)
+        if text:
+            self.consensus_status.setText(text)
 
     def _consensus_sign_in(self):
-        from spm_studio.ai import literature, pi_setup
-        from spm_studio.ai import platform_util as pu
-        from spm_studio.ai.config import load
-        import os
-        conf = load()
-        backend = conf['backend']
-        try:
-            if backend == 'claude-code':
-                exe = self._agent_executable(conf)
-                program, prefix = pu.resolve_command(exe)
-                argv, env = [program, *prefix], {}
-                banner = ('SPM Studio - sign in to Consensus for the assistant\n\n'
-                          '1. In Claude Code below, type:   /mcp   and press Enter.\n'
-                          f'2. Choose   {literature.CONSENSUS_SERVER}   then   Authenticate.\n'
-                          '3. Your browser opens: sign in to Consensus (your university e-mail works) and allow access.\n'
-                          '4. Back here, type   /exit   and press Enter.\n')
-            elif backend == 'codex':
-                exe = self._agent_executable(conf)
-                program, prefix = pu.resolve_command(exe)
-                argv, env = [program, *prefix, 'mcp', 'login', literature.CONSENSUS_SERVER], {}
-                banner = ('SPM Studio - sign in to Consensus for the assistant\n\n'
-                          'Your browser opens: sign in to Consensus (your university e-mail works) and allow access.\n')
-            elif backend == 'pi' and conf.get('pi_managed'):
-                entry = pi_setup.managed_pi_entry()
-                if entry is None:
-                    raise FileNotFoundError('SPM Studio\'s Pi is not installed')
-                program, prefix = pu.resolve_command(str(entry))
-                argv, env = [program, *prefix], {**pi_setup.pi_env(), 'PI_SKIP_VERSION_CHECK': '1'}
-                banner = ('SPM Studio - sign in to Consensus for the assistant\n\n'
-                          '1. In Pi below, type:   /mcp   and press Enter.\n'
-                          f'2. Choose   {literature.CONSENSUS_SERVER}   and authenticate: your browser opens.\n'
-                          '3. Sign in to Consensus (your university e-mail works) and allow access.\n'
-                          '4. Back here, type   /quit   and press Enter.\n')
-            else:
-                self.consensus_status.setText('Open your own Pi in a terminal, type /mcp and authenticate “consensus”.')
-                return
-            if Path(program).is_absolute():
-                env['PATH'] = str(Path(program).parent) + os.pathsep + os.environ.get('PATH', '')
-            script = pu.write_terminal_script(pi_setup.managed_root() / 'launchers', 'consensus-sign-in-' + backend,
-                                              env, argv, banner)
-            manual = pu.open_terminal(script)
-        except (OSError, ValueError) as exc:
-            self.consensus_status.setText('Could not start the sign-in: ' + str(exc))
+        if self._signin is not None and self._signin.isRunning():
             return
-        self.consensus_status.setText(('Run in a terminal: ' + manual) if manual else
-                                      'A terminal window opened: follow the steps shown there. '
-                                      'Click Apply first if you have not yet.')
+        worker = _ConsensusSignIn(self)
+        self._signin = worker
+        worker.opened.connect(self._consensus_opened)
+        worker.done.connect(self._consensus_signed_in)
+        worker.failed.connect(self._consensus_failed)
+        self._consensus_busy(True, 'Contacting Consensus…')
+        worker.start()
+
+    def _consensus_opened(self, url):
+        opened = QDesktopServices.openUrl(QUrl(url))
+        self._signin_url = url
+        self.consensus_status.setText(
+            'Your browser opened the Consensus sign-in page. Sign in there (your university e-mail works), allow '
+            'SPM Studio, then come back here — this page updates by itself.' if opened else
+            'Open this address in your browser to sign in: ' + url)
+
+    def _consensus_cancel(self):
+        if self._signin is not None:
+            self._signin.cancel()
+
+    def _consensus_signed_in(self, stored):
+        from spm_studio.ai.config import load, save
+        self._consensus_busy(False)
+        conf = load()
+        conf['consensus_enabled'] = True
+        try:
+            save(conf)
+        except (OSError, ValueError) as exc:
+            self.consensus_status.setText('Signed in, but the setting could not be saved: ' + str(exc))
+            return
+        self.consensus_status.setText('Signed in. The sign-in is ' + stored + '.')
+        self._log('Consensus: signed in')
+        self._literature_refresh_state()
+        self._restart_assistant()
+        self.raise_()
+        self.activateWindow()
+
+    def _consensus_failed(self, message):
+        self._consensus_busy(False)
+        self.consensus_status.setText('Not signed in — ' + message)
+        self._literature_refresh_state()
+
+    def _consensus_test(self):
+        from spm_studio.ai import consensus
+        self.consensus_status.setText('Checking…')
+        self.consensus_test.setEnabled(False)
+
+        def done(result, error):
+            self.consensus_test.setEnabled(True)
+            if error:
+                self.consensus_status.setText('✗ ' + error)
+            else:
+                self.consensus_status.setText(('✓ ' if result['connected'] else '✗ ') + result['message'])
+        self._run_task(consensus.status, done)
+
+    def _consensus_sign_out(self):
+        from spm_studio.ai import consensus
+        from spm_studio.ai.config import load, save
+        consensus.sign_out()
+        conf = load()
+        conf['consensus_enabled'] = False
+        try:
+            save(conf)
+        except (OSError, ValueError):
+            pass
+        self.consensus_status.setText('Signed out: the sign-in was removed from this computer.')
+        self._literature_refresh_state()
+        self._restart_assistant()
+
+    def _consensus_save_key(self):
+        from spm_studio.ai import consensus, lit_store
+        from spm_studio.ai.config import load, save
+        key = self.consensus_key.text().strip()
+        if not key:
+            self.consensus_status.setText('Paste the API key first.')
+            return
+        note = lit_store.put(consensus.API_KEY_NAME, key)
+        self.consensus_key.clear()
+        conf = load()
+        conf['consensus_enabled'] = True
+        try:
+            save(conf)
+        except (OSError, ValueError):
+            pass
+        self.consensus_status.setText('API key ' + note + '.')
+        self._literature_refresh_state()
+        self._restart_assistant()
+        self._consensus_test()
+
+    # ---- Zotero
+    def _zotero_browse(self):
+        start = self.zotero_folder.text().strip() or str(Path.home())
+        chosen = QFileDialog.getExistingDirectory(self, 'Zotero data folder (contains zotero.sqlite)', start)
+        if chosen:
+            self.zotero_folder.setText(chosen)
+
+    def _zotero_connect(self):
+        """One click: find Zotero on this computer (app or database file) and connect it."""
+        from spm_studio.ai import literature
+        conf = self._literature_conf()
+        self.zotero_connect.setEnabled(False)
+        self.zotero_status.setText('Looking for Zotero on this computer…')
+
+        def done(found, error):
+            self.zotero_connect.setEnabled(True)
+            if error or not found or not found.get('found'):
+                self.zotero_advanced.setChecked(True)
+                self.zotero_status.setText(
+                    '✗ ' + (error or 'No Zotero library was found on this computer. If Zotero is installed, start it '
+                            'once, or choose its data folder below (Zotero shows it in Settings › Advanced › Files '
+                            'and Folders). For a library kept only on zotero.org, choose “zotero.org account”.'))
+                return
+            self.zotero_mode.setCurrentIndex(self.zotero_mode.findData('auto'))
+            if not self._literature_apply():
+                return
+            parts = []
+            if found.get('data_dir'):
+                parts.append(f"{found.get('items')} items in {found['data_dir']}")
+            parts.append('the Zotero app answers too (indexed PDFs are searched as well)' if found.get('app') else
+                         'read from the database file — Zotero does not need to be open')
+            self.zotero_status.setText('✓ Connected: ' + '; '.join(parts) + '.')
+        self._run_task(lambda: literature.detect_zotero(conf), done)
+
+    def _zotero_test(self):
+        from spm_studio.ai import literature
+        conf = self._literature_conf()
+        if conf['zotero_mode'] == 'off':
+            self.zotero_status.setText('Not connected. Click “Connect Zotero”.')
+            return
+        self._store_zotero_key()
+        self.zotero_status.setText('Checking…')
+
+        def done(status, error):
+            if error:
+                self.zotero_status.setText('✗ ' + error)
+            else:
+                self.zotero_status.setText(('✓ ' if status['connected'] else '✗ ') + status['message'])
+        self._run_task(lambda: literature.zotero_status(conf), done)
+
+    def _zotero_disconnect(self):
+        self.zotero_mode.setCurrentIndex(self.zotero_mode.findData('off'))
+        if self._literature_apply():
+            self.zotero_status.setText('Disconnected. Nothing was changed in Zotero.')
+
+    def done(self, result):
+        # Leaving the window ends a pending sign-in and waits briefly for background checks.
+        signin = getattr(self, '_signin', None)
+        if signin is not None and signin.isRunning():
+            signin.cancel()
+            signin.wait(3000)
+        for task in list(getattr(self, '_lit_tasks', [])):
+            task.wait(4000)
+        super().done(result)
 
     # -------------------------------------------------------------------- About
     def _about_page(self):

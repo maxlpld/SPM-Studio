@@ -157,7 +157,7 @@ def _ssl():
         return ssl.create_default_context()
 
 
-def _get(url: str, timeout: float = 15, accept: str = 'application/vnd.github+json') -> bytes:
+def _get(url: str, timeout: float = 15, accept: str = 'application/vnd.github+json', progress=None) -> bytes:
     headers = {'Accept': accept, 'User-Agent': 'SPM-Studio-updater'}
     token = github_token() if url.startswith(API) else ''   # only ever sent to the GitHub API
     if token:
@@ -167,7 +167,22 @@ def _get(url: str, timeout: float = 15, accept: str = 'application/vnd.github+js
         handlers.append(HTTPSHandler(context=_ssl()))
     try:
         with build_opener(*handlers).open(Request(url, headers=headers), timeout=timeout) as r:
-            return r.read()
+            if progress is None:
+                return r.read()
+            # v0.0.7: read in pieces so the update window can show the download advancing.
+            try:
+                total = int(r.headers.get('Content-Length') or 0)
+            except ValueError:
+                total = 0
+            chunks, done = [], 0
+            while True:
+                chunk = r.read(65536)
+                if not chunk:
+                    break
+                chunks.append(chunk)
+                done += len(chunk)
+                progress(done, total)
+            return b''.join(chunks)
     except HTTPError as exc:
         if exc.code == 404:
             raise FileNotFoundError(url) from exc
@@ -329,7 +344,7 @@ def prepare(result: dict, progress=None) -> Path:
         shutil.rmtree(target, ignore_errors=True)
     target.mkdir(parents=True)
     archive = base / f'{tag}.zip'
-    data = _get(result['archive'], timeout=120, accept='application/zip')
+    data = _get(result['archive'], timeout=120, accept='application/zip', progress=progress)
     if len(data) < 10_000:
         raise UpdateError('Download incomplete')
     archive.write_bytes(data)
@@ -358,6 +373,185 @@ def launch_installer(source: Path, version: str) -> str:
               'When it says "installed successfully", close SPM Studio and open it again.')
     script = pu.write_terminal_script(source, 'run-update', {}, installer_argv(source), banner)
     return pu.open_terminal(script)
+
+
+# ------------------------------------------------------------------ in-app install (v0.0.7)
+# The installer runs inside the update window (no terminal). Its output is turned into a
+# percentage with the milestones below; pip's many lines fill the long middle part.
+MILESTONES = (
+    # (text found in a line of installer output, percent reached, what the user reads)
+    ('Python:', 8, 'Preparing the new version'),
+    ('Copying application files', 10, 'Preparing the new version'),
+    ('Creating the private Python environment', 12, 'Creating its Python environment'),
+    ('Successfully installed pip', 16, 'Installing the Python packages'),
+    ('Requirement already satisfied: pip', 16, 'Installing the Python packages'),
+    ('Installing collected packages', 74, 'Installing the Python packages'),
+    ('Successfully installed', 80, 'Packages installed'),
+    ('Standalone SPM Studio source', 82, 'Testing the new version'),
+    ('SMOKE ok', 84, 'Testing the new version'),
+    ('SMOKE PASSED', 90, 'Test passed'),
+    ('Existing staged release', 82, 'Testing the new version'),
+    ('Release staged and tested', 92, 'Activating the new version'),
+    ('installed successfully', 100, 'Installed'),
+)
+PIP_STEP = ('Collecting ', 'Downloading ', 'Using cached ', 'Obtaining ', 'Building ', 'Preparing metadata',
+            'Requirement already satisfied', 'Installing build dependencies', 'Getting requirements')
+FAIL_MARKS = ('SMOKE FAILED', 'SMOKE FAIL ', 'Partial release at', 'refusing to')
+
+
+class InstallProgress:
+    """Percentage and step text from the lines the installer prints."""
+
+    def __init__(self, start: int = 5):
+        self.percent = start
+        self.label = 'Starting the installer'
+        self.success = False
+        self.problem = ''
+
+    def feed(self, line: str) -> bool:
+        """Take one output line; True when the percentage or the label changed."""
+        before = (self.percent, self.label)
+        text = line.strip()
+        if not text:
+            return False
+        for mark in FAIL_MARKS:
+            if mark in text and not self.problem:
+                self.problem = text[:300]
+        if text.startswith('Installing collected packages') and text.split(':', 1)[-1].strip() == 'pip':
+            text = 'Successfully installed pip'       # pip upgrading itself, not the application's packages
+        for mark, percent, label in MILESTONES:
+            if mark in text:
+                if percent > self.percent or (percent == self.percent and label != self.label):
+                    self.percent, self.label = max(self.percent, percent), label
+                if mark == 'installed successfully':
+                    self.success = True
+                break
+        else:
+            if text.startswith(PIP_STEP) and 16 <= self.percent < 72:
+                # Each package line moves the bar a little; it never reaches the next milestone alone.
+                self.percent = min(72, self.percent + 1) if self.percent < 60 else min(72, self.percent + 0.25)
+                self.label = 'Installing the Python packages'
+        return (self.percent, self.label) != before
+
+
+def installer_environment() -> dict:
+    """Extra environment for an unattended installer: no prompts, plain line output."""
+    return {'PIP_DISABLE_PIP_VERSION_CHECK': '1', 'PIP_NO_INPUT': '1', 'PIP_PROGRESS_BAR': 'off',
+            'PYTHONUNBUFFERED': '1', 'PYTHONUTF8': '1', 'PYTHONIOENCODING': 'utf-8', 'NO_COLOR': '1',
+            'SPM_STUDIO_IN_APP_UPDATE': '1'}
+
+
+class InstallRunner:
+    """Run the installer without a terminal: no stdin, own process group, output line by line.
+
+    ``on_line(text)`` is called for every line (from the calling thread of :meth:`run`).
+    :meth:`cancel` stops the installer **and** the programs it started (pip, the self-test).
+    """
+
+    def __init__(self, argv, cwd, on_line=None, env=None):
+        self.argv = [str(a) for a in argv]
+        self.cwd = str(cwd)
+        self.on_line = on_line or (lambda text: None)
+        self.env = {**os.environ, **installer_environment(), **(env or {})}
+        self.process = None
+        self.cancelled = False
+
+    def run(self) -> int:
+        options = {}
+        if sys.platform.startswith('win'):
+            options['creationflags'] = (getattr(subprocess, 'CREATE_NO_WINDOW', 0)
+                                        | getattr(subprocess, 'CREATE_NEW_PROCESS_GROUP', 0))
+        else:
+            options['start_new_session'] = True
+        try:
+            self.process = subprocess.Popen(self.argv, cwd=self.cwd, env=self.env, stdin=subprocess.DEVNULL,
+                                            stdout=subprocess.PIPE, stderr=subprocess.STDOUT, bufsize=0, **options)
+        except OSError as exc:
+            self.on_line(f'Could not start the installer: {exc}')
+            return 127
+        pending = b''
+        while True:
+            chunk = self.process.stdout.read(4096)
+            if not chunk:
+                break
+            pending += chunk
+            # pip redraws some lines with a carriage return: treat both as line ends.
+            parts = re.split(rb'\r\n|\n|\r', pending)
+            pending = parts.pop()
+            for raw in parts:
+                self.on_line(raw.decode('utf-8', 'replace'))
+        if pending:
+            self.on_line(pending.decode('utf-8', 'replace'))
+        return self.process.wait()
+
+    def cancel(self):
+        self.cancelled = True
+        process = self.process
+        if process is None or process.poll() is not None:
+            return
+        try:
+            if sys.platform.startswith('win'):
+                subprocess.run(['taskkill', '/T', '/F', '/PID', str(process.pid)], capture_output=True, timeout=20,
+                               creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
+            else:
+                import signal
+                os.killpg(os.getpgid(process.pid), signal.SIGTERM)
+                try:
+                    process.wait(5)
+                except subprocess.TimeoutExpired:
+                    os.killpg(os.getpgid(process.pid), signal.SIGKILL)
+        except (OSError, subprocess.SubprocessError):
+            try:
+                process.kill()
+            except OSError:
+                pass
+
+
+def releases_dir() -> Path:
+    """Where the installers put releases on this system (same paths as the install scripts)."""
+    if sys.platform.startswith('win'):
+        return Path(os.environ.get('LOCALAPPDATA', Path.home() / 'AppData' / 'Local')) / 'SPMStudio' / 'releases'
+    if sys.platform == 'darwin':
+        return Path.home() / 'Library' / 'Application Support' / 'SPMStudio' / 'releases'
+    return Path(os.environ.get('XDG_DATA_HOME', Path.home() / '.local' / 'share')) / 'spm-studio-ai-app' / 'releases'
+
+
+def remove_partial_release(version: str) -> bool:
+    """Delete a half-built release left by an interrupted update, so the next attempt can start.
+
+    Only ``releases/<version>`` without its ``READY`` marker is removed, never a finished release
+    and never the one this process runs from.
+    """
+    if not re.fullmatch(r'[0-9A-Za-z][0-9A-Za-z.+-]*', version or ''):
+        return False
+    target = releases_dir() / version
+    try:
+        if not target.is_dir() or (target / 'READY').exists():
+            return False
+        running = Path(sys.prefix).resolve()
+        if target.resolve() == running or target.resolve() in running.parents:
+            return False
+        shutil.rmtree(target)
+        return True
+    except OSError:
+        return False
+
+
+def restart_argv() -> list[str]:
+    """Command that starts the (newly installed) SPM Studio again."""
+    if sys.platform.startswith('win'):
+        launcher = Path(os.environ.get('LOCALAPPDATA', Path.home() / 'AppData' / 'Local')) / 'SPMStudio' / 'bin' / 'spm-studio.cmd'
+        if launcher.is_file():
+            return [os.environ.get('COMSPEC', 'cmd.exe'), '/c', str(launcher)]
+    else:
+        if sys.platform == 'darwin':
+            bundle = Path.home() / 'Applications' / 'SPM Studio.app'
+            if bundle.is_dir():
+                return ['open', '-n', str(bundle)]
+        launcher = Path.home() / '.local' / 'bin' / 'spm-studio'
+        if launcher.is_file():
+            return [str(launcher)]
+    return [sys.executable, '-m', 'spm_studio']        # development checkout: same interpreter
 
 
 # ------------------------------------------------------------------ CLI
