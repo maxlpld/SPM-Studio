@@ -81,8 +81,9 @@ def bump(new: str):
                            flags=re.M), encoding='utf8')
     readme = ROOT / 'README.md'
     text = readme.read_text(encoding='utf8')
-    readme.write_text(README_BADGE.sub(lambda m: m.group(1) + new.replace('-', '--') + m.group(3), text, count=1),
-                      encoding='utf8')
+    text = README_BADGE.sub(lambda m: m.group(1) + new.replace('-', '--') + m.group(3), text, count=1)
+    text = re.sub(r'alt="Version [^"]*"', f'alt="Version {new}"', text, count=1)     # the badge's alt text too
+    readme.write_text(text, encoding='utf8')
     log = ROOT / 'CHANGELOG.md'
     text = log.read_text(encoding='utf8')
     if not re.search(rf'^##\s+\[?v?{re.escape(new)}\b', text, re.M):

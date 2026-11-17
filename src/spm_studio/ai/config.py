@@ -26,7 +26,9 @@ DEFAULT = {'backend': 'none', 'pi_executable': '', 'provider': 'openai', 'model'
            # v0.0.5: literature sources for the agent (Settings › Literature). The Zotero API key is
            # never stored here (OS keyring, see ai/literature.py).
            'consensus_enabled': False, 'zotero_mode': 'off', 'zotero_library_id': '',
-           'zotero_library_type': 'user'}
+           'zotero_library_type': 'user',
+           # v0.0.7: zotero_mode also takes 'auto' and 'database'; optional Zotero data folder.
+           'zotero_data_dir': ''}
 
 
 def base_dir() -> Path:
@@ -50,7 +52,7 @@ def load() -> dict:
             result[key] = found[key]
     if result['backend'] not in BACKENDS:result['backend']='none'
     if result['provider'] not in PROVIDERS:result['provider']='openai'
-    if result['zotero_mode'] not in ('off','local','web'):result['zotero_mode']='off'
+    if result['zotero_mode'] not in ('off','auto','local','database','web'):result['zotero_mode']='off'
     if result['zotero_library_type'] not in ('user','group'):result['zotero_library_type']='user'
     return result
 
@@ -62,7 +64,7 @@ def save(conf:dict) -> None:
     if clean['judge'] not in {'none', 'local'}:raise ValueError('Unsupported Judge')
     if clean['routing'] not in {'manual','eco','balanced','performance'}:raise ValueError('Invalid routing')
     if clean['autonomy'] not in {'ask','workspace'}:raise ValueError('Invalid autonomy')
-    if clean['zotero_mode'] not in {'off','local','web'}:raise ValueError('Invalid Zotero mode')
+    if clean['zotero_mode'] not in {'off','auto','local','database','web'}:raise ValueError('Invalid Zotero mode')
     if clean['zotero_library_type'] not in {'user','group'}:raise ValueError('Invalid Zotero library type')
     if clean['zotero_library_id'] and not str(clean['zotero_library_id']).isdigit():
         raise ValueError('The Zotero library ID is a number')

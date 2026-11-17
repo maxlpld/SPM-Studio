@@ -100,6 +100,10 @@ def run(win) -> int:
         dialog = SetupDialog(win.ai_dock)
         for i in range(dialog.mode.count()):
             dialog.mode.setCurrentIndex(i); app.processEvents()
+        # v0.0.7: Quick start cards + Advanced page
+        assert dialog.nav.count() == 2 and len(dialog.cards) == 6
+        for row in (1, 0):
+            dialog.nav.setCurrentRow(row); app.processEvents()
         from spm_studio.ai.pi_wizard import PiSetupWizard
         from spm_studio.ai import pi_setup, platform_util, judge_proxy, cli_agents  # noqa: F401
         wizard = PiSetupWizard(win.ai_dock)
@@ -111,6 +115,8 @@ def run(win) -> int:
         upd = UpdateDialog(win, {'repository': 'owner/repo', 'current': '0.0.1', 'latest': '9.9.9', 'tag': 'v9.9.9',
                                  'update': True, 'url': '', 'archive': '', 'source': 'releases',
                                  'notes': [{'version': '9.9.9', 'notes': '- smoke', 'published': ''}]})
+        upd._set_progress(40, 'Installing'); upd._toggle_details(True); upd._toggle_details(False)
+        app.processEvents()
         upd.close(); upd.deleteLater()
         assert platform_util.hardware()['os']
         dialog.close(); dialog.deleteLater()

@@ -517,6 +517,12 @@ QFrame#activityStrip {{ background: @accent_soft; border: 1px solid @border; bor
 QFrame#activityStrip QLabel {{ color: @fg; font-weight: 600; }}
 QToolButton#SettingsGearV005 {{ padding: 5px; min-width: 26px; }}
 QLabel#aboutTitle {{ font-size: {px + 8}px; font-weight: 700; }}
+/* v0.0.7: choice cards of the assistant Quick start page */
+QFrame#choiceCard {{ background: @surface; border: 1px solid @border; border-radius: {r}px; }}
+QFrame#choiceCard[selected="true"] {{ border: 1px solid @accent; background: @accent_soft; }}
+QRadioButton#choiceTitle {{ font-weight: 600; font-size: {px + 1}px; }}
+QLabel#badge {{ background: @accent; color: @accent_fg; border-radius: {rs}px; padding: 1px 7px;
+    font-size: {small}px; font-weight: 600; }}
 QMessageBox QLabel {{ min-height: 20px; }}
 QDialogButtonBox {{ background: transparent; padding-top: 6px; }}
 QToolBar {{ background: transparent; border: 0; spacing: 4px; padding: 2px; }}

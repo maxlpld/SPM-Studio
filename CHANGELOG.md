@@ -7,6 +7,30 @@ so write it for users. Add new versions **at the top**.
 The internal builds that preceded the GitHub project (0.7.0 – 0.8.3) are documented in
 [`docs/DEVELOPMENT_HISTORY.md`](docs/DEVELOPMENT_HISTORY.md).
 
+## 0.0.7 — 2026-11-17
+
+### Literature sources that connect from Settings
+
+- **Zotero works out of the box.** *Settings › Literature › Connect Zotero* finds your library on this computer and reads it directly from Zotero's database (read-only). Nothing has to be enabled in Zotero, every Zotero version works, and Zotero does not need to be running. When the Zotero app (7 or later) answers, it is used as well, so indexed PDFs are searched too. *Advanced* keeps the other ways: the Zotero app only, a data folder in an unusual place, or a zotero.org library with a read-only key.
+- **Sign in to Consensus directly in Settings.** *Sign in to Consensus* opens the Consensus page in your browser; sign in with your own account (a university e-mail uses your institution's licence) and the Settings page shows *Connected*. No terminal and no assistant program is involved any more. An API key can be used instead (*Advanced*).
+- **They now work with every assistant and in ordinary chat.** In 0.0.5 and 0.0.6 the sources needed an agent with tools switched on, and each agent had to be configured separately — which is why they often looked “not connected”. Now SPM Studio runs the lookup itself when the assistant asks for one, with Pi, Claude Code, Codex or a direct API chat. The chat shows a short line (“Looked up: Zotero search …”).
+- **Sign-ins survive a restart on every computer.** The zotero.org key and the Consensus sign-in are kept in the system keyring, or — on computers without one — in a private file of your account, instead of being lost when SPM Studio closes.
+- Clear messages when something is missing (Zotero not found, Zotero too old for its app interface, sign-in expired).
+
+### Assistant settings
+
+- **Two pages, like Settings.** *Quick start* shows one card per way of getting an assistant — *Set it up for me* (recommended), *I have a Claude subscription*, *I have a ChatGPT subscription*, *I already use Pi*, *I have an API key*, *No assistant* — each with its status (installed? signed in?) and the one or two buttons it needs, plus a line saying what to do next.
+- A finished guided setup is saved and used at once; no extra *Save* click.
+- **Advanced** keeps every expert setting: program paths, workspace, API connections and fallbacks, Fast/Smart models, the local Judge, how development tasks are confirmed.
+
+### Updates inside the app
+
+- **No terminal window any more.** *Install update* downloads, builds and tests the new version inside the update window, with a progress bar and the current step. **Show details** shows what the installer prints (and *Copy details* copies it).
+- **Restart now or later.** When the new version is installed, choose *Restart now* (SPM Studio closes and opens the new version) or *Later* (it starts the next time you open SPM Studio).
+- A failed or cancelled update leaves the current version untouched, says why, and cleans up after itself so that *Try again* works.
+
+SPM processing and the analysis scripts are unchanged; existing scans, results, profiles and settings are kept. Updating from 0.0.6 still uses the previous update window one last time; from 0.0.7 on, updates run inside the app.
+
 ## 0.0.6 — 2026-11-16
 
 ### Windows installation

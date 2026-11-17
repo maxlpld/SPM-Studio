@@ -80,40 +80,54 @@ a system service, and an existing Ollama configuration is not changed.
 
 ## Literature sources: Consensus and Zotero (Settings › Literature)
 
-Both are optional, off by default and read-only. They are offered to agent backends (Pi, Claude Code, Codex);
-a direct API connection is chat-only and cannot call them.
+Both are optional, off until connected, and read-only. They are connected in the Settings page by SPM Studio
+itself and then work with **every** backend — Pi, Claude Code, Codex and direct API chat — with or without
+agent tools.
+
+### How the assistant uses them
+
+The assistant is told (in its instructions) that it can ask for a lookup by ending its message with a
+request line such as
+
+```
+<spm-literature>{"source": "zotero", "action": "search", "query": "kelvin probe graphene"}</spm-literature>
+```
+
+SPM Studio runs the request in the app and sends the result back as the next message; the assistant then
+answers. The chat shows “Looking up: …” / “Looked up: …” instead of the request and the raw data. Only the
+read-only actions exist (`zotero`: `search`, `item`, `collections`, `fulltext`; `consensus`: `search`), at
+most four requests per message and four rounds per question; results are size-capped and marked as data.
+Agents that have a shell can also run `python -m spm_studio.ai.literature …`, and MCP clients can use the
+stdio server `python -m spm_studio.ai.literature --mcp`; neither is required.
 
 ### Zotero
 
-| Choice | What is needed | Where the data goes |
-|---|---|---|
-| **Zotero app on this computer** (recommended) | Zotero 7 or later running, with *Settings › Advanced › Allow other applications on this computer to communicate with Zotero* ticked | Stays on the computer (`http://127.0.0.1:23119/api`, read-only). |
-| **zotero.org account** | Numeric library ID and a private key with read-only library access (zotero.org › Settings › Security) | Requests go to `api.zotero.org`. The key is kept in the operating system's keyring, never in a settings file; without a keyring set the environment variable `ZOTERO_API_KEY`. |
+**Connect Zotero** sets the automatic mode. *Advanced* lists all of them:
 
-*Test connection* checks it. The assistant then has four read-only tools — search, one item (abstract, notes,
-attachments), collections, indexed full text — through a small MCP server
-(`python -m spm_studio.ai.literature --mcp`) and through the same module as a command line
-(`python -m spm_studio.ai.literature search "kelvin probe" --limit 10`), which works with every agent.
-Nothing can be added, changed or deleted in Zotero.
+| Choice | What is needed | Notes |
+|---|---|---|
+| **Automatic** (recommended) | Nothing | Asks the Zotero app when it answers, otherwise reads the database file. |
+| **Zotero database file** | Nothing | Reads `zotero.sqlite` in the Zotero data folder, opened read-only and immutable (never locked or changed). Any Zotero version, running or not. Searches titles, creators, years, tags, abstracts and notes; full text comes from Zotero's own PDF index. The folder is found in the usual places and in Zotero's own preference; set it by hand only if it is elsewhere. |
+| **Zotero app** | Zotero 7 or later running, with *Settings › Advanced › Allow other applications on this computer to communicate with Zotero* | `http://127.0.0.1:23119/api`. Also searches inside indexed PDFs. |
+| **zotero.org account** | Numeric library ID and a private key with read-only library access | Requests go to `api.zotero.org`. |
 
 ### Consensus
 
-Consensus is reached through its hosted MCP server, `https://mcp.consensus.app/mcp`, with your own Consensus
-sign-in (OAuth in the browser). SPM Studio registers that address with the agent and never sees the password
-or the token:
-
-| Assistant | What *Apply* does | Sign in |
-|---|---|---|
-| Claude Code | `claude mcp add --scope user --transport http consensus https://mcp.consensus.app/mcp` | *Sign in to Consensus…* opens Claude Code: `/mcp` › *consensus* › *Authenticate*. |
-| Codex | `codex mcp add consensus --url https://mcp.consensus.app/mcp` | *Sign in to Consensus…* runs `codex mcp login consensus`. |
-| Pi installed by SPM Studio | Writes the server into SPM Studio's private Pi folder (`mcp.json`); needs Pi 0.99 or later. | *Sign in to Consensus…* opens Pi: `/mcp`, then authenticate *consensus*. |
-| Your own Pi | Nothing is written (your `~/.pi` is never changed): the entries are copied to the clipboard for `~/.pi/agent/mcp.json`. | In your Pi: `/mcp`. |
+**Sign in to Consensus** runs the standard OAuth sign-in documented by Consensus (authorisation code with
+PKCE, dynamic client registration, scope `search`): the Consensus page opens in the browser, and the answer
+comes back to a temporary address on this computer (`http://127.0.0.1:<port>/callback`). SPM Studio then calls
+Consensus' MCP server `https://mcp.consensus.app/mcp` (tool `search`) with the resulting token. The password
+is typed on consensus.app only. *Sign out* removes the sign-in from this computer; access can also be revoked
+in the Consensus account. Organisations that hand out Consensus API keys can paste one under *Advanced*.
 
 If your university provides Consensus, sign in with your university e-mail: the licence is attached to the
-account. A Zotero library linked inside your Consensus account is used by Consensus itself; connecting Zotero
-in SPM Studio as well lets the assistant read your library directly.
+account. A Zotero library linked inside your Consensus account is used by Consensus itself.
 
-To disconnect: untick the source and click *Apply* (the registration is removed from the agent).
+### Where the secrets are
+
+The zotero.org key and the Consensus sign-in are stored in the operating system's keyring. On a computer
+without a keyring they are stored in `literature_secrets.json` in SPM Studio's settings folder, readable by
+your account only (mode 600). They are never written to the ordinary settings file, the logs or a release.
 
 ## Guides the assistant reads before it builds something
 
