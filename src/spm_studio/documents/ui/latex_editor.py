@@ -1171,9 +1171,9 @@ class LatexEditorWindow(QMainWindow):
         cursor = self.editor.textCursor()
         doc = self.docs[self.current]
         if at == 'end':
-            text = doc.toPlainText()
-            end = text.rfind('\\end{document}')
-            cursor.setPosition(to_qt(text, end) if end >= 0 else doc.characterCount() - 1)
+            source = doc.toPlainText()
+            end = source.rfind('\\end{document}')
+            cursor.setPosition(to_qt(source, end) if end >= 0 else doc.characterCount() - 1)
         elif at.startswith('line:'):
             block = doc.findBlockByNumber(max(0, int(float(at.split(':', 1)[1])) - 1))
             cursor = QTextCursor(block)

@@ -466,6 +466,8 @@ def test_latex_editor_figures_assistant_and_compile(window, qt, home, tmp_path):
     results = hub.ai_execute(requests)
     assert 'Content of the open file' in results[0][1] and 'figures/scan_topo.pdf' in results[0][1]
     assert results[1][1].startswith('Replaced') and results[3][1].startswith('ERROR')
+    assert results[4][1].startswith('Inserted 22 characters in main.tex'), results[4][1]
+    assert win.editor.toPlainText().count('\\documentclass') == 1
     assert (project / 'sections' / 'extra.tex').read_text() == '\\section{X}'
     assert not (tmp_path.parent / 'escape.tex').exists()
     win.open_file(str(project / 'main.tex'))
