@@ -74,18 +74,18 @@ def test_factory_templates_guides_and_library(home):
     assert not (custom / 'latex_templates' / 'Lab_Notes.tex').exists()
 
 
-def test_guide_examples_are_valid():
+def test_guide_examples_are_valid(tmp_path):
     from spm_studio.documents import templates
     text = (ROOT / 'customization' / 'presentation_templates' / 'README.md').read_text(encoding='utf8')
-    blocks = [json.loads(b) for b in re.findall(r'```json\n(.*?)```', text, re.S)]
+    blocks = [json.loads(b) for b in re.findall(r'```json\r?\n(.*?)```', text, re.S)]
     assert blocks
-    tmp = Path(os.environ.get('TMPDIR', '/tmp'))
+    tmp = tmp_path
     for n, block in enumerate(blocks):
         path = tmp / f'guide_example_{n}.json'
         path.write_text(json.dumps(block), encoding='utf8')
         templates.validate_slides(path)
     latex_guide = (ROOT / 'customization' / 'latex_templates' / 'README.md').read_text(encoding='utf8')
-    for block in re.findall(r'```json\n(.*?)```', latex_guide, re.S):
+    for block in re.findall(r'```json\r?\n(.*?)```', latex_guide, re.S):
         assert 'main' in json.loads(block)
 
 

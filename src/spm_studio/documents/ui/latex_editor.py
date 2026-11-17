@@ -1207,10 +1207,10 @@ class LatexEditorWindow(QMainWindow):
             self._replace_document_text(self.docs[str(path)], text)
             self._save(str(path))
         else:
+            # created on disk only: the file the user is editing stays open (it appears in the file tree)
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text(text, encoding='utf8')
-            self.open_file(str(path))
-        return f'Wrote {relative} ({len(text)} characters)'
+        return f'Wrote {relative} ({len(text)} characters); the open file is unchanged'
 
     def ai_open_file(self, relative: str) -> str:
         path = self._safe_path(relative)
