@@ -41,13 +41,19 @@ def test_mask_handle_moves_one_boundary_only(app):
     chart=LivePlot();chart.resize(600,250)
     chart.histogram(np.linspace(0,10,1001),60,
                     [{'name':'A','low':2.,'high':8.,'color':'#ff0000'}],0)
-    chart.show();app.processEvents()
+    chart.show();QTest.qWaitForWindowExposed(chart)
+    # the chart geometry is final only after the first layout/paint; on a busy Xvfb that can take a moment
+    for _ in range(20):
+        app.processEvents();QTest.qWait(10)
     emitted=[];chart.rangeEdited.connect(lambda x,y:emitted.append((x,y)))
     start=QPoint(round(chart._x_from_value(2.)),round(chart._chart.center().y()))
     target=QPoint(round(chart._x_from_value(3.)),round(chart._chart.center().y()))
+    QTest.mouseMove(chart,start)
     QTest.mousePress(chart,Qt.MouseButton.LeftButton,pos=start)
-    QTest.mouseMove(chart,target)
+    for step in range(1,6):                       # several moves, as a real drag sends
+        QTest.mouseMove(chart,QPoint(start.x()+(target.x()-start.x())*step//5,start.y()))
     QTest.mouseRelease(chart,Qt.MouseButton.LeftButton,pos=target)
+    app.processEvents()
     assert emitted
     assert 2.8<emitted[-1][0]<3.2
     assert emitted[-1][1]==8.
