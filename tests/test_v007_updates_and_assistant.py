@@ -131,6 +131,19 @@ def test_installer_runs_without_a_terminal_and_without_input(tmp_path):
     assert env['PIP_NO_INPUT'] == '1' and env['PIP_PROGRESS_BAR'] == 'off' and env['PYTHONUTF8'] == '1'
 
 
+def test_windows_carriage_return_redraws_do_not_create_phantom_blank_lines(tmp_path):
+    # Python's Windows stdout can translate an explicit \r\n to \r\r\n.
+    # Feed raw pipe bytes to reproduce the exact Windows failure on every OS.
+    argv = _script(tmp_path, (
+        'import sys\n'
+        'sys.stdout.buffer.write(b"one\\rtwo\\r\\r\\nthree\\n")\n'
+        'sys.stdout.buffer.flush()\n'))
+    lines = []
+    runner = updates.InstallRunner(argv, tmp_path, on_line=lines.append)
+    assert runner.run() == 0
+    assert lines == ['one', 'two', 'three']
+
+
 @pytest.mark.skipif(os.name == 'nt', reason='process groups are checked on POSIX; Windows uses taskkill /T')
 def test_cancel_stops_the_installer_and_what_it_started(tmp_path):
     marker = tmp_path / 'child_survived'
