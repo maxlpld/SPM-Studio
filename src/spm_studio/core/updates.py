@@ -475,11 +475,16 @@ class InstallRunner:
             if not chunk:
                 break
             pending += chunk
-            # pip redraws some lines with a carriage return: treat both as line ends.
+            # pip redraws progress with CR, and Windows' text-mode stdout
+            # can translate an explicit CRLF into CRCRLF. Both produce
+            # redundant separators; never report empty phantom log lines.
+            # Keep the trailing fragment until the next read so chunk
+            # boundaries cannot split a message.
             parts = re.split(rb'\r\n|\n|\r', pending)
             pending = parts.pop()
             for raw in parts:
-                self.on_line(raw.decode('utf-8', 'replace'))
+                if raw:
+                    self.on_line(raw.decode('utf-8', 'replace'))
         if pending:
             self.on_line(pending.decode('utf-8', 'replace'))
         return self.process.wait()
