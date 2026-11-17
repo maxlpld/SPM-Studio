@@ -1,0 +1,6 @@
+{
+  "name": "Article",
+  "description": "Plain article: title, sections, figures, equations, bibliography (BibTeX).",
+  "main": "main.tex",
+  "category": "Documents"
+}

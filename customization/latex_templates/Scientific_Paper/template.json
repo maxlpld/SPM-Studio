@@ -1,0 +1,6 @@
+{
+  "name": "Scientific paper (two columns)",
+  "description": "Two-column paper with abstract, affiliations, SI units, figures spanning one or two columns.",
+  "main": "main.tex",
+  "category": "Documents"
+}

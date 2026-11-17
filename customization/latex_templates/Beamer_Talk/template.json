@@ -1,0 +1,6 @@
+{
+  "name": "Beamer talk",
+  "description": "LaTeX slides (beamer, 16:9) with a clean title page, sections and figure frames.",
+  "main": "main.tex",
+  "category": "Presentations"
+}

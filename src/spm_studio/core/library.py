@@ -13,6 +13,8 @@ themes      ``…/themes``                        ``*.json``
 colormaps   ``…/colormaps``                     ``*.csv`` / ``*.txt``
 plots       ``…/plot_styles``                   ``*.json``
 shortcuts   ``…/shortcuts``                     ``*.json``
+latex_tpl   ``…/latex_templates``               template folders, ``*.tex``
+slide_tpl   ``…/presentation_templates``        ``*.json``, template folders
 ========== =================================== ============================
 
 *Export* writes one ``.zip`` *pack* that another user imports with **Import…**;
@@ -65,7 +67,17 @@ KINDS = {
                   'Fonts, line widths and colours of analysis plots.'),
     'shortcuts': Kind('shortcuts', 'Keyboard shortcuts', 'shortcut file', 'shortcuts', ('.json',),
                       'Keyboard shortcut sets.'),
+    # v0.0.8: templates of the LaTeX and presentation editors.
+    'latex_templates': Kind('latex_templates', 'LaTeX templates', 'LaTeX template', 'latex_templates', ('.tex',),
+                            'Starting points for new LaTeX projects: a folder with template.json and its files, '
+                            'or one .tex file. Import a LaTeX project folder or an Overleaf .zip to make one.'),
+    'slide_templates': Kind('slide_templates', 'Presentation templates', 'presentation template',
+                            'presentation_templates', ('.json',),
+                            'Theme, layouts and starter slides of new presentations (.json, or a folder with '
+                            'template.json and its images).'),
 }
+TEMPLATE_KINDS = ('latex_templates', 'slide_templates')
+TEMPLATE_MARKER = 'template.json'
 
 
 @dataclass(frozen=True)
@@ -136,6 +148,20 @@ def list_items(kind: str) -> list[Item]:
             elif entry.is_file() and entry.suffix.lower() == '.py' and not entry.name.startswith('_'):
                 items.append(Item(kind, entry.name, entry, False, entry.stem, 'standalone script'))
             continue
+        if kind in TEMPLATE_KINDS:
+            if entry.name.lower() == 'readme.md' or entry.name.endswith('.bak'):
+                continue
+            if entry.is_file() and entry.suffix.lower() not in info.suffixes:
+                continue
+            label, detail, valid = entry.stem.replace('_', ' '), '', True
+            try:
+                meta = _validate_template(kind, entry)
+                label = str(meta.get('name') or label)
+                detail = str(meta.get('description') or ('folder' if entry.is_dir() else 'single file'))
+            except Exception as exc:
+                detail, valid = f'invalid: {exc}', False
+            items.append(Item(kind, entry.name, entry, entry.is_dir(), label, detail[:90], valid))
+            continue
         if not entry.is_file() or entry.suffix.lower() not in info.suffixes:
             continue
         detail, valid = '', True
@@ -159,6 +185,14 @@ def validate_file(kind: str, path) -> None:
         elif path.suffix.lower() == '.py':
             compile(path.read_text(encoding='utf-8'), str(path), 'exec')
         return
+    if kind in TEMPLATE_KINDS:
+        if path.is_file() and path.suffix.lower() == '.json' and kind == 'latex_templates':
+            data = json.loads(path.read_text(encoding='utf-8'))      # template.json being edited
+            if not isinstance(data, dict):
+                raise LibraryError('template.json must be a JSON object')
+            return
+        _validate_template(kind, path)
+        return
     if path.suffix.lower() not in info.suffixes:
         raise LibraryError(f'{info.singular.capitalize()} files end in ' + ' / '.join(info.suffixes))
     if kind == 'profiles':
@@ -179,6 +213,34 @@ def validate_file(kind: str, path) -> None:
     elif kind == 'shortcuts':
         from .shortcuts import validate_profile as validate_shortcuts
         validate_shortcuts(json.loads(path.read_text(encoding='utf-8')))
+
+
+def _validate_template(kind: str, path) -> dict:
+    from spm_studio.documents import templates
+    try:
+        return templates.validate_latex(path) if kind == 'latex_templates' else templates.validate_slides(path)
+    except templates.TemplateError as exc:
+        raise LibraryError(str(exc)) from exc
+
+
+def _template_candidates(kind: str, source: Path) -> list[Path]:
+    """A template folder, or the template folders inside ``source``."""
+    try:
+        _validate_template(kind, source)
+        return [source]
+    except LibraryError:
+        pass
+    found = []
+    for child in sorted(source.iterdir()):
+        if child.name.startswith('.') or child.name.lower() == 'readme.md':
+            continue
+        if child.is_dir() or child.suffix.lower() in KINDS[kind].suffixes:
+            try:
+                _validate_template(kind, child)
+                found.append(child)
+            except LibraryError:
+                continue
+    return found
 
 
 def validate_tool_folder(folder) -> str:
@@ -226,6 +288,11 @@ def _place(kind: str, source: Path, name: str, on_conflict: str) -> Path:
         shutil.copytree(source, target, ignore=shutil.ignore_patterns('__pycache__', '*.pyc', '.git'))
     else:
         shutil.copy2(source, target)
+    if kind == 'latex_templates' and target.is_dir() and not (target / TEMPLATE_MARKER).exists():
+        meta = _validate_template(kind, target)
+        (target / TEMPLATE_MARKER).write_text(json.dumps(
+            {'name': target.name.replace('_', ' '), 'description': 'Imported LaTeX project',
+             'main': meta.get('main', 'main.tex'), 'category': 'Imported'}, indent=2) + '\n', encoding='utf-8')
     if kind != 'scripts':
         paths.mark_factory_item_removed(f'{KINDS[kind].folder}/{target.name}', False)
     return target
@@ -237,6 +304,9 @@ def detect_kind(source) -> str | None:
     if source.is_dir():
         if _is_tool_folder(source) or any(_is_tool_folder(p) for p in source.iterdir() if p.is_dir()):
             return 'scripts'
+        for kind in TEMPLATE_KINDS:
+            if _template_candidates(kind, source):
+                return kind
         return None
     if source.suffix.lower() == '.zip':
         try:
@@ -245,7 +315,9 @@ def detect_kind(source) -> str | None:
             return None
     if source.suffix.lower() == '.py' or source.name == 'module.json':
         return 'scripts'
-    for kind in ('profiles', 'exports', 'themes', 'plots', 'shortcuts', 'colormaps'):
+    if source.suffix.lower() == '.tex':
+        return 'latex_templates'
+    for kind in ('slide_templates', 'profiles', 'exports', 'themes', 'plots', 'shortcuts', 'colormaps'):
         try:
             validate_file(kind, source)
             return kind
@@ -264,8 +336,24 @@ def import_path(kind: str, source, on_conflict: str = 'error') -> list[Path]:
     if not source.exists():
         raise LibraryError(f'Not found: {source}')
     if source.is_file() and source.suffix.lower() == '.zip':
+        if kind == 'latex_templates':
+            try:
+                read_pack_manifest(source)
+            except LibraryError:
+                return _import_latex_archive(source, on_conflict)   # an Overleaf / LaTeX source .zip
         return import_pack(source, kind, on_conflict)
     info = KINDS[kind]
+    if kind in TEMPLATE_KINDS:
+        if source.is_dir():
+            chosen = _template_candidates(kind, source)
+            if not chosen:
+                raise LibraryError('No template found: a LaTeX template has a .tex file with \\documentclass; '
+                                   'a presentation template is a .json file (see the guide of this folder)')
+        else:
+            _validate_template(kind, source)
+            chosen = [source]
+        _check_conflicts(kind, [c.name for c in chosen], on_conflict)
+        return [_place(kind, c, c.name, on_conflict) for c in chosen]
     if kind == 'scripts':
         if source.is_file() and source.name == 'module.json':
             source = source.parent
@@ -296,6 +384,22 @@ def import_path(kind: str, source, on_conflict: str = 'error') -> list[Path]:
         raise LibraryError('Not imported — ' + '; '.join(problems))
     _check_conflicts(kind, [f.name for f in files], on_conflict)
     return [_place(kind, file, file.name, on_conflict) for file in files]
+
+
+def _import_latex_archive(archive: Path, on_conflict: str) -> list[Path]:
+    import tempfile
+    from spm_studio.documents import latex_project
+    with tempfile.TemporaryDirectory() as tmp:
+        try:
+            project = latex_project.import_zip(archive, tmp, archive.stem)
+        except latex_project.ProjectError as exc:
+            raise LibraryError(str(exc)) from exc
+        name = archive.stem.replace(' ', '_')
+        staged = Path(tmp) / name
+        if project != staged:
+            project.rename(staged)
+        _check_conflicts('latex_templates', [name], on_conflict)
+        return [_place('latex_templates', staged, name, on_conflict)]
 
 
 def _check_conflicts(kind, names, on_conflict):
@@ -427,7 +531,13 @@ def remove_item(kind: str, name: str) -> Path:
 def editable_file(kind: str, name: str) -> Path:
     """The text file shown by Edit… (``module.json`` for a tool folder)."""
     target = kind_dir(kind) / _safe_name(name)
-    if target.is_dir():
+    if target.is_dir() and kind in TEMPLATE_KINDS:
+        if (target / TEMPLATE_MARKER).is_file():
+            target = target / TEMPLATE_MARKER
+        else:
+            meta = _validate_template(kind, target)
+            target = target / meta.get('main', 'main.tex')
+    elif target.is_dir():
         target = target / 'module.json'
     if not target.is_file():
         raise LibraryError(f'Nothing to edit in {name}')
@@ -468,6 +578,17 @@ def duplicate_item(kind: str, name: str, new_name: str) -> Path:
     target = kind_dir(kind) / new_name
     if target.exists():
         raise ConflictError([new_name])
+    if source.is_dir() and kind in TEMPLATE_KINDS:
+        shutil.copytree(source, target, ignore=shutil.ignore_patterns('__pycache__', '*.pyc'))
+        marker = target / TEMPLATE_MARKER
+        if marker.is_file():
+            try:
+                data = json.loads(marker.read_text(encoding='utf-8'))
+                data['name'] = new_name.replace('_', ' ')
+                marker.write_text(json.dumps(data, indent=2, ensure_ascii=False) + '\n', encoding='utf-8')
+            except (OSError, ValueError):
+                pass
+        return target
     if source.is_dir():
         shutil.copytree(source, target, ignore=shutil.ignore_patterns('__pycache__', '*.pyc'))
         manifest = target / 'module.json'

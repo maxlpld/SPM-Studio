@@ -6,6 +6,7 @@ Pages
 * **Library** — import / export / edit / remove scripts, profiles, export profiles,
   themes, colormaps, plot styles and shortcut files (``core.library``).
 * **Literature** — Consensus and Zotero for the assistant (``ai.literature``).
+* **Documents** — v0.0.8: LaTeX editor, presentation editor, Overleaf (``documents``).
 * **About** — version, author, project page.
 
 Everything that used to live in the menu bar and had no other place is here.
@@ -26,7 +27,7 @@ from spm_studio.shared.dialogs import MessageDialog, TextInputDialog
 from spm_studio.shared.ui_strings import ui_label
 
 PAGES = (('general', 'General', 'gear'), ('library', 'Library', 'folder'),
-         ('literature', 'Literature', 'book'), ('about', 'About', 'info'))
+         ('literature', 'Literature', 'book'), ('documents', 'Documents', 'latex'), ('about', 'About', 'info'))
 
 
 def open_url(url: str):
@@ -209,7 +210,8 @@ class SettingsDialog(QDialog):
         root.addWidget(self.nav)
         root.addWidget(self.stack, 1)
         builders = {'general': self._general_page, 'library': self._library_page,
-                    'literature': self._literature_page, 'about': self._about_page}
+                    'literature': self._literature_page, 'documents': self._documents_page,
+                    'about': self._about_page}
         self._page_keys = []
         for key, label, icon_name in PAGES:
             item = QListWidgetItem(label)
@@ -269,6 +271,11 @@ class SettingsDialog(QDialog):
             self.window_._log(text, important=important)
         except Exception:
             pass
+
+    # ------------------------------------------------------------------ Documents
+    def _documents_page(self):
+        from spm_studio.documents.ui.settings_page import build_page
+        return build_page(self)
 
     # ------------------------------------------------------------------ General
     def _general_page(self):
@@ -399,6 +406,9 @@ class SettingsDialog(QDialog):
         self.lib_import_folder = add('Import folder…', 'folder', self._library_import_folder,
                                      'A folder of files of this kind (for scripts: one tool folder, or a folder of tools)')
         self.lib_gwyddion = add('Import Gwyddion gradients…', None, self._library_gwyddion)
+        self.lib_new_template = add('New template…', 'plus', self._library_new_template,
+                                    'Start a new template (then Edit…, or build it in the editor and use '
+                                    '“Save as template”)')
         self.lib_export = add('Export…', 'export', self._library_export,
                               'Write the selected items into one .zip to send to someone')
         column.addSpacing(8)
@@ -443,6 +453,7 @@ class SettingsDialog(QDialog):
             self.items.addItem(item)
         self.lib_gwyddion.setVisible(kind == 'colormaps')
         self.lib_readme.setVisible(kind == 'scripts')
+        self.lib_new_template.setVisible(kind in library.TEMPLATE_KINDS)
         self.lib_import_folder.setText('Import tool folder…' if kind == 'scripts' else 'Import folder…')
         self.lib_guide.setEnabled(library.guide(kind) is not None)
         self._library_buttons()
@@ -524,6 +535,37 @@ class SettingsDialog(QDialog):
                                                     str(Path.home()))
         if selected:
             self._import(selected)
+
+    def _library_new_template(self):
+        kind = self._kind()
+        name, ok = TextInputDialog.getText(self, 'New template', 'Name of the template:')
+        if not ok or not name.strip():
+            return
+        import json
+        from spm_studio.documents import latex_project, templates, deck as deck_model
+        try:
+            if kind == 'latex_templates':
+                target = latex_project.unique_folder(library.kind_dir(kind), name.strip().replace(' ', '_'))
+                target.mkdir(parents=True)
+                (target / 'main.tex').write_text(latex_project.MINIMAL_DOCUMENT, encoding='utf-8')
+                (target / 'figures').mkdir()
+                (target / 'template.json').write_text(json.dumps(
+                    {'name': name.strip(), 'description': 'My template', 'main': 'main.tex',
+                     'category': 'My templates'}, indent=2) + '\n', encoding='utf-8')
+                created = target.name
+            else:
+                target = templates.save_slides_template(
+                    {'size': '16:9', 'theme': dict(deck_model.DEFAULT_THEME), 'slides': []}, name.strip(),
+                    'My template', include_slides=False)
+                created = target.name
+        except (OSError, ValueError) as exc:
+            MessageDialog.warning(self, 'New template', str(exc))
+            return
+        self._library_refresh()
+        for i in range(self.items.count()):
+            if self.items.item(i).data(Qt.ItemDataRole.UserRole) == created:
+                self.items.setCurrentRow(i)
+        self._library_changed(f'Created template {created}. Edit it, or read “How to build one”.')
 
     def _library_gwyddion(self):
         self.window_.import_gwyddion_gradients()

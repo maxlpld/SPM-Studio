@@ -1,0 +1,46 @@
+\documentclass[11pt,a4paper]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage[margin=2.5cm]{geometry}
+\usepackage{amsmath,amssymb}
+\usepackage{graphicx}
+\usepackage{siunitx}
+\usepackage{booktabs}
+\usepackage{xcolor}
+\usepackage[colorlinks=true,linkcolor=teal,citecolor=teal,urlcolor=teal]{hyperref}
+
+\graphicspath{{figures/}}
+
+\title{ {{title}} }
+\author{ {{author}} }
+\date{ {{date}} }
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+A short summary of the work.
+\end{abstract}
+
+\section{Introduction}
+Introduce the subject and cite prior work~\cite{binnig1982}.
+
+\section{Methods}
+Scans were acquired at \SI{4.3}{\kelvin} with a bias of \SI{-1.2}{\volt}.
+Export a scan from SPM Studio with \emph{Export › Insert in LaTeX document}: the figure is copied
+into \texttt{figures/} and included here automatically.
+
+\section{Results}
+\begin{equation}
+  I(V) \propto \int_0^{eV} \rho_s(E)\,\rho_t(E - eV)\,\mathrm{d}E
+  \label{eq:tunnel}
+\end{equation}
+
+\section{Conclusion}
+Conclude.
+
+\bibliographystyle{unsrt}
+\bibliography{references}
+
+\end{document}

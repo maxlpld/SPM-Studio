@@ -7,6 +7,44 @@ so write it for users. Add new versions **at the top**.
 The internal builds that preceded the GitHub project (0.7.0 – 0.8.3) are documented in
 [`docs/DEVELOPMENT_HISTORY.md`](docs/DEVELOPMENT_HISTORY.md).
 
+## 0.0.8 — 2026-11-17
+
+### LaTeX editor (optional)
+
+- **Switch it on in *Settings › Documents*:** a **LaTeX** button appears in the header. It opens a start screen — *new project from a template*, *open*, *import an Overleaf “Download source” .zip*, *import from Overleaf*, *recent* — and then the project in its own window, in the same design as the scan window.
+- **Like Overleaf:** project files and outline on the left; the source in the middle (syntax colours, line numbers, completion of commands, environments, `\ref`, `\cite` and file names, automatic brackets and `\end{…}`, find/replace, comment lines); the **PDF** on the right, kept at the same page when it is rebuilt.
+- **Recompile** (Ctrl+Enter) and an **Auto-compile** button that rebuilds the PDF while you type. Choose pdfLaTeX, XeLaTeX, LuaLaTeX, latexmk (BibTeX/Biber automatically) or Tectonic; build files stay in a hidden `.spm_build` folder.
+- **Logs:** errors and warnings with their file and line (click to jump, red marks in the margin), the raw log, and *Ask the assistant to fix*.
+- A formatting bar for sections, bold/italic, math, equations, a symbol palette (Greek, operators, arrows, `siunitx` units), lists, figures, tables, references and citations.
+- Files are saved while you type (can be switched off). *Save as…* copies the project elsewhere; *Download source (.zip)* and *Download PDF*; word count.
+- Uses the TeX installation of your computer (TeX Live, MacTeX, MiKTeX); *Settings › Documents* shows what was found and how to install it.
+
+### Presentation editor (optional)
+
+- **Switch it on in *Settings › Documents*:** a **Slides** button appears in the header (new from a template, open, import a .zip or a **PowerPoint .pptx**, recent).
+- **Like PowerPoint:** slide thumbnails (drag to reorder, hide), layouts, text boxes with fonts, sizes, colours, bold/italic/underline, alignment and bullets; **pictures, animated GIFs and videos**; shapes and arrows; snapping guides, rotation, opacity, borders; speaker notes; undo/redo for everything.
+- **LaTeX boxes:** *Insert › LaTeX* adds a text box in which you write LaTeX (text with `$…$` math or `\[ … \]`); it is compiled and displayed automatically while you type, at any size and colour.
+- **Themes:** colours, fonts, title band, footer, slide numbers, background picture, 16:9 / 4:3 / 16:10.
+- **Slide show** (F5 / Shift+F5) in full screen with fade and push transitions, videos that play on click or automatically.
+- **Export** to PDF, **PowerPoint (.pptx)** (text stays editable, LaTeX boxes become sharp pictures, GIFs stay animated, videos are embedded), PNG images of every slide, or a `.zip` to share.
+
+### From the scan window to your documents — and to Overleaf
+
+- **Export… now asks where the figure goes:** save in a folder (as before), **insert in a LaTeX document** (copied into `figures/`, inserted at the cursor with `\includegraphics`, caption and label; an SVG is converted to a vector PDF), **add to a presentation** (new slide with a title, or the current slide), and/or **upload to Overleaf** (project and folder of your choice) — any combination at once. The choice is remembered.
+- Analysis results and graphs of the Logs panel: right-click › *Send to LaTeX / presentation / Overleaf…*. Both editors have a **From SPM Studio** button.
+- **Overleaf** through its Git integration: paste a Git token (kept in the system keyring) and your project addresses in *Settings › Documents*; then upload figures, import whole projects into the LaTeX editor, and push/pull your changes from the editor.
+
+### Templates
+
+- New Library sections **LaTeX templates** (Article, Scientific paper, Beamer talk, Report/thesis, Lab notes) and **Presentation templates** (Clean light, Graphite dark, Scientific talk with starter slides, Classic 4:3): import (a `.tex`, a LaTeX folder, an Overleaf .zip, a template .json), *New template…*, edit, duplicate, remove and export them like profiles. Each folder has a `README.md` saying how to build one.
+- *Save as template…* in both editors stores the open project (figures / slides optional).
+
+### Assistant
+
+- The assistant now also works **in the LaTeX and presentation editors**, with every assistant and in plain chat: it reads the open document (file, cursor, compile errors; slides and their items), writes and fixes LaTeX, compiles, creates projects and presentations, adds slides, text, LaTeX boxes and notes. Every change can be undone in the editor. The editors' **Assistant** button opens it next to the window; the source's right-click menu has *Ask the assistant about this*.
+
+SPM processing, analysis scripts, existing scans, results, profiles and settings are unchanged. The editors are off until you switch them on. PowerPoint export/import uses the new `python-pptx` dependency, installed by the update.
+
 ## 0.0.7 — 2026-11-17
 
 ### Literature sources that connect from Settings

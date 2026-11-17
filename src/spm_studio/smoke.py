@@ -163,10 +163,39 @@ def run(win) -> int:
             image = _render_svg(svg, 200)
             assert image.width() == 200
 
+    def documents():
+        # v0.0.8: LaTeX editor, presentation editor, templates and the figure hand-over.
+        from spm_studio.core import paths
+        from spm_studio.documents import latex_project, templates, deck
+        assert templates.find('latex', 'Article') is not None and templates.find('slides', 'Clean_Light') is not None
+        for folder in ('latex_templates', 'presentation_templates'):
+            assert (paths.customization_dir() / folder / 'README.md').is_file(), folder
+        assert not win.latex_button.isVisible() or win.latex_button.text() == 'LaTeX'
+        with tempfile.TemporaryDirectory() as tmp:
+            svg = Path(tmp) / 'figure.svg'
+            svg.write_text('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 10"><rect width="20" '
+                           'height="10" fill="red"/></svg>')
+            project = latex_project.create_project(tmp, 'Smoke paper', templates.find('latex', 'Article').path)
+            editor = win.documents.open_latex(project)
+            editor.auto_button.setChecked(False)
+            app.processEvents()
+            rel = editor.insert_figure([svg], 'Smoke')
+            assert (project / rel).is_file() and rel in editor.editor.toPlainText()
+            editor.close(); app.processEvents()
+            file = deck.create_project(tmp, 'Smoke talk', template=templates.load_slides_template('Scientific_Talk'))
+            slides = win.documents.open_slides(file)
+            app.processEvents()
+            slides.add_figure([svg], new_slide=True, title='Smoke')
+            slides.add_latex(r'$x^2$', x=48, y=300, w=200, h=40)
+            slides.add_text('Smoke', x=48, y=360, w=200, h=40)
+            app.processEvents()
+            assert slides.save() and len(deck.load(file)['slides']) == 6
+            slides.close(); app.processEvents()
+
     for name, fn in (('themes', themes), ('menus', menus), ('settings window', settings),
                      ('assistant panel', assistant),
                      ('results options', options), ('live tool detection', live_tools), ('export-panel figures', script_figures),
-                     ('svg result preview', results_view)):
+                     ('svg result preview', results_view), ('LaTeX and presentation editors', documents)):
         _check(name, fn, failures)
     print('SMOKE ' + ('FAILED: ' + ', '.join(failures) if failures else 'PASSED'), flush=True)
     return 1 if failures else 0
