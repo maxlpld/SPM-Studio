@@ -290,7 +290,7 @@ class DocumentHub(QObject):
         was_open = dock.is_open()
         placed = bool(self.main_window.settings.value('ai_window_geometry')) if self.main_window else False
         if source is not None and not dock.detached():
-            dock.detach(show=False)
+            dock.undock_panel(show=False)
         window = dock.panel_window()
         if source is not None and dock.detached() and not was_open and not placed:
             geo = source.frameGeometry()

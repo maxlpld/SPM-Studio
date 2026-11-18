@@ -67,10 +67,10 @@ def run(win) -> int:
     def assistant():
         win.ai_dock.show(); app.processEvents()
         # v0.0.8.1: detached = a window of its own, without parent (any screen / desktop)
-        window = win.ai_dock.detach(); app.processEvents()
+        window = win.ai_dock.undock_panel(); app.processEvents()
         assert window.parent() is None and window.isVisible() and win.ai_dock.is_open()
         assert win.ai_dock.input.window() is window
-        win.ai_dock.attach(); app.processEvents()
+        win.ai_dock.dock_panel(); app.processEvents()
         assert win.ai_dock.isVisible() and not window.isVisible() and win.ai_dock.input.window() is win
         win.ai_dock.history = [{'role': 'user', 'content': 'Hello'},
                                {'role': 'assistant', 'content': '**Bold** and `code`\n\n```python\nprint(1)\n```'}]

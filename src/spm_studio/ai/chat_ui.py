@@ -113,8 +113,8 @@ class AssistantWindow(QWidget):
 class AssistantDock(QDockWidget):
     """Native AI assistant: chat + supervised development tasks (v0.8 layout).
 
-    v0.0.8.1: *Detach* moves the panel into :class:`AssistantWindow`, a window of its own;
-    *Dock* puts it back. Use :meth:`is_open`, :meth:`open_panel`, :meth:`close_panel` and
+    v0.0.8.1: *Detach* (:meth:`undock_panel`) moves the panel into :class:`AssistantWindow`, a window of its own;
+    :meth:`dock_panel` puts it back. Use :meth:`is_open`, :meth:`open_panel`, :meth:`close_panel` and
     :meth:`panel_window` rather than show()/hide() so both places are handled."""
     shownChanged=Signal(bool)
 
@@ -164,7 +164,7 @@ class AssistantDock(QDockWidget):
         self.float_button=tool_button('','float','Open the assistant in its own window (move it to any screen '
                                       'or desktop) / dock it back',icon_only=True)
         self.float_button.setObjectName('AiAssistantDetachV0081')
-        self.float_button.clicked.connect(lambda:self.attach() if self._detached else self.detach())
+        self.float_button.clicked.connect(lambda:self.dock_panel() if self._detached else self.undock_panel())
         top.addWidget(self.float_button)
         settings=tool_button('','settings','Assistant settings…',icon_only=True);settings.clicked.connect(self.setup)
         top.addWidget(settings)
@@ -302,7 +302,7 @@ class AssistantDock(QDockWidget):
             QTimer.singleShot(120,self._float_to_window);return
         geometry=self.geometry()
         self.setFloating(False)
-        self.detach(geometry=geometry)
+        self.undock_panel(geometry=geometry)
 
     # ---- v0.0.8.1: docked in the main window, or in a window of its own
     def detached(self):return self._detached
@@ -314,7 +314,7 @@ class AssistantDock(QDockWidget):
     def is_open(self):
         return self._window.isVisible() if self._detached and self._window is not None else self.isVisible()
 
-    def detach(self,geometry=None,show=True):
+    def undock_panel(self,geometry=None,show=True):
         if self._window is None:self._window=AssistantWindow(self)
         if not self._detached:
             self.setWidget(self._placeholder)
@@ -333,7 +333,7 @@ class AssistantDock(QDockWidget):
         self.shownChanged.emit(self.is_open())
         return self._window
 
-    def attach(self):
+    def dock_panel(self):
         if not self._detached:return
         self._window.layout().removeWidget(self.body)
         self.setWidget(self.body)
@@ -373,7 +373,7 @@ class AssistantDock(QDockWidget):
 
     def _restore_float(self):
         if str(self.host.settings.value('ai_dock_floating','false')).lower()=='true':
-            QTimer.singleShot(0,lambda:self.detach(show=False))
+            QTimer.singleShot(0,lambda:self.undock_panel(show=False))
 
     def save_state(self):
         if self._detached and self._window is not None:

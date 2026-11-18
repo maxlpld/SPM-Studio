@@ -743,7 +743,7 @@ def test_assistant_gets_a_window_of_its_own(window, qt, home, tmp_path):
     window.toggle_ai_assistant()                        # comes back where the user left it
     qt.processEvents()
     assert shown.isVisible() and dock.detached()
-    dock.attach()
+    dock.dock_panel()
     qt.processEvents()
     assert not dock.detached() and dock.isVisible() and dock.input.window() is window
     window.toggle_ai_assistant()
