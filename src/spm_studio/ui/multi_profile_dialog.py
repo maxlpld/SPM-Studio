@@ -139,9 +139,22 @@ class MultiProfileDialog(QDialog):
         rois = [r for r in list(v.extra_rois) + ([v.roi] if v.roi is not None else []) if r.kind == 'line']
         known = {tuple(map(tuple, l.points_px)) for l in self.lines}
         shape = tuple(v.geometry.shape)
+        current = {tuple(tuple(map(float, p)) for p in r.points_px) for r in rois}
+        # A line that was extended (Shift+click) or whose vertex was dragged keeps its
+        # name, colour and graph: the stale entry is updated instead of adding a new line.
+        stale = [l for l in self.lines if tuple(map(tuple, l.points_px)) not in current
+                 and tuple(l.reference_shape) == shape]
         for roi in rois:
             pts = tuple(tuple(map(float, p)) for p in roi.points_px)
             if pts in known:
+                continue
+            if stale:
+                line = stale.pop(0)
+                old = tuple(map(tuple, line.points_px))
+                style = v.line_styles.pop(old, None)
+                line.points_px = pts
+                if style is not None:
+                    v.line_styles[pts] = style
                 continue
             i = len(self.lines)
             self.lines.append(LineSpec(pts, shape, f'L{i + 1}', line_color(i), graph=1))
@@ -172,8 +185,7 @@ class MultiProfileDialog(QDialog):
             ins = QCheckBox(); ins.setChecked(line.inset)
             ins.toggled.connect(lambda v, i=r: self._set(i, 'inset', v))
             self.table.setCellWidget(r, 5, ins)
-            (c0, r0), (c1, r1) = line.points_px
-            coord = QTableWidgetItem(f'({c0:.0f}, {r0:.0f}) → ({c1:.0f}, {r1:.0f})')
+            coord = QTableWidgetItem(' → '.join(f'({c:.0f}, {r:.0f})' for c, r in line.points_px))
             coord.setFlags(coord.flags() & ~Qt.ItemFlag.ItemIsEditable)
             self.table.setItem(r, 6, coord)
         self._building = False

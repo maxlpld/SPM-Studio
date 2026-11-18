@@ -273,8 +273,9 @@ def _draw_overlays(painter, rect, geometry, overlays):
             pts = o.get('points_px',[])
             points = [QPointF(rect.left()+(col+.5)/geometry.shape[1]*rect.width(),
                               rect.top()+(row+.5)/geometry.shape[0]*rect.height()) for col,row in pts]
-            if t == 'line' and len(points) == 2:
-                painter.drawLine(*points)
+            if t == 'line' and len(points) >= 2:
+                for a, b in zip(points, points[1:]):
+                    painter.drawLine(a, b)
             elif t == 'rectangle' and len(points) == 2:
                 painter.drawRect(QRectF(points[0],points[1]).normalized())
             elif t == 'point' and points:

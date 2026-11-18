@@ -355,7 +355,7 @@ class MainWindow(QMainWindow):
         self.compare_button.clicked.connect(self.open_research_comparison)
         self.export_button=QPushButton('Export…')
         self.export_button.clicked.connect(self.export_current)
-        self.bias_figure_button=QPushButton('Bias figure…')
+        self.bias_figure_button=QPushButton('Spectroscopy figure…')
         self.bias_figure_button.setObjectName('BiasFigureComposerV18')
         self.bias_figure_button.setToolTip('Build publication-ready multi-channel images and bias spectroscopy figures with live PDF preview')
         self.bias_figure_button.clicked.connect(self.open_bias_figure_composer)
@@ -844,7 +844,7 @@ class MainWindow(QMainWindow):
         tools.addSeparator()
         tools.addAction('Line profiles…',self.open_line_profiles)
         tools.addAction('Place molecules by hand…',self.open_manual_molecules)
-        self._action(tools,'Bias figure composer…',None,self.open_bias_figure_composer)
+        self._action(tools,'Spectroscopy figure composer…',None,self.open_bias_figure_composer)
         self._action(tools,'Compare saved runs…',None,self.open_research_comparison)
         tools.addSeparator()
         self._action(tools,'Refresh modules','tool.refresh',self.refresh_modules)
@@ -1098,7 +1098,8 @@ class MainWindow(QMainWindow):
     def _load_profiles(self):
         presets={'STM':dict(DEFAULT_PROFILE),
                  'KPFM':{**DEFAULT_PROFILE,'name':'KPFM','channel_contains':'Bias','visible_channels':['Z','Bias']},
-                 'Multipass':{**DEFAULT_PROFILE,'name':'Multipass','channel_contains':'OC','visible_channels':['Z','OC']}}
+                 'Multipass':{**DEFAULT_PROFILE,'name':'Multipass','channel_contains':'Z','multipass':True,
+                              'visible_channels':['Z','Current','OC M1 Freq']}}
         # v0.0.5: a built-in profile removed in Settings › Library stays out of the list.
         removed=paths.removed_factory_items()
         presets={k:v for k,v in presets.items() if f'profiles/{k}.json' not in removed}
@@ -2027,6 +2028,10 @@ class MainWindow(QMainWindow):
     def _on_roi_edited(self):
         selected=self.module_panel.selection_list.currentRow()
         self._sync_selection_list(selected)
+        dlg=getattr(self,'_line_profile_dialog',None)
+        if dlg is not None and dlg.isVisible():
+            try:dlg.import_from_scan()
+            except Exception:pass
         self._queue_live_preview()
         self._interactive_timer.start()
         self._indicate_staleness()
@@ -2203,11 +2208,9 @@ class MainWindow(QMainWindow):
                 active_channel=self.inspector.channel.currentText()
                 if active_channel not in self.scan.channels:active_channel=self._current_channel
                 if self.scan.channels[active_channel].geometry.size_m:
+                    from ..core.analysis_utils import profile_along,geometry_spacing
                     geom=self.scan.channels[active_channel].geometry
-                    p0,p1=roi.points_px
-                    d=np.hypot((p1[0]-p0[0])*geom.size_m[0]/geom.shape[1],
-                               (p1[1]-p0[1])*geom.size_m[1]/geom.shape[0])
-                    xx=np.linspace(0,d*1e9,len(yy))
+                    xx,yy=profile_along(self.viewer.data,roi.points_px,spacing=geometry_spacing(geom,1e9))
                 lines.append((f'Line {i+1}',xx,yy))
             self.module_panel.preview.profiles(lines)
             self.viewer.mask_overlay=None
@@ -2787,7 +2790,7 @@ class MainWindow(QMainWindow):
                     for j,axis in enumerate(('x','y'))})
             elif tool=='path_level':
                 if roi is None or roi.kind!='line':raise ValueError('Select a line')
-                (x0,y0),(x1,y1)=roi.points_px
+                (x0,y0),(x1,y1)=roi.points_px[0],roi.points_px[-1]
                 self._interactive_append_step('path_plane',dict(x0=x0,y0=y0,x1=x1,y1=y1))
             elif tool=='spot_remove':
                 point=point_pixel(roi,self.viewer.data.shape)
@@ -2931,11 +2934,24 @@ class MainWindow(QMainWindow):
         self._syncing=False
         requested=profile.get('visible_channels',[])
         resolved=[]
+        multipass=bool(profile.get('multipass'))
+        from ..core import scan_parameters as scan_params
+        passes=scan_params.passes_in_scan(self.scan) if multipass else []
         for requested_name in requested:
             exact=next((n for n in self.scan.channels if n.lower()==requested_name.lower()),None)
+            if multipass and passes:
+                # Every pass of the requested channel ([P1] Z, [P2] Z …), in pass order.
+                matches=[n for n in self.scan.channels
+                         if self._match_profile_channel(requested_name,scan_params.channel_base(n))]
+                matches.sort(key=lambda n:(scan_params.pass_of_channel(n) or 0))
+                for match in matches:
+                    if match not in resolved:resolved.append(match)
+                continue
             match=exact or next((n for n in self.scan.channels
                                  if self._match_profile_channel(requested_name,n)),None)
             if match and match not in resolved:resolved.append(match)
+        if multipass:
+            self._apply_multipass_titles(passes)
         current=self.inspector.channel.currentText()
         if current not in resolved:resolved.insert(0,current)
         # Applying a profile never reloads the original raster. Ensure every
@@ -2953,6 +2969,29 @@ class MainWindow(QMainWindow):
             except Exception as exc:self._log(f'Auto-crop skipped: {exc}')
         self._schedule_process()
         self._sync_multiview()
+
+    def _apply_multipass_titles(self,passes):
+        """Multipass profile: titles say which pass a channel belongs to, and the log lists
+        what was changed in each pass (bias, setpoint, Δz … read from the header)."""
+        from ..core import scan_parameters as scan_params
+        for channel in self.scan.channels:
+            n=scan_params.pass_of_channel(channel)
+            if n is None:continue
+            base=self._channel_titles.get(channel)
+            if base is None:
+                from ..core.plot_settings import default_channel_title
+                base=default_channel_title(scan_params.channel_base(channel))
+            if not str(base).startswith(f'P{n} · '):
+                self._channel_titles[channel]=f'P{n} · {base}'
+        params=scan_params.parameters(self.scan)
+        if not passes:
+            self._log('Multipass profile: this scan has no [P1]/[P2] channels or Multipass configuration.')
+            return
+        for n in passes:
+            items=[p for p in params if p.group==f'P{n}' and p.key.split('.',1)[1] in
+                   ('bias','setpoint','z_offset','playback','time_per_line')]
+            text=', '.join(p.line() for p in items) or 'no configuration in the header'
+            self._log(f'Multipass P{n}: {text}')
 
     def apply_profile_to_all_files(self):
         """Assign selected profile across the current file list, without loading files.
@@ -3012,7 +3051,7 @@ class MainWindow(QMainWindow):
         except Exception as exc:
             import traceback
             self._log('Bias composer could not start:\n'+traceback.format_exc(),important=True)
-            QMessageBox.warning(self,'Bias figure composer unavailable',str(exc))
+            QMessageBox.warning(self,'Spectroscopy figure composer unavailable',str(exc))
 
     def save_profile(self):
         """Persist exactly the visible channels with their separate processing and display.
@@ -3191,7 +3230,8 @@ class MainWindow(QMainWindow):
                 overlays=list(self.viewer.overlays)
                 rois=list(self.viewer.extra_rois)+([self.viewer.roi] if self.viewer.roi is not None else [])
                 for roi in rois:
-                    if roi.kind in ('line','rectangle') and len(roi.points_px)==2:
+                    if (roi.kind=='rectangle' and len(roi.points_px)==2) or \
+                       (roi.kind=='line' and len(roi.points_px)>=2):
                         line_style=self.viewer.line_styles.get(tuple(map(tuple,roi.points_px)))
                         color=(line_style[0] if roi.kind=='line' and line_style else '#ffda55')
                         width=(line_style[2] if roi.kind=='line' and line_style and len(line_style)>2 else 2)
@@ -3362,9 +3402,10 @@ class MainWindow(QMainWindow):
             self.browser.tools.addItem(item)
         # Figure composer is a full interactive workspace, not a batch analysis.
         # Expose it beside ordinary scripts in the left Tools browser as requested.
-        composer_item=QListWidgetItem('Bias spectroscopy figure composer')
+        composer_item=QListWidgetItem('Spectroscopy figure composer (Δf(V), dI/dV, I(V), I(z) …)')
         composer_item.setData(Qt.ItemDataRole.UserRole,'__bias_figure_composer__')
-        composer_item.setToolTip('Open interactive multi-channel bias figure designer · PDF/SVG/PNG · no scan needed')
+        composer_item.setToolTip('Scan images + spectra of any method (choose the measurement type at the top) · '
+                                 'measurement positions on the scan · PDF/SVG/PNG · no scan needed')
         self.browser.tools.addItem(composer_item)
         for msg in issues:self._log('Module discovery: '+msg)
         if quiet:return

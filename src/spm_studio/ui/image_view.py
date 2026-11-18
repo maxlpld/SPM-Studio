@@ -49,6 +49,10 @@ class ImageView(QWidget):
         self.molecule_overlay = None   # v32: manual molecules {'art','items','selected','opacity'}
         self._result = False
         self.display_zero = False
+        # v0.0.10 polylines: Shift+click after a line continues it with a new segment.
+        self._last_line_pts = None   # vertices of the line that Shift+click extends
+        self._poly_cursor = None     # screen position of the dashed next-segment preview
+        self._poly_click = False
 
     def set_scan(self,image:QImage,data,geometry:Geometry,style:ImageStyle,bounds,channel,unit,
                  *,preserve_view=False,display_zero=False):
@@ -121,7 +125,81 @@ class ImageView(QWidget):
         self.drag_start = None
         self.drag_current = None
         self._edit = None
+        self._poly_cursor = None
         self.update()
+
+    # ------------------------------------------------------------ polylines (v0.0.10)
+    def _extendable_line(self):
+        """(origin, index, roi) of the line Shift+click continues, or ``None``."""
+        if self.tool!='line' or self.geometry is None:
+            return None
+        target=self._last_line_pts
+        candidates=([('main',-1,self.roi)] if self.roi is not None else [])+ \
+                   [('extra',i,r) for i,r in reversed(list(enumerate(self.extra_rois)))]
+        lines=[c for c in candidates if c[2].kind=='line']
+        if target is not None:
+            for c in lines:
+                if tuple(map(tuple,c[2].points_px))==target:
+                    return c
+        return lines[0] if lines else None
+
+    def _poly_target(self,position,roi,snap=False):
+        """Screen position of the next vertex; Ctrl snaps the new segment to 15° steps."""
+        if not snap:
+            return position
+        import math
+        last=self._to_screen(roi.points_px[-1])
+        dx,dy=position.x()-last.x(),position.y()-last.y()
+        length=math.hypot(dx,dy)
+        if length<1e-9:
+            return position
+        angle=round(math.atan2(dy,dx)/math.radians(15))*math.radians(15)
+        return QPointF(last.x()+length*math.cos(angle),last.y()+length*math.sin(angle))
+
+    @staticmethod
+    def segment_angles(points):
+        """(absolute angle of the last segment, turn from the previous one) in degrees.
+
+        Absolute: 0° = to the right, counter-clockwise positive (image Y points down).
+        """
+        import math
+        if len(points)<2:
+            return None,None
+        (x0,y0),(x1,y1)=points[-2],points[-1]
+        absolute=math.degrees(math.atan2(-(y1-y0),x1-x0))
+        if len(points)<3:
+            return absolute,None
+        (xa,ya)=points[-3]
+        before=math.degrees(math.atan2(-(y0-ya),x0-xa))
+        turn=(absolute-before+180)%360-180
+        return absolute,turn
+
+    def _replace_line(self,origin,index,old,new):
+        if origin=='main':self.roi=new
+        else:self.extra_rois[index]=new
+        key_old=tuple(map(tuple,old.points_px));key_new=tuple(map(tuple,new.points_px))
+        if key_old in self.line_styles:
+            self.line_styles[key_new]=self.line_styles.pop(key_old)
+        if self._last_line_pts==key_old or self._last_line_pts is None:
+            self._last_line_pts=key_new
+
+    def extend_line(self,point,origin=None,index=None):
+        """Append a vertex ``(col,row)`` to the current line (programmatic Shift+click)."""
+        found=self._extendable_line() if origin is None else \
+              (origin,index,self.roi if origin=='main' else self.extra_rois[index])
+        if found is None:
+            return None
+        origin,index,roi=found
+        last=roi.points_px[-1]
+        if abs(point[0]-last[0])+abs(point[1]-last[1])<.5:
+            return None
+        new=ROI('line',tuple(map(tuple,roi.points_px))+(tuple(map(float,point)),))
+        self._last_line_pts=tuple(map(tuple,roi.points_px))
+        self._replace_line(origin,index,roi,new)
+        self._last_line_pts=tuple(map(tuple,new.points_px))
+        self.roiEdited.emit()
+        self.update()
+        return new
 
     def _base_rect(self):
         if self.geometry is None:
@@ -167,7 +245,8 @@ class ImageView(QWidget):
             p0=self._to_screen(roi.points_px[0])
             p1=self._to_screen(roi.points_px[1]) if len(roi.points_px)>1 else p0
             if roi.kind in ('line','point'):
-                handles=[('p0',p0)] if roi.kind=='point' else [('p0',p0),('p1',p1)]
+                handles=[('p0',p0)] if roi.kind=='point' else \
+                        [(f'p{k}',self._to_screen(pt)) for k,pt in enumerate(roi.points_px)]
             else:
                 l,r=sorted((p0.x(),p1.x()));t,b=sorted((p0.y(),p1.y()))
                 handles=[('left',QPointF(l,(t+b)/2)),('right',QPointF(r,(t+b)/2)),
@@ -190,6 +269,17 @@ class ImageView(QWidget):
             edited=ROI('point',(point,))
             if origin=='main':self.roi=edited
             else:self.extra_rois[index]=edited
+            self.roiEdited.emit()
+            self.update()
+            return
+        if roi.kind=='line':
+            vertices=[tuple(p) for p in roi.points_px]
+            k=int(handle[1:]) if handle.startswith('p') and handle[1:].isdigit() else -1
+            if 0<=k<len(vertices):
+                vertices[k]=tuple(point)
+            edited=ROI('line',tuple(vertices))
+            self._replace_line(origin,index,roi,edited)
+            self._last_line_pts=tuple(map(tuple,edited.points_px))
             self.roiEdited.emit()
             self.update()
             return
@@ -299,10 +389,10 @@ class ImageView(QWidget):
                 painter.drawEllipse(points[0],5,5)
             elif len(points)==2 and roi.kind=='rectangle':
                 painter.drawRect(QRectF(*points).normalized())
-            elif len(points)==2:
-                painter.drawLine(*points)
+            elif len(points)>=2:
+                painter.drawPolyline(points)
                 if roi.kind=='line':
-                    painter.drawText(QPointF(points[1].x()+6,points[1].y()-6),name)
+                    painter.drawText(QPointF(points[-1].x()+6,points[-1].y()-6),name)
             if roi.kind=='line' and self.tool=='line':
                 painter.setBrush(QColor('#ffda55'))
                 for point in points:painter.drawEllipse(point,4.5,4.5)
@@ -314,6 +404,22 @@ class ImageView(QWidget):
                             (r,t),(r,(t+b)/2),(r,b)):
                     painter.drawRect(QRectF(x-4,y-4,8,8))
             painter.restore()
+        if self._poly_cursor is not None and self.tool=='line' and not self._result:
+            found=self._extendable_line()
+            if found is not None:
+                roi=found[2]
+                last=self._to_screen(roi.points_px[-1])
+                painter.save()
+                painter.setPen(QPen(QColor('#71aee9'),2,Qt.PenStyle.DashLine))
+                painter.drawLine(last,self._poly_cursor)
+                nxt=self._to_pixel(self._poly_cursor,clamp=True)
+                if nxt is not None:
+                    absolute,turn=self.segment_angles(list(roi.points_px)+[nxt])
+                    text=f'{absolute:.0f}°' + (f'  (turn {turn:+.0f}°)' if turn is not None else '')
+                    painter.setPen(QColor('#71aee9'))
+                    painter.drawText(QPointF(self._poly_cursor.x()+10,self._poly_cursor.y()+16),
+                                     text+'   Shift+click: add segment · Ctrl: 15° steps')
+                painter.restore()
         if self.drag_start and self.drag_current and self.tool != 'pan':
             painter.setPen(QPen(QColor('#71aee9'),2,Qt.PenStyle.DashLine))
             if self.tool=='rectangle':
@@ -322,7 +428,23 @@ class ImageView(QWidget):
                 painter.drawLine(self.drag_start,self.drag_current)
         painter.end()
 
+    def keyReleaseEvent(self,event):
+        if event.key()==Qt.Key.Key_Shift and self._poly_cursor is not None:
+            self._poly_cursor=None
+            self.update()
+        super().keyReleaseEvent(event)
+
+    def leaveEvent(self,event):
+        if self._poly_cursor is not None:
+            self._poly_cursor=None
+            self.update()
+        super().leaveEvent(event)
+
     def keyPressEvent(self,event):
+        if event.key()==Qt.Key.Key_Shift and self.tool=='line' and self._extendable_line() is not None:
+            from PySide6.QtGui import QCursor
+            self._poly_cursor=self.mapFromGlobal(QCursor.pos()).toPointF()
+            self.update()
         if event.key() in (Qt.Key.Key_Delete, Qt.Key.Key_Backspace) and self.selected_roi_index >= 0:
             self.deleteSelectedRequested.emit()
             event.accept()
@@ -366,6 +488,19 @@ class ImageView(QWidget):
             self.activated.emit()
         if self.image is None:return
         if event.button() in (Qt.MouseButton.LeftButton,Qt.MouseButton.MiddleButton):
+            mods=event.modifiers()
+            if (event.button()==Qt.MouseButton.LeftButton and self.tool=='line'
+                    and mods & Qt.KeyboardModifier.ShiftModifier):
+                found=self._extendable_line()
+                if found is not None:
+                    target=self._poly_target(event.position(),found[2],
+                                             bool(mods & Qt.KeyboardModifier.ControlModifier))
+                    point=self._to_pixel(target,clamp=True)
+                    if point is not None:
+                        self.extend_line(point,found[0],found[1])
+                    self._poly_click=True
+                    self.drag_start=None
+                    return
             if event.button()==Qt.MouseButton.LeftButton and self.tool!='pan':
                 self._edit=self._near_handle(event.position())
                 if self._edit is not None:
@@ -385,6 +520,17 @@ class ImageView(QWidget):
             self._origin_pan=QPointF(self.pan)
 
     def mouseMoveEvent(self,event):
+        mods=event.modifiers()
+        if self.tool=='line' and self.drag_start is None and self._edit is None \
+                and mods & Qt.KeyboardModifier.ShiftModifier:
+            found=self._extendable_line()
+            self._poly_cursor=(self._poly_target(event.position(),found[2],
+                                                 bool(mods & Qt.KeyboardModifier.ControlModifier))
+                               if found is not None else None)
+            self.update()
+        elif self._poly_cursor is not None:
+            self._poly_cursor=None
+            self.update()
         if self._edit is not None:
             self._edit_to(event.position())
             return
@@ -418,6 +564,9 @@ class ImageView(QWidget):
             self.update()
 
     def mouseReleaseEvent(self,event):
+        if self._poly_click:
+            self._poly_click=False
+            return
         if self._edit is not None:
             self._edit_to(event.position())
             self._edit=None
@@ -434,6 +583,8 @@ class ImageView(QWidget):
             p2=self._to_pixel(event.position(),clamp=True)
             if p1 and p2 and abs(p1[0]-p2[0])+abs(p1[1]-p2[1])>2:
                 self.roi=ROI('rectangle' if self.tool=='rectangle' else 'line',(p1,p2))
+                if self.roi.kind=='line':
+                    self._last_line_pts=tuple(map(tuple,self.roi.points_px))
                 self.roiChanged.emit(self.roi)
         self.drag_start=self.drag_current=None
         self.update()

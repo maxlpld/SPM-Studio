@@ -159,6 +159,53 @@ def _draw_scale_bar(painter, rect, physical_width_m, font_size, color='#111111',
                               font_pt=font_size,position=position)
 
 
+PARAMETER_CORNERS=('top_left','top_right','bottom_left','bottom_right')
+
+
+def _draw_parameter_box(painter, rect, lines, corner='top_left', font_size=10., color='#ffffff',
+                        box=True, avoid_corner=None):
+    """v0.0.10: acquisition parameters (bias, setpoint, Δz of each Multipass pass …) written
+    inside the image in a chosen corner. A corner shared with the scale bar moves the text
+    off the bar (above it for bottom corners, below it for top corners)."""
+    from PySide6.QtCore import QRectF, QPointF, Qt
+    from PySide6.QtGui import QColor, QFontMetricsF, QFont
+    lines=[str(x) for x in (lines or []) if str(x).strip()]
+    if not lines or rect.width()<20 or rect.height()<20:return
+    corner=corner if corner in PARAMETER_CORNERS else 'top_left'
+    painter.save()
+    font=QFont('DejaVu Sans')
+    # Small enough to never cover the scan: ≤ 1/14 of the image height per line.
+    pixel=max(7.,min(float(font_size)*0.92,rect.height()/max(8.,len(lines)*2.8+2)))
+    font.setPixelSize(int(round(pixel)))
+    painter.setFont(font)
+    metrics=QFontMetricsF(font)
+    pad=max(3.,pixel*0.45)
+    line_h=metrics.height()*1.08
+    width=max(metrics.horizontalAdvance(line) for line in lines)+2*pad
+    height=line_h*len(lines)+2*pad-(line_h-metrics.height())
+    width=min(width,rect.width()-2*pad)
+    margin=max(3.,rect.width()*0.02)
+    left=rect.left()+margin if corner.endswith('left') else rect.right()-margin-width
+    top=rect.top()+margin if corner.startswith('top') else rect.bottom()-margin-height
+    if avoid_corner==corner:
+        shift=max(pixel*3.6,rect.height()*0.11)
+        top=top+shift if corner.startswith('top') else top-shift
+    box_rect=QRectF(left,top,width,height)
+    text=QColor(color or '#ffffff')
+    if box:
+        dark=text.lightnessF()>0.5
+        fill=QColor(0,0,0,150) if dark else QColor(255,255,255,190)
+        painter.setPen(Qt.PenStyle.NoPen);painter.setBrush(fill)
+        painter.drawRoundedRect(box_rect,pad*0.8,pad*0.8)
+    painter.setBrush(Qt.BrushStyle.NoBrush);painter.setPen(text)
+    align=int(Qt.AlignmentFlag.AlignLeft if corner.endswith('left') else Qt.AlignmentFlag.AlignRight)
+    for k,line in enumerate(lines):
+        r=QRectF(left+pad,top+pad+k*line_h,width-2*pad,metrics.height())
+        painter.drawText(r,align|int(Qt.AlignmentFlag.AlignVCenter),
+                         metrics.elidedText(line,Qt.TextElideMode.ElideRight,r.width()))
+    painter.restore()
+
+
 def _draw_lattice(painter, rect, info):
     from PySide6.QtCore import QPointF, Qt, QRectF
     from PySide6.QtGui import QPen, QColor, QPolygonF
@@ -444,6 +491,12 @@ def export_publication(scan, panels, destination, preset, *, plot_config=None, t
                               spec.get('scale_bar_position','bottom_right'))
             if spec['kind']=='channel' and spec.get('overlays'):
                 _draw_overlays(painter,image_rect,geometry,spec['overlays'])
+            box=spec.get('parameter_box') or {}
+            if box.get('enabled') and box.get('lines'):
+                bar_corner=(spec.get('scale_bar_position','bottom_right')
+                            if style.scale_bar and spec.get('show_scale_bar',True) else None)
+                _draw_parameter_box(painter,image_rect,box['lines'],box.get('corner','top_left'),font_size,
+                                    box.get('color','#ffffff'),bool(box.get('background',True)),bar_corner)
             if spec.get('show_colorbar',True) and side!='none' and (
                     spec['kind']!='report' or spec.get('colorbar_source')):
                 _colorbar(painter,image_rect,style,lo,hi,spec.get('unit',''),

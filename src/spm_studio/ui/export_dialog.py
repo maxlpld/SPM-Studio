@@ -256,7 +256,17 @@ class PublicationDialog(QDialog):
         form.addRow('',show_scalebar)
         form.addRow('Bar colour',scalebar_color);form.addRow('Bar corner',scalebar_position)
         show_scalebar.toggled.connect(scalebar_color.setEnabled);show_scalebar.toggled.connect(scalebar_position.setEnabled)
-        data={'group':group,'scan':scan_choice,'image':image,'trace':trace,'title':title,'unit':unit,'legend':legend,'scalebar_color':scalebar_color,'scalebar_position':scalebar_position,'show_scalebar':show_scalebar,
+        # v0.0.10: bias / setpoint / Δz of each Multipass pass … written in a chosen corner.
+        from .parameter_box_dialog import default_state
+        params_button=QPushButton('Measurement parameters…')
+        params_button.setObjectName(f'ExportParametersV0010_{index}')
+        params_button.setToolTip('Write bias, setpoint, Δz (each Multipass pass P1, P2 …) and other header '
+                                 'values in a corner of this image')
+        params_summary=QLabel('Off');params_summary.setWordWrap(True);params_summary.setObjectName('hint')
+        params_button.clicked.connect(lambda _=False,n=index:self._edit_parameters(n))
+        form.addRow('Parameters',params_button);form.addRow('',params_summary)
+        data={'params':default_state(),'params_button':params_button,'params_summary':params_summary,
+              'group':group,'scan':scan_choice,'image':image,'trace':trace,'title':title,'unit':unit,'legend':legend,'scalebar_color':scalebar_color,'scalebar_position':scalebar_position,'show_scalebar':show_scalebar,
               'show_colorbar':show_colorbar,'colorbar_source':source,'unit_buttons':unit_buttons}
         show_colorbar.toggled.connect(lambda checked,n=index:self._bar_changed(n))
         source.currentIndexChanged.connect(lambda _,n=index:self._bar_changed(n))
@@ -272,8 +282,30 @@ class PublicationDialog(QDialog):
                                        min(index,len(self.choices)-1)))
         trace.setCurrentIndex(max(0,trace.findData(self.selected_trace)))
         self._set_defaults(index)
+        image.currentIndexChanged.connect(lambda _,n=index:self._refresh_parameter_summary(n))
+        self._refresh_parameter_summary(index)
         group.setVisible(False)
         return data
+
+    def _panel_channel(self,index):
+        choice=self.controls[index]['image'].currentData() or {}
+        return str(choice.get('channel','')) if choice.get('kind')=='channel' else ''
+
+    def _refresh_parameter_summary(self,index):
+        from .parameter_box_dialog import summary
+        fields=self.controls[index]
+        try:text=summary(fields['params'],self._panel_scan(index),self._panel_channel(index))
+        except Exception as exc:text=f'Unavailable: {exc}'
+        fields['params_summary'].setText(text)
+        fields['params_button'].setEnabled(bool(self._panel_channel(index)))
+
+    def _edit_parameters(self,index):
+        from .parameter_box_dialog import ParameterBoxDialog
+        fields=self.controls[index]
+        dialog=ParameterBoxDialog(self._panel_scan(index),self._panel_channel(index),fields['params'],self)
+        if dialog.exec():
+            fields['params']=dialog.state()
+            self._refresh_parameter_summary(index)
 
     def _ensure_controls(self,count):
         """Create image panels on demand (three exist from the start; up to MAX_PANELS)."""
@@ -460,6 +492,9 @@ class PublicationDialog(QDialog):
             spec['scale_bar_color']=fields['scalebar_color'].text().strip() or '#111111'
             spec['scale_bar_position']=fields['scalebar_position'].currentData()
             spec['show_scale_bar']=fields['show_scalebar'].isChecked()
+            if spec['kind']=='channel' and fields['params'].get('enabled'):
+                from .parameter_box_dialog import box_spec
+                spec['parameter_box']=box_spec(fields['params'],scan,spec['channel'])
             result.append(spec)
         return result
 
@@ -478,6 +513,8 @@ class PublicationDialog(QDialog):
                   'show_scale_bar':fields['show_scalebar'].isChecked(),
                   'scale_bar_color':fields['scalebar_color'].text().strip() or '#111111',
                   'scale_bar_position':str(fields['scalebar_position'].currentData() or 'bottom_right')}
+            if fields['params'].get('enabled'):
+                item['parameters']=dict(fields['params'])
             if choice.get('kind')=='channel':
                 item.update(source='channel',channel=str(choice.get('channel','')))
             else:
@@ -539,6 +576,9 @@ class PublicationDialog(QDialog):
             if panel.get('scale_bar_color'):fields['scalebar_color'].setText(panel['scale_bar_color'])
             if 'scale_bar_position' in panel:
                 fields['scalebar_position'].setCurrentIndex(max(0,fields['scalebar_position'].findData(panel['scale_bar_position'])))
+            from .parameter_box_dialog import clean_state,default_state
+            fields['params']=clean_state(panel['parameters']) if 'parameters' in panel else default_state()
+            self._refresh_parameter_summary(index)
             self._bar_changed(index)
         self._layout_changed()
         if missing:

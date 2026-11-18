@@ -1,7 +1,8 @@
 {
   "schema_version": 1,
   "name": "Multipass",
-  "channel_contains": "OC",
+  "multipass": true,
+  "channel_contains": "Z",
   "style": {
     "colormap": "gray",
     "range_mode": "percentile",
@@ -12,8 +13,20 @@
     "colorbar": true
   },
   "processing": [],
+  "channel_processing": {
+    "Z": [
+      {"operation": "plane", "params": {}, "enabled": true},
+      {"operation": "row_median", "params": {}, "enabled": true}
+    ]
+  },
+  "channel_styles": {
+    "Z": {"colormap": "gray", "range_mode": "percentile", "low": 1, "high": 99, "gamma": 1, "scale_bar": true, "colorbar": true},
+    "Current": {"colormap": "viridis", "range_mode": "percentile", "low": 1, "high": 99, "gamma": 1, "scale_bar": true, "colorbar": true},
+    "OC M1 Freq": {"colormap": "gray", "range_mode": "percentile", "low": 1, "high": 99, "gamma": 1, "scale_bar": true, "colorbar": true}
+  },
   "visible_channels": [
     "Z",
-    "OC_M1_Freq._Shift"
+    "Current",
+    "OC M1 Freq"
   ]
 }
