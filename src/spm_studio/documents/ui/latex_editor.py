@@ -16,7 +16,7 @@ from PySide6.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, Q
                                QTreeWidget, QTreeWidgetItem, QMenu, QFileDialog, QFrame, QInputDialog, QSpinBox,
                                QDialog, QFormLayout, QDialogButtonBox, QCheckBox, QApplication)
 
-from spm_studio.documents import settings as doc_settings, tex, latex_project, templates, overleaf
+from spm_studio.documents import settings as doc_settings, tex, latex_project, templates, overleaf, tex_packages
 from spm_studio.shared.dialogs import MessageDialog, TextInputDialog
 from .common import HeaderBar, Ribbon, button, open_path, run_in_thread, figure_for_latex
 from .code_editor import CodeEditor, LatexHighlighter, new_document, FindBar
@@ -225,6 +225,7 @@ class LatexEditorWindow(QMainWindow):
         self.log_pane = LogPane()
         self.log_pane.jump.connect(self._jump_to)
         self.log_pane.askAssistant.connect(self._ask_fix)
+        self.log_pane.installRequested.connect(self.install_packages)
         self.log_pane.hide()
         right.addWidget(self.log_pane)
         right.setSizes([620, 260])
@@ -297,6 +298,10 @@ class LatexEditorWindow(QMainWindow):
         table.clicked.connect(self._insert_table)
         r.add(figure)
         r.add(table)
+        package = button('Package', 'plus', 'Add a package to the preamble (\\usepackage); installs it if missing')
+        package.setObjectName('LatexAddPackageV0081')
+        package.clicked.connect(self.add_package_dialog)
+        r.add(package)
         r.separator()
         for text, tip, snippet in (('ref', 'Cross-reference', '\\ref{§}'), ('cite', 'Citation', '\\cite{§}'),
                                    ('link', 'Hyperlink', '\\href{§}{¤}')):
@@ -328,6 +333,8 @@ class LatexEditorWindow(QMainWindow):
         m.addSeparator()
         self.main_menu = m.addMenu('Main document')
         self.main_menu.aboutToShow.connect(self._fill_main_menu)
+        m.addAction('Add a package…', self.add_package_dialog)
+        m.addAction('Install or update a LaTeX package…', self._install_package_dialog)
         m.addAction('Word count', self._word_count)
         m.addAction('Editor settings…', self._editor_settings)
         m.addSeparator()
@@ -744,6 +751,125 @@ class LatexEditorWindow(QMainWindow):
         else:
             main.write_text(new, encoding='utf8')
 
+    # ================================================================== packages
+    def add_package_dialog(self):
+        """Ask for package names (and options); add them to the preamble; offer to install missing ones."""
+        from PySide6.QtWidgets import QLineEdit, QCompleter, QLabel
+        dialog = QDialog(self)
+        dialog.setWindowTitle('Add a package')
+        dialog.setMinimumWidth(440)
+        form = QFormLayout(dialog)
+        names = QLineEdit()
+        names.setObjectName('LatexPackageNamesV0081')
+        names.setPlaceholderText('e.g. siunitx, physics, tikz')
+        completer = QCompleter(PACKAGES, names)
+        completer.setCaseSensitivity(Qt.CaseSensitivity.CaseInsensitive)
+        names.setCompleter(completer)
+        options = QLineEdit()
+        options.setPlaceholderText('options (optional), e.g. separate-uncertainty')
+        install = QCheckBox('Install the package if it is not on this computer')
+        install.setChecked(True)
+        hint = QLabel('Several packages: separate them with commas. They are added to the preamble of the main '
+                      'document after the other \\usepackage lines.')
+        hint.setObjectName('hint')
+        hint.setWordWrap(True)
+        form.addRow('Package', names)
+        form.addRow('Options', options)
+        form.addRow('', install)
+        form.addRow(hint)
+        box = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
+        box.button(QDialogButtonBox.StandardButton.Ok).setText('Add')
+        box.accepted.connect(dialog.accept)
+        box.rejected.connect(dialog.reject)
+        form.addRow(box)
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+        wanted = [n.strip() for n in names.text().replace(';', ',').split(',') if n.strip()]
+        bad = [n for n in wanted if not tex_packages.package_name_valid(n)]
+        if bad:
+            MessageDialog.warning(self, 'Add a package', 'Not a package name: ' + ', '.join(bad))
+            return
+        self.add_packages(wanted, options.text().strip(), install=install.isChecked())
+
+    def add_packages(self, wanted, options: str = '', install: bool = True):
+        main = self.main_file()
+        if main is None or not wanted:
+            return []
+        added = []
+        for name in wanted:
+            doc = self.docs.get(str(main))
+            text = doc.toPlainText() if doc is not None else main.read_text(encoding='utf8', errors='replace')
+            new = latex_project.ensure_package(text, name, options)
+            if new != text:
+                added.append(name)
+                if doc is not None:
+                    self._replace_document_text(doc, new)
+                else:
+                    main.write_text(new, encoding='utf8')
+        self.statusBar().showMessage(('Added ' + ', '.join(added)) if added else 'Already in the preamble', 4000)
+        if install:
+            missing = [tex_packages.Need('missing', f'{n}.sty', tex_packages.package_for_file(n + '.sty'))
+                       for n in wanted if tex.which('kpsewhich') and not tex_packages.is_installed(f'{n}.sty')
+                       and not tex_packages.is_installed(f'{n}.cls')]
+            if missing:
+                self.install_packages(missing, False)
+                return added
+        if self.auto_button.isChecked():
+            self.autocompile_timer.start()
+        return added
+
+    def _install_package_dialog(self):
+        name, ok = TextInputDialog.getText(self, 'Install or update a LaTeX package',
+                                           'Package name (as on CTAN, e.g. siunitx):')
+        if ok and name.strip():
+            if not tex_packages.package_name_valid(name.strip()):
+                MessageDialog.warning(self, 'Install', 'Not a package name: ' + name)
+                return
+            update = tex_packages.is_installed(name.strip() + '.sty')
+            self.install_packages([tex_packages.Need('outdated' if update else 'missing',
+                                                     '' if update else name.strip() + '.sty', name.strip())], update)
+
+    def install_packages(self, needs, update=False):
+        """Install / update packages in the background, show the output in Logs, then recompile."""
+        if getattr(self, '_installing', False):
+            return
+        names = ', '.join(n.package for n in needs)
+        kind = tex_packages.manager()
+        if kind is None:
+            MessageDialog.warning(self, 'Install package', 'No LaTeX package manager was found.\n\n' + tex.install_hint())
+            return
+        how = {'miktex': 'MiKTeX (for your account)',
+               'tlmgr': 'TeX Live (tlmgr' + (', user mode: into ~/texmf' if tex_packages._is_debian_texlive() else '') + ')',
+               'apt': 'apt (asks for your password)'}[kind]
+        if not MessageDialog.confirm(self, 'Update package' if update else 'Install package',
+                                     f'{"Update" if update else "Install"} {names} with {how}?\n\n'
+                                     'This needs an internet connection and can take a minute. The system may ask '
+                                     'for your password.', 'Update' if update else 'Install'):
+            return
+        self._installing = True
+        self.logs_button.setChecked(True)
+        self.log_pane.tabs.setCurrentIndex(1)
+        self.log_pane.append_raw(f'\n----- {"Updating" if update else "Installing"} {names} -----')
+        self.compile_state.setText(f'Installing {names}…')
+        lines = []
+
+        def work():
+            return tex_packages.install(needs, update, log=lines.append)
+
+        def done(result, error):
+            self._installing = False
+            for line in lines:
+                self.log_pane.append_raw(line)
+            ok, message = result if result else (False, error)
+            self.log_pane.append_raw(message)
+            self.compile_state.setText(message[:120])
+            if ok:
+                self.statusBar().showMessage(message, 6000)
+                self.compile()
+            else:
+                MessageDialog.warning(self, 'Install package', message)
+        run_in_thread(work, done, self)
+
     # ================================================================== figures
     def _insert_figure_file(self):
         files, _ = QFileDialog.getOpenFileNames(self, 'Insert figure', str(Path.home()),
@@ -866,6 +992,10 @@ class LatexEditorWindow(QMainWindow):
         self.compile_state.setText(('Compiled' if ok else 'Compiled with errors' if pdf else 'Failed') +
                                    f' · {seconds:.1f} s · {self.compiler.engine}')
         self._apply_markers()
+        self.package_needs = tex_packages.needs(log)
+        self.log_pane.show_packages(self.package_needs)
+        if self.package_needs and not self.logs_button.isChecked():
+            self.logs_button.setChecked(True)
         waiters, self._compile_waiters = self._compile_waiters, []
         for loop in waiters:
             loop.quit()

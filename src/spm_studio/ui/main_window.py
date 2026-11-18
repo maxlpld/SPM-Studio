@@ -902,17 +902,18 @@ class MainWindow(QMainWindow):
         self.ai_dock=AssistantDock(self)
         self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea,self.ai_dock)
         self.ai_dock.hide()
-        self.ai_dock.visibilityChanged.connect(lambda visible:self.ai_toolbar_button.setChecked(self.ai_dock.isVisible()))
+        self.ai_dock.visibilityChanged.connect(lambda visible:self.ai_toolbar_button.setChecked(self.ai_dock.is_open()))
+        self.ai_dock.shownChanged.connect(lambda shown:self.ai_toolbar_button.setChecked(self.ai_dock.is_open()))
 
     def open_ai_assistant(self):
         self.ai_dock.first_open()
 
     def toggle_ai_assistant(self):
-        if self.ai_dock.isVisible():
-            self.ai_dock.hide()
+        if self.ai_dock.is_open():
+            self.ai_dock.close_panel()
         else:
             self.ai_dock.first_open()
-        self.ai_toolbar_button.setChecked(self.ai_dock.isVisible())
+        self.ai_toolbar_button.setChecked(self.ai_dock.is_open())
 
     @staticmethod
     def _shift_combo(combo,delta):
