@@ -81,8 +81,43 @@ def _md_to_html(text):
     return html[start:end if end>0 else None]
 
 
+class AssistantWindow(QWidget):
+    """v0.0.8.1: the detached assistant is an ordinary top-level window (no parent): it can go to any
+    screen or virtual desktop and stays where the user puts it, independently of the SPM Studio window."""
+    def __init__(self,dock):
+        super().__init__(None,Qt.WindowType.Window)
+        self.dock=dock
+        self.setObjectName('AiAssistantWindowV0081')
+        self.setWindowTitle('Assistant — SPM Studio')
+        try:self.setWindowIcon(dock.host.windowIcon())
+        except Exception:pass
+        lay=QVBoxLayout(self);lay.setContentsMargins(0,0,0,0);lay.setSpacing(0)
+        self.resize(460,780)
+
+    def _remember(self):
+        try:self.dock.host.settings.setValue('ai_window_geometry',self.saveGeometry())
+        except RuntimeError:pass
+
+    def moveEvent(self,event):
+        super().moveEvent(event);self._remember()
+
+    def resizeEvent(self,event):
+        super().resizeEvent(event);self._remember()
+
+    def closeEvent(self,event):
+        # Closing only hides it; the conversation and running tasks continue.
+        self._remember();event.accept()
+        QTimer.singleShot(0,lambda:self.dock.shownChanged.emit(False))
+
+
 class AssistantDock(QDockWidget):
-    """Native AI assistant: chat + supervised development tasks (v0.8 layout)."""
+    """Native AI assistant: chat + supervised development tasks (v0.8 layout).
+
+    v0.0.8.1: *Detach* (:meth:`undock_panel`) moves the panel into :class:`AssistantWindow`, a window of its own;
+    :meth:`dock_panel` puts it back. Use :meth:`is_open`, :meth:`open_panel`, :meth:`close_panel` and
+    :meth:`panel_window` rather than show()/hide() so both places are handled."""
+    shownChanged=Signal(bool)
+
     def __init__(self,main_window):
         super().__init__('Assistant',main_window)
         self.setObjectName('AiAssistantDock')
@@ -106,6 +141,8 @@ class AssistantDock(QDockWidget):
         self._task_folder=None
         self._task_autoinstall=False
         self._html_cache={}
+        self._detached=False
+        self._window=None
         from spm_studio.shared.appearance import tool_button
         from PySide6.QtWidgets import QTabWidget
         from PySide6.QtGui import QShortcut, QKeySequence
@@ -124,8 +161,10 @@ class AssistantDock(QDockWidget):
         self.tools_button.setObjectName('AiAgentToolsToggleV081')
         self.tools_button.clicked.connect(self._toggle_tools)
         top.addWidget(self.tools_button)
-        self.float_button=tool_button('','float','Detach / dock the assistant',icon_only=True)
-        self.float_button.clicked.connect(lambda:self.setFloating(not self.isFloating()))
+        self.float_button=tool_button('','float','Open the assistant in its own window (move it to any screen '
+                                      'or desktop) / dock it back',icon_only=True)
+        self.float_button.setObjectName('AiAssistantDetachV0081')
+        self.float_button.clicked.connect(lambda:self.dock_panel() if self._detached else self.undock_panel())
         top.addWidget(self.float_button)
         settings=tool_button('','settings','Assistant settings…',icon_only=True);settings.clicked.connect(self.setup)
         top.addWidget(settings)
@@ -223,6 +262,8 @@ class AssistantDock(QDockWidget):
         dl.addWidget(self.log,1)
         self.tabs.addTab(dev,'Develop')
         self.setWidget(body)
+        self.body=body
+        self._placeholder=QWidget()
         self._render_timer=QTimer(self);self._render_timer.setSingleShot(True);self._render_timer.setInterval(85)
         self._render_timer.timeout.connect(self.render)
         self.session_picker.activated.connect(lambda _=0:self.switch_session(self.session_picker.currentText()))
@@ -250,38 +291,94 @@ class AssistantDock(QDockWidget):
     def _session_id(self):return 'spm'+hashlib.sha256(self._session_name().encode()).hexdigest()[:24]
 
     def _top_changed(self,float_):
+        # A dock floated by Qt (dragged out, or setFloating) stays tied to the main window; once the
+        # drag is over it becomes a real window of its own (v0.0.8.1).
         self.conf=load()
-        if float_:
-            geo=self.host.settings.value('ai_dock_geometry')
-            if geo:self.restoreGeometry(geo)
+        if float_:QTimer.singleShot(0,self._float_to_window)
+
+    def _float_to_window(self):
+        if not self.isFloating():return
+        if QApplication.mouseButtons()!=Qt.MouseButton.NoButton:
+            QTimer.singleShot(120,self._float_to_window);return
+        geometry=self.geometry()
+        self.setFloating(False)
+        self.undock_panel(geometry=geometry)
+
+    # ---- v0.0.8.1: docked in the main window, or in a window of its own
+    def detached(self):return self._detached
+
+    def panel_window(self):
+        """The top-level window that shows the assistant now (its own window, or the dock)."""
+        return self._window if self._detached else self
+
+    def is_open(self):
+        return self._window.isVisible() if self._detached and self._window is not None else self.isVisible()
+
+    def undock_panel(self,geometry=None,show=True):
+        if self._window is None:self._window=AssistantWindow(self)
+        if not self._detached:
+            self.setWidget(self._placeholder)
+            self._window.layout().addWidget(self.body)
+            self.body.show()
+            self._detached=True
+            saved=self.host.settings.value('ai_window_geometry')
+            if saved:self._window.restoreGeometry(saved)
+            elif geometry is not None and geometry.width()>100:self._window.setGeometry(geometry)
+            self.host.settings.setValue('ai_dock_floating',True)
+            self.float_button.setToolTip('Dock the assistant back into the SPM Studio window')
+            QDockWidget.hide(self)
+        if show:
+            self._window.show();self._window.raise_();self._window.activateWindow()
             QTimer.singleShot(0,self._ensure_on_screen)
-        self.host.settings.setValue('ai_dock_floating',float_)
+        self.shownChanged.emit(self.is_open())
+        return self._window
+
+    def dock_panel(self):
+        if not self._detached:return
+        self._window.layout().removeWidget(self.body)
+        self.setWidget(self.body)
+        self.body.show()
+        self._window.hide()
+        self._detached=False
+        if self.isFloating():self.setFloating(False)
+        self.host.settings.setValue('ai_dock_floating',False)
+        self.float_button.setToolTip('Open the assistant in its own window (move it to any screen or desktop)')
+        QDockWidget.show(self);self.raise_()
+        self.shownChanged.emit(self.is_open())
+
+    def open_panel(self):
+        if self._detached:
+            self._window.show()
+            if self._window.isMinimized():self._window.showNormal()
+            self._window.raise_();self._window.activateWindow()
+        else:
+            QDockWidget.show(self);self.raise_()
+        self.shownChanged.emit(True)
+
+    def close_panel(self):
+        if self._detached:self._window.hide()
+        else:QDockWidget.hide(self)
+        self.shownChanged.emit(False)
 
     def _ensure_on_screen(self):
-        """A floating window remembered on a now-disconnected monitor comes back to the main one."""
-        if not self.isFloating():return
-        frame=self.frameGeometry()
+        """A window remembered on a now-disconnected monitor comes back to the main one."""
+        win=self.panel_window()
+        if win is None or (win is self and not self.isFloating()):return
+        frame=win.frameGeometry()
         screens=[sc.availableGeometry() for sc in QApplication.screens()]
         if any(g.intersects(frame) for g in screens):return
         target=(self.host.screen() or QApplication.primaryScreen()).availableGeometry()
-        self.resize(min(self.width(),target.width()-40),min(self.height(),target.height()-40))
-        self.move(target.center()-self.rect().center())
+        win.resize(min(win.width(),target.width()-40),min(win.height(),target.height()-40))
+        win.move(target.center()-win.rect().center())
 
     def _restore_float(self):
         if str(self.host.settings.value('ai_dock_floating','false')).lower()=='true':
-            QTimer.singleShot(0,lambda:self.setFloating(True))
+            QTimer.singleShot(0,lambda:self.undock_panel(show=False))
 
     def save_state(self):
-        self.host.settings.setValue('ai_dock_geometry',self.saveGeometry())
-        self.host.settings.setValue('ai_dock_floating',self.isFloating())
-
-    def moveEvent(self,event):
-        super().moveEvent(event)
-        if self.isFloating():self.host.settings.setValue('ai_dock_geometry',self.saveGeometry())
-
-    def resizeEvent(self,event):
-        super().resizeEvent(event)
-        if self.isFloating():self.host.settings.setValue('ai_dock_geometry',self.saveGeometry())
+        if self._detached and self._window is not None:
+            self.host.settings.setValue('ai_window_geometry',self._window.saveGeometry())
+        self.host.settings.setValue('ai_dock_floating',self._detached)
 
     def closeEvent(self,event):
         self.save_state()
@@ -296,6 +393,10 @@ class AssistantDock(QDockWidget):
         if QApplication.instance() is not None:
             try:QApplication.instance().removeEventFilter(self)
             except Exception:pass
+        if self._window is not None:
+            # a parentless window would keep the application running after the main window closed
+            try:self.save_state();self._window.hide();self._window.deleteLater()
+            except RuntimeError:pass
         for backend in (self.rpc,self.task):
             if backend is not None:
                 try:
@@ -306,7 +407,7 @@ class AssistantDock(QDockWidget):
     def first_open(self):
         if not self.conf.get('configured'):
             self.setup()
-        self.show();self.raise_()
+        self.open_panel()
         self._ensure_tools_decision()
         self.input.setFocus()
 
@@ -540,8 +641,8 @@ class AssistantDock(QDockWidget):
         if self._last_reply and self.history and self.history[-1]['role']=='assistant' \
                 and self._literature_followup(self.history[-1]['content']):
             return
-        if not self.isVisible() or not self.host.isActiveWindow():
-            QApplication.alert(self.host,0)
+        if not self.is_open() or not self.panel_window().isActiveWindow():
+            QApplication.alert(self.panel_window(),0)
 
     # ---- v0.0.8: actions on the LaTeX / presentation editors (documents/protocol.py)
     def _documents_followup(self,reply):

@@ -7,6 +7,23 @@ so write it for users. Add new versions **at the top**.
 The internal builds that preceded the GitHub project (0.7.0 – 0.8.3) are documented in
 [`docs/DEVELOPMENT_HISTORY.md`](docs/DEVELOPMENT_HISTORY.md).
 
+## 0.0.9 — 2026-11-18
+
+### Assistant in a window of its own
+
+- **Detach** (the window button at the top of the assistant) now opens the assistant in an ordinary window of its own: move it to any screen or virtual desktop, minimise it, keep it next to the LaTeX or presentation editor — it stays where you put it and no longer follows or brings back the SPM Studio window. The same button docks it back.
+- **Asking the assistant from the LaTeX or presentation editor** (Assistant button, *Ask the assistant to fix*, *Ask the assistant about this*) opens it beside the editor, without switching to the SPM Studio window; the editor stays as it was.
+
+### LaTeX editor
+
+- **Package button** in the toolbar (also *Menu › Add a package…*): type one or more package names (with options if needed); they are added to the preamble, and installed if they are missing on the computer.
+- **Missing or outdated packages:** when a compilation stops because a package is not installed (or is too old), the Logs show **Install …** / **Update …** buttons (and *Install all*). SPM Studio installs it with MiKTeX, TeX Live's tlmgr (on Ubuntu/Debian into your own `~/texmf`, no administrator rights), or apt as a last resort, shows the output in the raw log and recompiles. *Menu › Install or update a LaTeX package…* does the same for any package.
+
+### Fixes
+
+- The assistant's *insert at the end* and *create a file* actions in the LaTeX editor now always edit the file you have open.
+- Check for updates understands hotfix numbers such as 0.0.9.1 for future releases.
+
 ## 0.0.8 — 2026-11-17
 
 ### LaTeX editor (optional)

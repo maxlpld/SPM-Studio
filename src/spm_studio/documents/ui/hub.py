@@ -275,33 +275,38 @@ class DocumentHub(QObject):
         return getattr(self.main_window, 'ai_dock', None) if self.main_window is not None else None
 
     def show_assistant(self, source=None):
+        """Open the assistant for an editor window, in a window of its own beside it.
+
+        The SPM Studio window is not brought forward, and the assistant window is only placed
+        the first time: afterwards it stays wherever the user moved it (any screen or desktop).
+        """
         dock = self._dock()
         if dock is None:
             return None
         if source is not None:
             self.note_active(source)
-        dock.first_open() if not dock.isVisible() else None
-        if source is not None and not dock.isFloating():
-            dock.setFloating(True)
-        if source is not None:
+        if not dock.conf.get('configured'):
+            dock.setup()
+        was_open = dock.is_open()
+        placed = bool(self.main_window.settings.value('ai_window_geometry')) if self.main_window else False
+        if source is not None and not dock.detached():
+            dock.undock_panel(show=False)
+        window = dock.panel_window()
+        if source is not None and dock.detached() and not was_open and not placed:
             geo = source.frameGeometry()
-            screen = source.screen().availableGeometry() if source.screen() else None
-            width = max(380, dock.width())
-            x = geo.right() - width - 20
-            y = geo.top() + 90
-            if screen is not None:
-                x = max(screen.left(), min(x, screen.right() - width))
-            dock.resize(width, max(520, min(geo.height() - 120, 900)))
-            dock.move(x, y)
-        dock.show()
-        dock.raise_()
-        dock.activateWindow()
-        return dock
+            screen = (source.screen() or QApplication.primaryScreen()).availableGeometry()
+            width = max(420, window.width())
+            height = max(560, min(geo.height(), screen.height() - 40))
+            x = geo.right() + 8 if geo.right() + 8 + width <= screen.right() else screen.right() - width
+            window.resize(width, height)
+            window.move(max(screen.left(), x), max(screen.top(), geo.top()))
+        dock.open_panel()
+        return window
 
     def ask_assistant(self, text, send=False, source=None):
-        dock = self.show_assistant(source)
-        if dock is None:
+        if self.show_assistant(source) is None:
             return
+        dock = self._dock()
         dock.input.setPlainText(text)
         cursor = dock.input.textCursor()
         cursor.movePosition(cursor.MoveOperation.End)

@@ -90,15 +90,17 @@ def current_version() -> str:
 
 def parse(v: str) -> tuple:
     """'v0.8.10' → (0, 8, 10, 1); pre-releases ('0.9.0rc1', '0.9.0-beta') sort before the release."""
-    m = re.match(r'^\s*v?(\d+)(?:\.(\d+))?(?:\.(\d+))?(.*)$', str(v or ''))
+    # 0.0.9: a fourth number (hotfix, '0.0.9.1') sorts after '0.0.9'; index 3 stays the "final release" flag
+    m = re.match(r'^\s*v?(\d+)(?:\.(\d+))?(?:\.(\d+))?(?:\.(\d+))?(.*)$', str(v or ''))
     if not m:
-        return (0, 0, 0, 0)
-    major, minor, patch, rest = int(m.group(1)), int(m.group(2) or 0), int(m.group(3) or 0), m.group(4).strip()
-    return (major, minor, patch, 0 if rest else 1)
+        return (0, 0, 0, 0, 0)
+    major, minor, patch = int(m.group(1)), int(m.group(2) or 0), int(m.group(3) or 0)
+    hotfix, rest = int(m.group(4) or 0), m.group(5).strip()
+    return (major, minor, patch, 0 if rest else 1, hotfix)
 
 
 def is_version_tag(name: str) -> bool:
-    return bool(re.fullmatch(r'v?\d+\.\d+(\.\d+)?([-.]?(a|b|rc|alpha|beta|dev)\.?\d*)?', name or ''))
+    return bool(re.fullmatch(r'v?\d+\.\d+(\.\d+){0,2}([-.]?(a|b|rc|alpha|beta|dev)\.?\d*)?', name or ''))
 
 
 # ------------------------------------------------------------------ credentials (private repositories)

@@ -73,7 +73,7 @@ def readme_version() -> str:
 
 
 def bump(new: str):
-    if not re.fullmatch(r'\d+\.\d+\.\d+([-.]?(a|b|rc|alpha|beta|dev)\.?\d*)?', new or ''):
+    if not re.fullmatch(r'\d+\.\d+\.\d+(\.\d+)?([-.]?(a|b|rc|alpha|beta|dev)\.?\d*)?', new or ''):
         sys.exit('Use a version like 0.0.2 (or 0.1.0rc1)')
     old = version()
     toml = ROOT / 'pyproject.toml'

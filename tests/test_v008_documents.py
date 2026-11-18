@@ -611,3 +611,142 @@ def test_formula_renderer_renders_or_reports(qt, home):
         assert not image.isNull() and w > 0 and h > 0
     bad = renderer.render_blocking(r'\begin{nonsense}', '#000000', 200, 'center', '', timeout=60000)
     assert bad is None or bad[0] is not None
+
+
+# ================================================================ 0.0.8.1 additions
+MISSING_LOG = r"""
+(./main.tex
+./main.tex:3: LaTeX Error: File `fancytables.sty' not found.
+
+Type X to quit or <RETURN> to proceed,
+! LaTeX Error: File `tikzlibrarycalc2.code.tex' not found.
+! LaTeX Error: File `sections/intro.tex' not found.
+! Package babel Error: Unknown option 'french'. Either you misspelled it
+LaTeX Warning: You have requested, on input line 7, version
+`2099/01/01' of package siunitx,
+but only version
+`2024-01-25 v3.3.10' is available.
+I couldn't open style file achemso.bst
+"""
+
+
+def test_missing_and_outdated_packages_are_found_in_the_log():
+    from spm_studio.documents import tex_packages
+    needs = tex_packages.needs(MISSING_LOG)
+    found = {(n.kind, n.package, n.file) for n in needs}
+    assert ('missing', 'fancytables', 'fancytables.sty') in found
+    assert ('missing', 'pgf', 'tikzlibrarycalc2.code.tex') in found
+    assert ('missing', 'babel-french', '') in found
+    assert ('missing', 'achemso', 'achemso.bst') in found
+    assert ('outdated', 'siunitx', '') in found
+    assert not any('intro' in n.package for n in needs)          # a project file is not a package
+    assert needs[0].label() == 'Install fancytables'
+    assert [n.label() for n in needs if n.kind == 'outdated'] == ['Update siunitx']
+    assert tex_packages.package_for_file('tikz.sty') == 'pgf' and tex_packages.package_for_file('foo.cls') == 'foo'
+    assert tex_packages.package_name_valid('revtex4-2') and not tex_packages.package_name_valid('a; rm -rf /')
+    assert tex_packages.needs('') == []
+
+
+@pytest.mark.skipif(os.name == 'nt', reason='shell-script fakes')
+@pytest.mark.parametrize('debian', [False, True])
+def test_package_installation_commands(tmp_path, monkeypatch, debian):
+    from spm_studio.documents import tex, tex_packages
+    bin_dir = tmp_path / 'bin'
+    bin_dir.mkdir()
+    calls = tmp_path / 'calls.txt'
+    installed = tmp_path / 'installed.txt'
+    (bin_dir / 'tlmgr').write_text(
+        '#!/bin/sh\necho "$@" >> %s\n'
+        'case "$*" in *"--version"*) echo "TeX Live (https://tug.org/texlive) version 2023";;\n'
+        '*"search"*) printf "fancytables:\\n\\ttexmf-dist/tex/latex/fancytables/fancytables.sty\\n";;\n'
+        '*"install"*) echo fancytables.sty >> %s;;\nesac\nexit 0\n' % (calls, installed))
+    (bin_dir / 'kpsewhich').write_text('#!/bin/sh\ngrep -qx "$1" %s 2>/dev/null && echo /x/$1\nexit 0\n' % installed)
+    for f in bin_dir.iterdir():
+        f.chmod(0o755)
+    monkeypatch.setenv('PATH', str(bin_dir) + os.pathsep + os.environ.get('PATH', ''))
+    monkeypatch.setattr(tex_packages, '_is_debian_texlive', lambda: debian)
+    monkeypatch.setattr(tex_packages, 'manager', lambda: 'tlmgr')
+    assert not tex_packages.is_installed('fancytables.sty')
+    log = []
+    need = tex_packages.Need('missing', 'fancytables.sty', 'fancytables')
+    ok, message = tex_packages.install([need], log=log.append)
+    assert ok, (message, log)
+    assert tex_packages.is_installed('fancytables.sty') and message == 'Installed fancytables'
+    lines = calls.read_text().splitlines()
+    assert any('search --global --file /fancytables.sty' in line for line in lines)
+    install_line = next(line for line in lines if 'install fancytables' in line)
+    assert ('--usermode' in install_line) == debian
+    if debian:
+        assert 'init-usertree' in lines[0]
+    assert 'tlmgr' in tex_packages.manual_command(['x'])
+    ok, message = tex_packages.install(['bad name;'], log=log.append)
+    assert not ok
+
+
+def test_latex_editor_adds_packages_and_offers_to_install(window, qt, home, tmp_path, monkeypatch):
+    from spm_studio.documents import latex_project, tex_packages
+    project = latex_project.create_project(tmp_path, 'Pkg')
+    win = window.documents.open_latex(project)
+    win.auto_button.setChecked(False)
+    qt.processEvents()
+    assert win.findChild(type(win.auto_button), 'LatexAddPackageV0081') is not None
+    added = win.add_packages(['physics', 'siunitx'], install=False)
+    text = win.editor.toPlainText()
+    assert added == ['physics', 'siunitx'] and '\\usepackage{physics}' in text
+    assert text.index('\\usepackage{physics}') < text.index('\\begin{document}')
+    assert win.add_packages(['physics'], install=False) == []          # not added twice
+    win.add_packages(['geometry'], 'margin=2cm', install=False)
+    requested = []
+    monkeypatch.setattr(win, 'install_packages', lambda needs, update=False: requested.append((needs, update)))
+    win.log_pane.installRequested.disconnect()
+    win.log_pane.installRequested.connect(lambda needs, update: requested.append((needs, update)))
+    win._compile_finished(False, MISSING_LOG, '', 1.0)
+    qt.processEvents()
+    assert win.log_pane.packages_bar.isVisible() and win.logs_button.isChecked()
+    from PySide6.QtWidgets import QPushButton
+    buttons = [b for b in win.log_pane.packages_bar.findChildren(QPushButton) if b.text() == 'Install fancytables']
+    assert buttons
+    buttons[0].click()
+    assert requested and requested[-1][0][0].package == 'fancytables' and requested[-1][1] is False
+    win._compile_finished(True, 'This is pdfTeX\nOutput written on main.pdf', '', 1.0)
+    qt.processEvents()
+    assert not win.log_pane.packages_bar.isVisible()
+    win.close()
+    qt.processEvents()
+
+
+def test_assistant_gets_a_window_of_its_own(window, qt, home, tmp_path):
+    from spm_studio.ai import config as ai_config
+    from spm_studio.documents import latex_project
+    from spm_studio.ai.chat_ui import AssistantWindow
+    conf = ai_config.load()
+    conf.update(configured=True, chat_tools_ack=True)       # no first-use dialogs in the test
+    ai_config.save(conf)
+    dock = window.ai_dock
+    dock.conf = ai_config.load()
+    project = latex_project.create_project(tmp_path, 'Asked')
+    win = window.documents.open_latex(project)
+    win.auto_button.setChecked(False)
+    qt.processEvents()
+    shown = window.documents.show_assistant(win)
+    qt.processEvents()
+    assert isinstance(shown, AssistantWindow) and shown.parent() is None and shown.isVisible()
+    assert dock.detached() and dock.is_open() and not dock.isVisible()
+    assert window.ai_toolbar_button.isChecked()
+    window.documents.ask_assistant('Explain this line', send=False, source=win)
+    assert dock.input.toPlainText() == 'Explain this line' and dock.input.window() is shown
+    shown.move(shown.x() + 37, shown.y())
+    qt.processEvents()
+    shown.close()
+    qt.processEvents()
+    assert not dock.is_open() and not window.ai_toolbar_button.isChecked()
+    window.toggle_ai_assistant()                        # comes back where the user left it
+    qt.processEvents()
+    assert shown.isVisible() and dock.detached()
+    dock.dock_panel()
+    qt.processEvents()
+    assert not dock.detached() and dock.isVisible() and dock.input.window() is window
+    window.toggle_ai_assistant()
+    assert not dock.is_open()
+    win.close()
+    qt.processEvents()

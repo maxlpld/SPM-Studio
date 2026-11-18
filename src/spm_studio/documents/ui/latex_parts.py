@@ -267,6 +267,7 @@ class LogPane(QWidget):
     """Errors and warnings (click → line) and the raw log, like Overleaf's *Logs and output files*."""
     jump = Signal(str, int)
     askAssistant = Signal()
+    installRequested = Signal(list, bool)      # [Need, …], update
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -287,6 +288,14 @@ class LogPane(QWidget):
         head.addWidget(self.summary, 1)
         head.addWidget(self.fix)
         layout.addLayout(head)
+        # v0.0.8.1: missing / outdated packages found in the log → one click to install them
+        self.packages_bar = QFrame()
+        self.packages_bar.setObjectName('docPanel')
+        self.packages_row = QHBoxLayout(self.packages_bar)
+        self.packages_row.setContentsMargins(8, 6, 8, 6)
+        self.packages_row.setSpacing(6)
+        self.packages_bar.hide()
+        layout.addWidget(self.packages_bar)
         self.tabs = QTabWidget()
         self.list = QTreeWidget()
         self.list.setHeaderLabels(['', 'Message', 'Where'])
@@ -327,6 +336,41 @@ class LogPane(QWidget):
         self.fix.setEnabled(bool(n_err) or not ok)
         if n_err or not ok:
             self.tabs.setCurrentIndex(0 if summary.entries else 1)
+
+    def show_packages(self, needs):
+        """Buttons to install the packages LaTeX did not find (or to update too old ones)."""
+        while self.packages_row.count():
+            widget = self.packages_row.takeAt(0).widget()
+            if widget is not None:
+                widget.deleteLater()
+        if not needs:
+            self.packages_bar.hide()
+            return
+        missing = [n for n in needs if n.kind == 'missing']
+        outdated = [n for n in needs if n.kind == 'outdated']
+        text = []
+        if missing:
+            text.append('Not installed: ' + ', '.join(n.package for n in missing))
+        if outdated:
+            text.append('Too old: ' + ', '.join(n.package for n in outdated))
+        label = QLabel(' · '.join(text))
+        label.setWordWrap(True)
+        self.packages_row.addWidget(label, 1)
+        for need in needs[:4]:
+            b = QPushButton(need.label())
+            b.setObjectName('LatexInstallPackageV0081')
+            b.setToolTip(need.detail or (f'LaTeX could not find {need.file}' if need.file else need.package))
+            b.clicked.connect(lambda _=False, n=need: self.installRequested.emit([n], n.kind == 'outdated'))
+            self.packages_row.addWidget(b)
+        if len(missing) > 1:
+            every = QPushButton('Install all')
+            every.setProperty('primary', True)
+            every.clicked.connect(lambda: self.installRequested.emit(missing, False))
+            self.packages_row.addWidget(every)
+        self.packages_bar.show()
+
+    def append_raw(self, text: str):
+        self.raw.appendPlainText(text)
 
     def _activate(self, item, _column=0):
         file, line = item.data(0, Qt.ItemDataRole.UserRole) or ('', 0)

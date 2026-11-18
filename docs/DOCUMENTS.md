@@ -51,6 +51,14 @@ The editor uses the TeX installation of the computer:
 
 *Settings › Documents* shows which compilers were found.
 
+**Packages.** The **Package** button of the toolbar adds `\usepackage{…}` lines to the preamble (several
+names separated by commas, with options if needed) and installs a package that is not on the computer. When
+a compilation stops because a package is missing or too old, *Logs* shows **Install …** / **Update …**
+buttons: SPM Studio uses MiKTeX (for your account), TeX Live's `tlmgr` (on Ubuntu/Debian in user mode, into
+`~/texmf`, without administrator rights; on macOS the system asks for your password) or, as a last resort on
+Ubuntu, `apt` (asks for your password), shows what it ran in the raw log and recompiles. If nothing works it
+shows the command to type in a terminal.
+
 ## Presentation editor
 
 * **Slides** on the left (drag to reorder; right-click: new with a layout, duplicate, delete, hide in the
@@ -133,7 +141,8 @@ The assistant works with the editors exactly as with scans, with every assistant
 direct API) and also in plain chat: it can read the open document (file, cursor, errors; the slides and
 their items), insert or replace LaTeX, create files, compile and read the new errors, create projects and
 presentations, add slides, text, LaTeX boxes and shapes, change items and speaker notes. The editors'
-**Assistant** button opens it next to the window; *Ask the assistant to fix* (LaTeX logs) and the
+**Assistant** button opens it next to the window, in a window of its own (move it to any screen or
+desktop; the window button at the top of the assistant docks it back into SPM Studio); *Ask the assistant to fix* (LaTeX logs) and the
 right-click *Ask the assistant about this* of the source send the context. Every change can be undone in
 the editor (*Ctrl+Z*). The chat shows short notes (“✎ LaTeX: replace …”) instead of the technical
 requests; the format is described in `src/spm_studio/documents/protocol.py`.
