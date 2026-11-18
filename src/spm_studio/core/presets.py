@@ -97,7 +97,9 @@ def validate_profile(d):
             'channel_processing':specific_steps, 'channel_titles':titles,
             # v32: crop away the unmeasured part of aborted scans when this profile is applied
             # (AFM profiles default to on; a complete scan is never cropped).
-            'auto_crop_incomplete':bool(d.get('auto_crop_incomplete','afm' in str(d.get('name','')).lower()))}
+            'auto_crop_incomplete':bool(d.get('auto_crop_incomplete','afm' in str(d.get('name','')).lower())),
+            # v0.0.10: a Multipass profile reads the [P1] / [P2] … passes of the header
+            'multipass':bool(d.get('multipass','multipass' in str(d.get('name','')).lower()))}
 
 
 def validate_export(d):
@@ -164,6 +166,21 @@ def validate_export_layout(layout):
         for key in _PANEL_BOOL:
             if key in panel:
                 item[key] = bool(panel[key])
+        if 'parameters' in panel:
+            # v0.0.10: measurement-parameter box (corner + header values, e.g. P2 bias)
+            box = panel['parameters']
+            if not isinstance(box, dict):
+                raise ValueError('layout panel parameters must be an object')
+            corner = box.get('corner', 'top_left')
+            if corner not in ('top_left', 'top_right', 'bottom_left', 'bottom_right'):
+                raise ValueError('layout panel parameters.corner must be a corner name')
+            keys = box.get('keys')
+            if keys is not None and (not isinstance(keys, list) or len(keys) > 40
+                                     or any(not isinstance(k, str) or not k or len(k) > 80 for k in keys)):
+                raise ValueError('layout panel parameters.keys must be a list of parameter names')
+            item['parameters'] = {'enabled': bool(box.get('enabled', True)), 'corner': corner,
+                                  'keys': keys, 'color': str(box.get('color', '#ffffff'))[:40],
+                                  'background': bool(box.get('background', True))}
         if item.get('source', 'channel') not in ('channel', 'result'):
             raise ValueError('layout panel source must be channel or result')
         item.setdefault('source', 'channel')

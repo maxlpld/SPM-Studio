@@ -43,14 +43,11 @@ def measure_profile(y,run=3):
             'right_height':float(abs(y[right]-y[-1]))}
 
 
-def _distance(ctx,p0,p1,n):
-    ny,nx=ctx.geometry.shape
-    if ctx.geometry.size_m:
-        sx,sy=ctx.geometry.size_m
-        length=np.hypot((p1[0]-p0[0])*sx/nx,(p1[1]-p0[1])*sy/ny)
-    else:
-        length=np.hypot(p1[0]-p0[0],p1[1]-p0[1])
-    return np.linspace(0,length,n)
+def _distance(ctx,*points_and_n):
+    """Distances along a line or polyline: ``_distance(ctx, p0, p1[, p2 …], n)``."""
+    from spm_studio.core.analysis_utils import polyline_length,geometry_spacing
+    *points,n=points_and_n
+    return np.linspace(0,polyline_length(points,geometry_spacing(ctx.geometry)),n)
 
 
 def run(ctx):

@@ -49,7 +49,7 @@ def test_bias_figure_button_left_the_top_bar_but_the_composer_stays_reachable():
     assert 'self.topbar.addWidget(self.bias_figure_button)' not in source
     assert 'self.bias_figure_button.hide()' in source
     assert "'__bias_figure_composer__'" in source
-    assert "self._action(tools,'Bias figure composer…',None,self.open_bias_figure_composer)" in source
+    assert "self._action(tools,'Spectroscopy figure composer…',None,self.open_bias_figure_composer)" in source
     assert 'self.browser.exportSelectionRequested.connect(self.export_scan_selection)' in source
     assert 'transparent=dialog.transparent_background()' in source
     browser = (SRC / 'ui' / 'browser_panel.py').read_text()

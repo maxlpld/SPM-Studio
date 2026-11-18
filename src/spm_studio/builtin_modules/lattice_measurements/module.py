@@ -16,10 +16,8 @@ def run(ctx):
         for i,roi in enumerate(lines,1):
             xx,yy=profile_between(ctx.data,*roi.points_px)
             if ctx.geometry.size_m:
-                (x0,y0),(x1,y1)=roi.points_px
-                d=np.hypot((x1-x0)*ctx.geometry.size_m[0]/ctx.geometry.shape[1],
-                           (y1-y0)*ctx.geometry.size_m[1]/ctx.geometry.shape[0])
-                xx=np.linspace(0,d,len(xx))
+                from spm_studio.core.analysis_utils import profile_along,geometry_spacing
+                xx,yy=profile_along(ctx.data,roi.points_px,spacing=geometry_spacing(ctx.geometry))
             if not np.isfinite(yy).all():
                 ctx.log(f'Line {i} skipped: incomplete signal','warning')
                 continue

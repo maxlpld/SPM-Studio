@@ -196,7 +196,31 @@ def run(win) -> int:
             assert slides.save() and len(deck.load(file)['slides']) == 6
             slides.close(); app.processEvents()
 
+    def spectroscopy_composer():
+        # v0.0.10: one composer for every spectroscopy method, polylines, parameter box.
+        from spm_studio.ui.bias_figure_composer import create_tool
+        from spm_studio.core import spectroscopy_methods as sm
+        composer = create_tool(win, {'root': Path.home(), 'output_dir': Path(tempfile.gettempdir())})
+        composer.show(); app.processEvents()
+        for key in sm.METHODS:
+            composer.method.setCurrentIndex(composer.method.findData(key)); app.processEvents()
+            assert composer.project['options']['method'] == key, key
+        composer.redraw_timer.stop()
+        composer.close(); composer.deleteLater(); app.processEvents()
+        from spm_studio.ui.image_view import ImageView
+        from spm_studio.core.models import ROI
+        view = ImageView(); view.tool = 'line'
+        view.extra_rois = [ROI('line', ((1., 1.), (5., 1.)))]
+        assert view.segment_angles([(0, 0), (1, 0), (1, 1)]) == (-90.0, -90.0)
+        from spm_studio.ui.parameter_box_dialog import ParameterBoxDialog
+        from types import SimpleNamespace
+        dialog = ParameterBoxDialog(SimpleNamespace(path=Path('x.sxm'), metadata={'header': {'BIAS': '1'}},
+                                                    channels={'Z': None}), 'Z', None, win)
+        assert dialog.state()['keys'] == ['bias']
+        dialog.close(); dialog.deleteLater()
+
     for name, fn in (('themes', themes), ('menus', menus), ('settings window', settings),
+                     ('spectroscopy composer', spectroscopy_composer),
                      ('assistant panel', assistant),
                      ('results options', options), ('live tool detection', live_tools), ('export-panel figures', script_figures),
                      ('svg result preview', results_view), ('LaTeX and presentation editors', documents)):

@@ -75,15 +75,22 @@ def _axis_scale(geometry):
 
 def line_profile(data, geometry, roi, max_samples=1600):
     if roi is None or roi.kind != 'line' or len(roi.points_px)<2:return None
-    (x0,y0),(x1,y1)=roi.points_px[:2]
-    n=max(2,min(max_samples,int(math.ceil(math.hypot(x1-x0,y1-y0)))+1))
-    xx=np.linspace(x0,x1,n)
-    yy=np.linspace(y0,y1,n)
+    pts=np.asarray(roi.points_px,dtype=float)
+    seg=np.diff(pts,axis=0)
+    pixel_length=float(np.hypot(seg[:,0],seg[:,1]).sum())
+    n=max(2,min(max_samples,int(math.ceil(pixel_length))+1))
+    sx,sy,u=_axis_scale(geometry)
+    # v0.0.10: a polyline (Shift+click) is followed segment by segment.
+    seg_len=np.hypot(seg[:,0]*sx,seg[:,1]*sy)
+    edges=np.concatenate([[0.],np.cumsum(seg_len)])
+    distance=np.linspace(0,float(edges[-1]),n)
+    if edges[-1]>0:
+        xx=np.interp(distance,edges,pts[:,0]);yy=np.interp(distance,edges,pts[:,1])
+    else:
+        xx=np.full(n,pts[0,0]);yy=np.full(n,pts[0,1])
     from scipy.ndimage import map_coordinates
     values=map_coordinates(np.asarray(data,dtype=float),[yy,xx],order=1,mode='nearest')
-    sx,sy,u=_axis_scale(geometry)
-    length=math.hypot((x1-x0)*sx,(y1-y0)*sy)
-    return np.linspace(0,length,n),values
+    return distance,values
 
 
 def area_statistics(data, geometry, roi=None, mask=None):

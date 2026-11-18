@@ -55,6 +55,7 @@ File name = the name shown in the list (`My_STM.json` → “My STM”). Use let
 | `channel_processing` | no | Steps per channel, applied **in the listed order**. `[]` = raw data. |
 | `channel_titles` | no | Colourbar title per channel. LaTeX between `$ $`, single backslash once parsed (write `"$\\Delta f$"` in JSON). |
 | `auto_crop_incomplete` | no | `true`: crop the unmeasured part of an aborted scan when applying. |
+| `multipass` | no | `true` (Nanonis Multipass): every `visible_channels` entry shows **all its passes** (`Z [P1]`, `Z [P2]` …), titles start with `P1 · `, `P2 · `, and the log lists each pass's bias, setpoint, Δz … read from the scan header. Default: on when the name contains “Multipass”. |
 
 Channel fragments are matched without regard to case or punctuation (`"Bias"` matches `Bias (V)`).
 Use the channel names of the user's own scans (they are listed in the Inspector).

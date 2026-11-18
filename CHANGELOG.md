@@ -7,6 +7,29 @@ so write it for users. Add new versions **at the top**.
 The internal builds that preceded the GitHub project (0.7.0 – 0.8.3) are documented in
 [`docs/DEVELOPMENT_HISTORY.md`](docs/DEVELOPMENT_HISTORY.md).
 
+## 0.0.10 — 2026-11-18
+
+### Lines with angles (polylines)
+
+- With the **Line** tool, draw a line as usual, then hold **Shift** and click: the line continues from its last point with a new segment, in any direction. While Shift is held a dashed preview follows the mouse and shows the segment's angle and its turn from the previous segment; hold **Ctrl** as well to snap to 15° steps. Add as many segments as you need.
+- Every corner can be dragged afterwards. Profiles follow the whole path (distance measured along the line, exact at the corners): live profile preview, *Line profiles* (the CSV now lists all corners), Line profile and flake-height tools, and the lines drawn on exported images.
+
+### Multipass profile
+
+- The **Multipass** profile reads the Nanonis Multipass configuration of the scan header: for every channel recorded in several passes it shows all of them (`[P1]`, `[P2]` …) side by side, titles them *P1 · Z*, *P2 · Z* …, and the log lists what each pass changed (bias, setpoint, Δz, playback, time per line).
+- Profiles accept `"multipass": true` (see `profiles/README.md`).
+
+### Measurement parameters on exported images
+
+- **Export › Measurement parameters…** (for each image): write the acquisition parameters inside the image, in the corner you choose (top/bottom, left/right), with your text colour and an optional semi-transparent box. Tick what to show: scan bias, setpoint, feedback, time per line, size, date … and for Multipass scans every value of every pass — *P1 · Bias*, *P2 · Bias*, setpoint, Δz, playback offset, speed ratio … Quick choices: *Default* (the pass of that channel: bias, setpoint, Δz), *Bias of every pass*, *Bias + setpoint + Δz of every pass*. A corner shared with the scale bar moves off it. Saved in export profiles.
+
+### One spectroscopy figure composer for every method
+
+- The *Bias figure composer* is now the **Spectroscopy figure composer**. Choose the **Measurement type** at the top — Δf(V) KPFM / CPD, **dI/dV (STS)**, I(V), I(z) / Δf(z), or a generic X–Y spectrum — and the axes, labels, default channel, units and available fits follow.
+- **dI/dV:** use the lock-in channel or a numerical derivative of the current; optional normalised (dI/dV)/(I/V), Savitzky–Golay smoothing, averaging of forward/backward sweeps and a waterfall offset. Conductance is shown in nS/pS.
+- Where each spectrum was measured is marked on the scan exactly as for bias spectra; images can also show the measurement parameters in a corner.
+- **New figure layout:** titles, panel letters, axis labels, colourbars, the figure title and the legend are now placed by an automatic layout and never overlap; each colourbar sits right under (or beside) its image and the page height follows the content. CPD / kink fits remain available for Δf(V).
+
 ## 0.0.9 — 2026-11-18
 
 ### Assistant in a window of its own

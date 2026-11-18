@@ -82,6 +82,7 @@ for what the dialog does not offer.
 | `unit` | Unit shown in `[ ]`; empty = automatic SI prefix. |
 | `show_colorbar`, `colorbar_position` | `true`/`false`; `below`, `right`, `left`, `none`. |
 | `show_scale_bar`, `scale_bar_color`, `scale_bar_position` | `true`/`false`; `#RRGGBB`; `bottom_right`, `bottom_left`, `top_right`, `top_left`. |
+| `parameters` | Optional box of measurement parameters written on the image: `{"enabled": true, "corner": "top_left", "keys": ["p2.bias", "p2.setpoint", "p2.z_offset"], "color": "#ffffff", "background": true}`. Keys: `bias`, `setpoint`, `feedback`, `time_per_line`, `size`, `pixels`, `date`, `temperature`, `amplitude`, and per Multipass pass `pN.bias`, `pN.setpoint`, `pN.z_offset`, `pN.playback`, `pN.playback_offset`, `pN.time_per_line`, `pN.speed_ratio`, `pN.bol_delay`, `pN.eol_delay`; `pass.bias` etc. means *the pass of this panel's channel*. `keys: null` = default (bias + setpoint, or the pass's bias, setpoint and Δz). A corner shared with the scale bar is moved off it. |
 
 Processing, colormap and contrast are **not** stored here: each image uses the display set on its
 scan (apply a profile first). Do not add other keys: unknown keys are dropped when the file is read.

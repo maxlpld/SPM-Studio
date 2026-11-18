@@ -1,4 +1,10 @@
-"""SPM Studio native bias spectroscopy figure composer. Read-only postprocessing."""
+"""SPM Studio spectroscopy figure composer (scan images + spectra). Read-only postprocessing.
+
+v0.0.10: one tool for every point-spectroscopy method. The *Measurement type* at the top
+(Δf(V) KPFM / CPD, dI/dV STS, I(V), I(z) / Δf(z), generic X–Y) sets the X axis, its label,
+the default Y channel, units, fits and processing. The figure layout is computed by
+Matplotlib's constrained layout, so titles, labels, colourbars and the legend never overlap.
+"""
 from __future__ import annotations
 
 import copy
@@ -23,6 +29,7 @@ from matplotlib.widgets import RectangleSelector
 
 from ..core.bias_figure_analysis import read_spectrum, session_files
 from ..core.bias_figure_render import create_figure, PALETTE
+from ..core import spectroscopy_methods as sm
 from ..core.io import read_scan
 from ..core.display import PALETTES
 from ..core import paths
@@ -33,9 +40,10 @@ def list_available_colormaps():
     extras=([p.name for p in folder.glob('*.csv')]+[p.name for p in folder.glob('*.txt')]) if folder.exists() else []
     return sorted(set(PALETTES)|set(extras),key=str.casefold)
 
-PLUGIN_NAME = 'Bias spectroscopy • paper figure composer'
+PLUGIN_NAME = 'Spectroscopy • paper figure composer'
 PLUGIN_TYPE = 'gui'
-PLUGIN_DESCRIPTION = 'Compose any number of SPM channels and bias curves, show Follow Me measurement positions and export vector PDF.'
+PLUGIN_DESCRIPTION = ('Compose SPM channels and spectra of any method (Δf(V) KPFM, dI/dV STS, I(V), I(z) …), '
+                      'show where each spectrum was measured and export vector PDF.')
 
 
 def _combo_set(box, value):
@@ -69,14 +77,15 @@ class Composer(QDialog):
         super().__init__(main_window)
         self.main_window=main_window
         self.context=context
-        self.setWindowTitle('SPM Studio — Bias spectroscopy figure composer')
+        self.setWindowTitle('SPM Studio — Spectroscopy figure composer')
         self.resize(1550,970)
         self.setMinimumSize(960,650)
         self.scans=({str(main_window.scan.path.resolve()):main_window.scan} if getattr(main_window,'scan',None) is not None else {})
         self.spectra={}
-        self.project={'version':2,'options':{'title':'', 'font':8., 'width':11.,
+        self.project={'version':3,'options':{'title':'', 'font':8., 'width':11.,'method':sm.DEFAULT_METHOD,
                       'share_bias':True,'share_signal':True,'panel_labels':True,'bias_min':'','bias_max':'',
-                      'signal_min':'','signal_max':''},
+                      'signal_min':'','signal_max':'','didv_source':'Lock-in channel','normalize':False,
+                      'smooth':0,'average':False,'offset':'','log_y':False,'x_channel':''},
                       'images':[],'graphs':[]}
         self._updating=False
         self._figure=None
@@ -106,6 +115,36 @@ class Composer(QDialog):
         scroll=QScrollArea();scroll.setWidgetResizable(True);split.addWidget(scroll)
         side=QWidget();scroll.setWidget(side)
         side_l=QVBoxLayout(side);side_l.setContentsMargins(7,7,7,7)
+        method_box=QGroupBox('Measurement type');side_l.addWidget(method_box)
+        mf=QFormLayout(method_box)
+        self.method=QComboBox();self.method.setObjectName('SpectroscopyMethodV0010')
+        for key,m in sm.METHODS.items():self.method.addItem(m.label,key)
+        self.method.setToolTip('What was measured: sets the X axis, labels, default channel, units and fits')
+        self.method.currentIndexChanged.connect(self.change_method)
+        self.method_hint=QLabel('');self.method_hint.setWordWrap(True);self.method_hint.setObjectName('hint')
+        self.didv_source=QComboBox();self.didv_source.addItems(['Lock-in channel','Numerical d(Current)/dV'])
+        self.didv_source.setToolTip('Lock-in: plot the demodulated channel. Numerical: derivative of the current (smoothed).')
+        self.normalize=QCheckBox('Normalised (dI/dV)/(I/V)')
+        self.smooth=QDoubleSpinBox();self.smooth.setRange(0,101);self.smooth.setDecimals(0);self.smooth.setSingleStep(2)
+        self.smooth.setSuffix(' points');self.smooth.setSpecialValueText('No smoothing')
+        self.smooth.setToolTip('Savitzky–Golay smoothing window (odd number of points); the files are unchanged')
+        self.average=QCheckBox('Average forward and backward sweeps')
+        self.offset=_line('0 = none (display unit)')
+        self.offset.setToolTip('Waterfall: shift each spectrum of a graph by this amount')
+        self.log_y=QCheckBox('Logarithmic Y axis (|signal|)')
+        self.x_channel=QComboBox();self.x_channel.setEditable(True)
+        self.x_channel.setToolTip('Channel of the spectroscopy file used as X axis')
+        for w in (self.didv_source,self.x_channel):w.currentIndexChanged.connect(self.update_global)
+        self.x_channel.currentTextChanged.connect(self.update_global)
+        for w in (self.normalize,self.average,self.log_y):w.stateChanged.connect(self.update_global)
+        self.smooth.valueChanged.connect(self.update_global);self.offset.textEdited.connect(self.update_global)
+        mf.addRow('Method',self.method);mf.addRow('',self.method_hint)
+        self._method_rows={}
+        for key,label,widget in (('didv_source','dI/dV from',self.didv_source),('normalize','',self.normalize),
+                                 ('x_channel','X channel',self.x_channel),('smooth','Smoothing',self.smooth),
+                                 ('average','',self.average),('offset','Waterfall offset',self.offset),
+                                 ('log_y','',self.log_y)):
+            mf.addRow(label,widget);self._method_rows[key]=(mf,widget)
         box=QGroupBox('Figure settings');side_l.addWidget(box)
         f=QFormLayout(box)
         self.figure_title=_line('Optional overall title');self.figure_title.textEdited.connect(self.update_global)
@@ -115,9 +154,9 @@ class Composer(QDialog):
         self.font_size=QDoubleSpinBox();self.font_size.setRange(5,15);self.font_size.setDecimals(1)
         self.font_size.valueChanged.connect(self.update_global)
         f.addRow('Title',self.figure_title);f.addRow('Page width',self.figure_width);f.addRow('Font size',self.font_size)
-        axes_box=QGroupBox('Paper axes · multi-site CPD comparison');side_l.addWidget(axes_box)
+        axes_box=QGroupBox('Paper axes · multi-site comparison');side_l.addWidget(axes_box)
         af=QFormLayout(axes_box)
-        self.share_bias=QCheckBox('Same absolute bias range in every plot')
+        self.share_bias=QCheckBox('Same X range in every plot')
         self.share_bias.setChecked(True);self.share_bias.stateChanged.connect(self.update_global)
         self.share_signal=QCheckBox('Same Y range for matching channels / units')
         self.share_signal.setChecked(True);self.share_signal.stateChanged.connect(self.update_global)
@@ -132,9 +171,10 @@ class Composer(QDialog):
         except Exception:self.transparent_export.setChecked(False)
         af.addRow('',self.share_bias);af.addRow('',self.share_signal);af.addRow('',self.panel_labels)
         af.addRow('',self.transparent_export)
-        af.addRow('Bias X min / max (V)',_row(self.bias_min,self.bias_max))
+        self.x_range_label=QLabel('X min / max (V)')
+        af.addRow(self.x_range_label,_row(self.bias_min,self.bias_max))
         af.addRow('Y min / max (display unit)',_row(self.signal_min,self.signal_max))
-        af.addRow(QLabel('Blank = automatic. X is absolute voltage, never centered on an individual CPD.'))
+        af.addRow(QLabel('Blank = automatic. X is absolute (bias in V, Z in nm), never re-centred per curve.'))
 
         self.tabs=QTabWidget();side_l.addWidget(self.tabs,1)
         self._image_tab();self._graph_tab()
@@ -181,6 +221,10 @@ class Composer(QDialog):
         self.i_markers=QCheckBox('Spectroscopy markers');self.i_markers.stateChanged.connect(self.update_image)
         self.i_flipx=QCheckBox('Flip marker X');self.i_flipx.stateChanged.connect(self.update_image)
         self.i_flipy=QCheckBox('Flip marker Y');self.i_flipy.stateChanged.connect(self.update_image)
+        self.i_params=QComboBox();self.i_params.addItems(['None','Top left','Top right','Bottom left','Bottom right'])
+        self.i_params.setToolTip('Write the measurement parameters (bias, setpoint; for Multipass the pass of the '
+                                 'channel: bias, setpoint, Δz) in a corner of the image')
+        self.i_params.currentIndexChanged.connect(self.update_image)
         self.i_driftx=_line('0');self.i_drifty=_line('0')
         self.i_driftx.textEdited.connect(self.update_image);self.i_drifty.textEdited.connect(self.update_image)
         form.addRow('Panel title',self.i_title);form.addRow('Scan file',self.i_scan)
@@ -189,12 +233,13 @@ class Composer(QDialog):
         form.addRow('Display unit',self.i_unit)
         form.addRow('Colour minimum',self.i_vmin);form.addRow('Colour maximum',self.i_vmax)
         form.addRow('',self.i_processed);form.addRow('',_row(self.i_scale,self.i_markers))
+        form.addRow('Parameters on image',self.i_params)
         form.addRow('Coordinate convention',_row(self.i_flipx,self.i_flipy))
         form.addRow('Manual drift X/Y (nm)',_row(self.i_driftx,self.i_drifty))
         lay.addStretch(1)
 
     def _graph_tab(self):
-        tab=QWidget();self.tabs.addTab(tab,'Bias plots & sweeps')
+        tab=QWidget();self.tabs.addTab(tab,'Spectra plots & sweeps')
         lay=QVBoxLayout(tab);lay.setContentsMargins(4,5,4,4)
         lay.addWidget(_row(_push('Add graph',self.add_graph),_push('Remove graph',self.remove_graph),
                            _push('↑',lambda:self.move_graph(-1)),_push('↓',lambda:self.move_graph(1))))
@@ -203,7 +248,8 @@ class Composer(QDialog):
         group=QGroupBox('Selected graph');form=QFormLayout(group);lay.addWidget(group)
         self.g_title=_line('e.g. Charged molecule');self.g_title.textEdited.connect(self.update_graph)
         self.g_channel=QComboBox();self.g_channel.currentIndexChanged.connect(self.update_graph)
-        self.g_unit=QComboBox();self.g_unit.addItems(['Auto','Raw','pm','nm','mV','V','pA','nA'])
+        self.g_unit=QComboBox();self.g_unit.addItems(['Auto','Raw','pm','nm','µV','mV','V','fA','pA','nA',
+                                                      'pS','nS','µS','Hz','kHz'])
         self.g_unit.currentIndexChanged.connect(self.update_graph)
         self.g_trend=QComboBox();self.g_trend.addItems(['None','Kink vs height','CPD vs height'])
         self.g_trend.currentIndexChanged.connect(self.update_graph)
@@ -216,7 +262,8 @@ class Composer(QDialog):
         self.g_annotate=QCheckBox('Mark detected kink / CPD on curves')
         self.g_annotate.stateChanged.connect(self.update_graph)
         form.addRow('Graph title',self.g_title);form.addRow('Y channel',self.g_channel)
-        form.addRow('Y unit',self.g_unit);form.addRow('Height analysis',self.g_trend)
+        self.g_trend_label=QLabel('Height analysis')
+        form.addRow('Y unit',self.g_unit);form.addRow(self.g_trend_label,self.g_trend)
         form.addRow('Fit using sweep',self.g_branch)
         form.addRow('Min. kink BIC gain',self.g_minbic);form.addRow('Min. kink SNR',self.g_sigma)
         form.addRow('',self.g_annotate)
@@ -239,7 +286,7 @@ class Composer(QDialog):
             spin.valueChanged.connect(self.update_inset)
             self.g_inset_pos.append(spin)
         il.addRow('',self.g_inset)
-        il.addRow('Bias region min/max (V)',_row(*self.g_region_fields[:2]))
+        il.addRow('X region min/max',_row(*self.g_region_fields[:2]))
         il.addRow('Signal region min/max',_row(*self.g_region_fields[2:]))
         il.addRow('Inset location',self.g_inset_preset)
         il.addRow('Position X / Y',_row(*self.g_inset_pos[:2]))
@@ -289,6 +336,7 @@ class Composer(QDialog):
         self.project['graphs'].append(self._new_graph('Charged molecule'))
         self.project['graphs'].append(self._new_graph('Non-charged molecule'))
         self._sync_all()
+        self._apply_method_ui()
         self.image_list.setCurrentRow(0);self.graph_list.setCurrentRow(0)
         self.figure_width.setValue(11);self.font_size.setValue(8.)
 
@@ -324,8 +372,67 @@ class Composer(QDialog):
                 'style':self._style_dict(scan,channel),'scalebar':True,'markers':True,
                 'flip_x':False,'flip_y':False,'drift_x':0.,'drift_y':0.}
 
-    def _new_graph(self,title='Bias spectroscopy'):
-        return {'title':title,'channel':'OC M1 Freq. Shift (Hz)','unit':'Auto',
+    def _method(self):
+        return sm.method(self.project.get('options',{}).get('method'))
+
+    def _default_channel(self):
+        m=self._method()
+        for spec in self.spectra.values():
+            ch=sm.preferred_channel(spec,m)
+            if ch:return ch
+        return {'bias_kpfm':'OC M1 Freq. Shift (Hz)','didv':'LI Demod 1 X (V)','iv':'Current (A)',
+                'iz':'Current (A)'}.get(m.key,'')
+
+    def change_method(self,*_):
+        if self._updating:return
+        old=self._method()
+        self.project['options']['method']=self.method.currentData() or sm.DEFAULT_METHOD
+        m=self._method()
+        if m.key!=old.key:
+            for graph in self.project['graphs']:
+                # The Y channel follows the method: dI/dV → lock-in, I(V) → current, KPFM → Δf …
+                spec=next((self.spectra[t['path']] for t in graph.get('traces',[]) if t.get('path') in self.spectra),None)
+                graph['channel']=(sm.preferred_channel(spec,m) if spec is not None else None) or self._default_channel()
+                if graph.get('trend','None') not in m.fits:graph['trend']='None'
+                title=graph.get('title','')
+                if title.startswith(old.graph_title):graph['title']=m.graph_title+title[len(old.graph_title):]
+        self._apply_method_ui()
+        row=self.graph_list.currentRow()
+        self._sync_all()
+        self.graph_list.setCurrentRow(row)
+        self.on_graph_select(row)
+        self.schedule()
+
+    def _apply_method_ui(self):
+        m=self._method();o=self.project.get('options',{})
+        self._updating=True
+        _combo_set(self.method,m.key)
+        self.method_hint.setText(m.hints or '')
+        self.method_hint.setVisible(bool(m.hints))
+        for key,(form,widget) in self._method_rows.items():
+            visible=key in m.options
+            widget.setVisible(visible)
+            label=form.labelForField(widget)
+            if label is not None:label.setVisible(visible)
+        self.didv_source.setCurrentText(str(o.get('didv_source','Lock-in channel')))
+        self.normalize.setChecked(bool(o.get('normalize',False)))
+        self.smooth.setValue(float(o.get('smooth',0) or 0))
+        self.average.setChecked(bool(o.get('average',False)))
+        self.offset.setText(str(o.get('offset','') or ''))
+        self.log_y.setChecked(bool(o.get('log_y',False)))
+        names=sorted({n for spec in self.spectra.values() for n in sm.x_channels(spec)},key=str.casefold)
+        self.x_channel.clear();self.x_channel.addItems(names)
+        self.x_channel.setCurrentText(str(o.get('x_channel','') or (names[0] if names else '')))
+        self.g_trend.clear();self.g_trend.addItems(list(m.fits))
+        self.g_trend.setEnabled(len(m.fits)>1);self.g_trend_label.setEnabled(len(m.fits)>1)
+        for w in (self.g_branch,self.g_minbic,self.g_sigma,self.g_annotate):w.setEnabled(m.key=='bias_kpfm')
+        unit={'bias':'V','z':'nm'}.get(m.sweep,'')
+        self.x_range_label.setText(f'X min / max ({unit})' if unit else 'X min / max')
+        self._updating=False
+
+    def _new_graph(self,title=None):
+        title=title or self._method().graph_title
+        return {'title':title,'channel':self._default_channel(),'unit':'Auto',
                 'trend':'None','trend_direction':'Forward','min_bic':14.0,
                 'min_sigma':4.,'annotate':False,'traces':[],
                 'inset':{'enabled':False,'bounds':None,'position':[.57,.53,.40,.40]}}
@@ -380,6 +487,7 @@ class Composer(QDialog):
             self.i_markers.setChecked(im.get('markers',True))
             self.i_flipx.setChecked(im.get('flip_x',False))
             self.i_flipy.setChecked(im.get('flip_y',False))
+            _combo_set(self.i_params,im.get('parameters','None'))
             self.i_driftx.setText(str(im.get('drift_x',0)))
             self.i_drifty.setText(str(im.get('drift_y',0)))
         self._updating=False
@@ -417,7 +525,8 @@ class Composer(QDialog):
              'unit':self.i_unit.currentText(), 'vmin':self.i_vmin.text().strip(),
              'vmax':self.i_vmax.text().strip(), 'processed':self.i_processed.isChecked(),
              'scalebar':self.i_scale.isChecked(),'markers':self.i_markers.isChecked(),
-             'flip_x':self.i_flipx.isChecked(),'flip_y':self.i_flipy.isChecked()})
+             'flip_x':self.i_flipx.isChecked(),'flip_y':self.i_flipy.isChecked(),
+             'parameters':self.i_params.currentText()})
         for field,widget in (('drift_x',self.i_driftx),('drift_y',self.i_drifty)):
             try:im[field]=float(widget.text())
             except ValueError:im[field]=0.
@@ -473,8 +582,8 @@ class Composer(QDialog):
             channels=set()
             for t in g['traces']:
                 s=self.spectra.get(t['path'])
-                if s:channels.update(s.channels())
-            channels.add(g.get('channel','OC M1 Freq. Shift (Hz)'))
+                if s:channels.update(sm.y_channels(s,self._method()))
+            if g.get('channel'):channels.add(g['channel'])
             self.g_channel.addItems(sorted(channels,key=str.lower))
             _combo_set(self.g_channel,g.get('channel',''))
             _combo_set(self.g_unit,g.get('unit','Auto'))
@@ -500,7 +609,7 @@ class Composer(QDialog):
         if g and g['traces']:self.trace_list.setCurrentRow(0)
 
     def add_graph(self):
-        self.project['graphs'].append(self._new_graph(f'Bias spectroscopy {len(self.project["graphs"])+1}'))
+        self.project['graphs'].append(self._new_graph(f'{self._method().graph_title} {len(self.project["graphs"])+1}'))
         self._sync_all();self.graph_list.setCurrentRow(len(self.project['graphs'])-1)
         self.tabs.setCurrentIndex(1);self.schedule()
 
@@ -680,10 +789,9 @@ class Composer(QDialog):
                 g['traces'].append(new[-1])
             except Exception as exc:errors.append(f'{Path(p).name}: {exc}')
         if new and len(g['traces'])==len(new):
-            preferred=[ch for ch in self.spectra[new[0]['path']].channels()
-                       if 'oc m1 freq' in ch.casefold()]
-            if preferred:g['channel']=preferred[0]
-            elif self.spectra[new[0]['path']].channels():g['channel']=self.spectra[new[0]['path']].channels()[0]
+            preferred=sm.preferred_channel(self.spectra[new[0]['path']],self._method())
+            if preferred:g['channel']=preferred
+        if new:self._apply_method_ui()
         index=self.graph_list.currentRow()
         self.on_graph_select(index)
         if g['traces']:self.trace_list.setCurrentRow(len(g['traces'])-1)
@@ -748,7 +856,11 @@ class Composer(QDialog):
                  'share_bias':self.share_bias.isChecked(),'share_signal':self.share_signal.isChecked(),
                  'panel_labels':self.panel_labels.isChecked(),
                  'bias_min':self.bias_min.text().strip(),'bias_max':self.bias_max.text().strip(),
-                 'signal_min':self.signal_min.text().strip(),'signal_max':self.signal_max.text().strip()})
+                 'signal_min':self.signal_min.text().strip(),'signal_max':self.signal_max.text().strip(),
+                 'didv_source':self.didv_source.currentText(),'normalize':self.normalize.isChecked(),
+                 'smooth':int(self.smooth.value()),'average':self.average.isChecked(),
+                 'offset':self.offset.text().strip(),'log_y':self.log_y.isChecked(),
+                 'x_channel':self.x_channel.currentText().strip()})
         self.schedule()
 
     def _load_required_scans(self):
@@ -818,7 +930,7 @@ class Composer(QDialog):
         self.redraw_timer.stop();self.redraw()
         if self._figure is None:return
         home=Path(self.context.get('output_dir') or Path.home())
-        suggested=home / f'bias_spectroscopy_figure.{fmt}'
+        suggested=home / f'{self._method().key}_spectroscopy_figure.{fmt}'
         filename,_=QFileDialog.getSaveFileName(self,f'Export paper figure ({fmt})',str(suggested),
                                               f'{fmt.upper()} (*.{fmt})')
         if not filename:return
@@ -851,7 +963,7 @@ class Composer(QDialog):
 
     def save_project(self):
         filename,_=QFileDialog.getSaveFileName(self,'Save figure setup',
-             str(Path(self.context.get('output_dir',Path.home()))/'bias_figure.figure.json'),
+             str(Path(self.context.get('output_dir',Path.home()))/'spectroscopy_figure.figure.json'),
              'Figure setup (*.json)')
         if filename:
             try:self._write_project(Path(filename))
@@ -879,7 +991,9 @@ class Composer(QDialog):
             for field,key in ((self.bias_min,'bias_min'),(self.bias_max,'bias_max'),
                               (self.signal_min,'signal_min'),(self.signal_max,'signal_max')):
                 field.setText(str(options.get(key,'')))
+            options.setdefault('method',sm.DEFAULT_METHOD)   # setups saved before v0.0.10 are Δf(V)
             self._updating=False
+            self._apply_method_ui()
             self.image_list.setCurrentRow(0);self.graph_list.setCurrentRow(0)
             self.schedule()
         except Exception as exc:QMessageBox.critical(self,'Load error',str(exc))

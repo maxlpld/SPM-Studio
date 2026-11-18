@@ -11,7 +11,7 @@ from dataclasses import dataclass, field, asdict
 import csv
 import numpy as np
 
-from .analysis_utils import profile_between
+from .analysis_utils import profile_between, profile_along, polyline_length
 
 # Distinct, colour-blind friendly line colours (Okabe–Ito + extras).
 LINE_COLORS = ['#0072B2', '#D55E00', '#009E73', '#CC79A7', '#E69F00', '#56B4E9',
@@ -61,11 +61,11 @@ def map_points(points_px, reference_shape, target_shape):
 
 
 def physical_length_nm(points_px, shape, size_m):
-    (c0, r0), (c1, r1) = points_px
+    """Length of the line (or of the whole polyline) in nm; ``None`` when uncalibrated."""
     if not size_m:
         return None
     ny, nx = shape
-    return float(np.hypot((c1 - c0) * size_m[0] / nx, (r1 - r0) * size_m[1] / ny) * 1e9)
+    return polyline_length(points_px, (size_m[0] / nx * 1e9, size_m[1] / ny * 1e9))
 
 
 @dataclass
@@ -95,12 +95,14 @@ def compute_profiles(lines, channels):
             if not line.visible:
                 continue
             pts = map_points(line.points_px, line.reference_shape, data.shape)
-            px, z = profile_between(data, *pts)
-            length = physical_length_nm(pts, data.shape, ch.get('size_m'))
-            if length is not None:
-                dist, unit = np.linspace(0, length, len(z)), 'nm'
+            size_m = ch.get('size_m')
+            if size_m:
+                ny, nx = data.shape
+                dist, z = profile_along(data, pts, spacing=(size_m[0] / nx * 1e9, size_m[1] / ny * 1e9))
+                unit = 'nm'
             else:
-                dist, unit = px, 'px'
+                dist, z = profile_along(data, pts)
+                unit = 'px'
             out.append(Profile(line.name, ch['name'], ch.get('unit', ''), dist, z, unit,
                                line.color, int(line.graph), bool(line.inset), pts))
     return out
@@ -111,13 +113,14 @@ def write_csv(profiles, path):
     with open(path, 'w', newline='', encoding='utf-8') as fh:
         w = csv.writer(fh)
         w.writerow(['line', 'channel', 'graph', 'inset', 'distance', 'distance_unit', 'value', 'value_unit',
-                    'col0', 'row0', 'col1', 'row1'])
+                    'col0', 'row0', 'col1', 'row1', 'vertices'])
         for p in profiles:
-            (c0, r0), (c1, r1) = p.points_px
+            (c0, r0), (c1, r1) = p.points_px[0], p.points_px[-1]
+            vertices = ' '.join(f'{c:.3f}:{r:.3f}' for c, r in p.points_px)
             for d, v in zip(p.distance, p.values):
                 w.writerow([p.line, p.channel, p.graph, int(p.inset), f'{d:.8g}', p.distance_unit,
                             '' if not np.isfinite(v) else f'{v:.10g}', p.unit,
-                            f'{c0:.3f}', f'{r0:.3f}', f'{c1:.3f}', f'{r1:.3f}'])
+                            f'{c0:.3f}', f'{r0:.3f}', f'{c1:.3f}', f'{r1:.3f}', vertices])
     return path
 
 
