@@ -1099,7 +1099,7 @@ class MainWindow(QMainWindow):
         presets={'STM':dict(DEFAULT_PROFILE),
                  'KPFM':{**DEFAULT_PROFILE,'name':'KPFM','channel_contains':'Bias','visible_channels':['Z','Bias']},
                  'Multipass':{**DEFAULT_PROFILE,'name':'Multipass','channel_contains':'Z','multipass':True,
-                              'visible_channels':['Z','OC M1 Freq. Shift']}}
+                              'visible_channels':['Z','Current','OC M1 Freq']}}
         # v0.0.5: a built-in profile removed in Settings › Library stays out of the list.
         removed=paths.removed_factory_items()
         presets={k:v for k,v in presets.items() if f'profiles/{k}.json' not in removed}

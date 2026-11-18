@@ -22,11 +22,11 @@
   "channel_styles": {
     "Z": {"colormap": "gray", "range_mode": "percentile", "low": 1, "high": 99, "gamma": 1, "scale_bar": true, "colorbar": true},
     "Current": {"colormap": "viridis", "range_mode": "percentile", "low": 1, "high": 99, "gamma": 1, "scale_bar": true, "colorbar": true},
-    "OC M1 Freq. Shift": {"colormap": "gray", "range_mode": "percentile", "low": 1, "high": 99, "gamma": 1, "scale_bar": true, "colorbar": true}
+    "OC M1 Freq": {"colormap": "gray", "range_mode": "percentile", "low": 1, "high": 99, "gamma": 1, "scale_bar": true, "colorbar": true}
   },
   "visible_channels": [
     "Z",
     "Current",
-    "OC M1 Freq. Shift"
+    "OC M1 Freq"
   ]
 }
