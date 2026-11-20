@@ -7,6 +7,23 @@ so write it for users. Add new versions **at the top**.
 The internal builds that preceded the GitHub project (0.7.0 – 0.8.3) are documented in
 [`docs/DEVELOPMENT_HISTORY.md`](docs/DEVELOPMENT_HISTORY.md).
 
+## 0.0.11 — 2026-11-20
+
+### Delete exactly the line you select
+
+- Click a line (or a region / point) on the scan to select it: it gets a white halo and is selected in the *Selections* list too. Press **Delete** (Suppr) to remove only that one. Before, Delete always removed the most recent line.
+- The remaining lines are renumbered (L1, L2 …) in drawing order but **keep their colours**; a custom name given in *Line profiles* is kept. A new line takes a colour that is not already on the scan. The *Line profiles* window follows the deletion.
+- With nothing selected, Delete removes nothing (the status bar explains how to select). *Undo last* still removes the most recent line.
+- Line colours are now the same on the scan, in the live profile preview and on the exported image.
+
+### New tool: Microscope X/Y calibration (lattice)
+
+- Calibrates the lateral X/Y piezo constants from atomic-resolution images of a known crystal, using **every open scan**: it reads the scan angle, the slow-scan direction and the previous calibration from each file, detects the lattice with the Lattice measurements engine and fits the new constants with their uncertainties (bootstrap and leave-one-out tests).
+- **Thermal drift:** the drift compensation written in each file is taken into account, one session drift is fitted with the calibration when the scans allow it (up and down scans, 0°/90°, different speeds), and every up/down pair gives an independent drift estimate that does not use the reference lattice.
+- Reference crystals: KBr(001) by default (a = 6.65 Å, γ = 90°, diagonal 4.7 Å — A. Hinaut, Ph.D. thesis, Université Toulouse III, 2012), NaCl, KCl, HOPG, Au/Ag/Cu(111), Si(111)-7×7, h-BN or custom; the conventional and the primitive surface cell are both recognised.
+- Results: a before → after lattice figure of the active scan (old values and arrows pale, new ones in full colour; old → new calibration in the other corner), a statistics figure, a JSON and a CSV. See the tool's README.
+- Installed automatically for existing users (once; a copy you already imported is left untouched).
+
 ## 0.0.10 — 2026-11-18
 
 ### Lines with angles (polylines)

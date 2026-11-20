@@ -266,6 +266,42 @@ def upgrade_factory_modules_v050():
     return messages
 
 
+NEW_FACTORY_MODULES = ('microscope_calibration',)
+
+
+def install_new_factory_modules(names=NEW_FACTORY_MODULES):
+    """Add tools that were bundled after the user's first installation (v0.0.11+).
+
+    Each new tool is offered once: it is copied only when no folder of that name exists, and a
+    tool the user deleted afterwards is not brought back.
+    """
+    import json, shutil
+    dest=scripts_dir()
+    marker=dest/'.factory_new_modules.json'
+    try:
+        offered=set(json.loads(marker.read_text(encoding='utf8'))) if marker.is_file() else set()
+    except (OSError, ValueError):
+        offered=set()
+    bundled=bundled_studio_root()/'scripts'
+    messages=[]
+    for name in names:
+        if name in offered:
+            continue
+        source=bundled/name
+        if not (source/'module.json').is_file():
+            continue
+        target=dest/name
+        if not target.exists():
+            shutil.copytree(source,target,ignore=shutil.ignore_patterns('__pycache__','*.pyc'))
+            messages.append(f'{name}: new tool installed')
+        offered.add(name)
+    try:
+        marker.write_text(json.dumps(sorted(offered)),encoding='utf8')
+    except OSError:
+        pass
+    return messages
+
+
 def _copy_missing_only(src,dst):
     """shutil.copytree callback that leaves already-present vendor files intact."""
     import shutil

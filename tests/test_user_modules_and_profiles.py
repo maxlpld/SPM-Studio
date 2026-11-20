@@ -13,7 +13,7 @@ def test_user_folder_receives_real_modules_and_prompt_once(tmp_path,monkeypatch)
     folder=install_factory_modules(sources)
     mods,errors=discover_modules([folder])
     assert not errors
-    assert set(mods)=={'channel_overlay','cpd_histogram','flake_height','kpfm_edge','lattice_measurements','molecule_placement','multiframe_drift_stack'}
+    assert set(mods)=={'channel_overlay','cpd_histogram','flake_height','kpfm_edge','lattice_measurements','microscope_calibration','molecule_placement','multiframe_drift_stack'}
     assert 'molecule_lattice_overlay' not in mods  # v15 removes redundant molecule overlay
     assert (folder/'README_SCRIPT.md').exists()
     assert mods['flake_height'].interaction=='line_profiles'

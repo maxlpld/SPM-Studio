@@ -1,0 +1,206 @@
+{
+  "api_version": "1.0",
+  "id": "microscope_calibration",
+  "name": "Microscope X/Y calibration (lattice)",
+  "version": "1.3.0",
+  "description": "New X/Y piezo calibration constants from lattice images of a known crystal (KBr, NaCl, HOPG …), fitted over every open scan; before → after lattice figure and statistics.",
+  "category": "Lattice",
+  "mode": "analysis",
+  "status": "experimental",
+  "entrypoint": "module:run",
+  "interaction": "none",
+  "snapshot_channels": "selected",
+  "requires": [
+    "numpy",
+    "scipy",
+    "matplotlib",
+    "skimage"
+  ],
+  "parameters": {
+    "material": {
+      "type": "choice",
+      "label": "Reference crystal",
+      "default": "KBr(001) — a = 6.65 Å, γ = 90°, diagonal 4.7 Å (Hinaut 2012)",
+      "choices": [
+        "Custom",
+        "KBr(001) — a = 6.65 Å, γ = 90°, diagonal 4.7 Å (Hinaut 2012)",
+        "NaCl(001) — Cl–Cl square cell",
+        "KCl(001) — Cl–Cl square cell",
+        "HOPG / graphene (hexagonal)",
+        "Au(111) (1×1)",
+        "Ag(111) (1×1)",
+        "Cu(111) (1×1)",
+        "Si(111)-(7×7)",
+        "h-BN (hexagonal)"
+      ],
+      "description": "Fills a, b, γ and the diagonal (source shown in the log). Choose “Custom” to use the four values below."
+    },
+    "a_angstrom": {
+      "type": "float",
+      "label": "a (Å) — with Custom",
+      "default": 6.65,
+      "min": 0.0,
+      "max": 1000.0,
+      "description": "Lattice constant a. KBr: 6.65 Å (conventional cell); the 4.7 Å cell seen in the image is recognised automatically."
+    },
+    "b_angstrom": {
+      "type": "float",
+      "label": "b (Å) — with Custom, 0 = same as a",
+      "default": 0.0,
+      "min": 0.0,
+      "max": 1000.0
+    },
+    "gamma_deg": {
+      "type": "float",
+      "label": "γ (°) — with Custom, 0 = unknown",
+      "default": 90.0,
+      "min": 0.0,
+      "max": 179.0,
+      "description": "Angle between a and b (90° square/rectangular, 120° hexagonal). Gives the two diagonals, which make X and Y separable even for a lattice at 45°."
+    },
+    "diagonal_angstrom": {
+      "type": "float",
+      "label": "Diagonal (Å) — with Custom, 0 = none",
+      "default": 4.7,
+      "min": 0.0,
+      "max": 1500.0,
+      "description": "Full diagonal |a ± b| or half diagonal (KBr: 4.7 Å = distance between neighbouring ions of the same species). Checked against a, b, γ."
+    },
+    "auto_match_cell": {
+      "type": "bool",
+      "label": "Recognise conventional vs primitive cell",
+      "default": true,
+      "description": "If the detected lattice matches a/√2 or a·√2 (square), a·√3 or a/√3 (hexagonal) of the value entered — e.g. KBr a0 = 6.60 Å entered while the image shows the 4.67 Å surface cell — use that exact description and say so in the log."
+    },
+    "previous_cx_nm_per_v": {
+      "type": "float",
+      "label": "Previous calibration X (nm/V) — 0 = from file",
+      "default": 0.0,
+      "min": 0.0,
+      "description": "Used when the file has no piezo calibration (or with the override below). Leave 0 and 0 to get correction factors only."
+    },
+    "previous_cy_nm_per_v": {
+      "type": "float",
+      "label": "Previous calibration Y (nm/V) — 0 = from file",
+      "default": 0.0,
+      "min": 0.0
+    },
+    "override_metadata": {
+      "type": "bool",
+      "label": "Use these previous values instead of the files'",
+      "default": false
+    },
+    "traces": {
+      "type": "choice",
+      "label": "Traces used",
+      "default": "Active trace only",
+      "choices": [
+        "Active trace only",
+        "Forward and backward (independent measurements)"
+      ]
+    },
+    "fit_axis_skew": {
+      "type": "bool",
+      "label": "Also fit X/Y axis non-orthogonality",
+      "default": false,
+      "description": "Adds a third parameter (angle between the piezo axes ≠ 90°). Needs vectors in ≥ 3 independent directions (e.g. scans at 0° and 90° with a rotated lattice)."
+    },
+    "drift_mode": {
+      "type": "choice",
+      "label": "Thermal drift",
+      "default": "Header + fit drift (recommended)",
+      "choices": [
+        "Header + fit drift (recommended)",
+        "Header only",
+        "Fit drift only (ignore header)",
+        "No drift correction"
+      ],
+      "description": "Header: the drift compensation written in each file (Nanonis Piezo Configuration › Drift X/Y, on/off) is taken into account. Fit: one drift velocity for the session is fitted with the calibration — needs up and down scans, 0°/90° scans or different speeds. Up/down pairs give an independent check."
+    },
+    "max_deviation_percent": {
+      "type": "float",
+      "label": "Reject lattices off by more than (%)",
+      "default": 25.0,
+      "min": 1.0,
+      "max": 80.0,
+      "description": "A detected cell this far from the reference is another lattice, a superstructure or an FFT harmonic and is not used."
+    },
+    "bootstrap_repeats": {
+      "type": "integer",
+      "label": "Bootstrap repeats (≥ 3 scans)",
+      "default": 400,
+      "min": 0,
+      "max": 5000
+    },
+    "scan_colormap": {
+      "type": "choice",
+      "label": "Colormap",
+      "default": "Current scan display",
+      "choices": [
+        "Current scan display",
+        "gray",
+        "afmhot",
+        "viridis",
+        "inferno",
+        "magma",
+        "plasma",
+        "cividis",
+        "copper",
+        "hot",
+        "bone",
+        "cubehelix",
+        "Greys",
+        "gray_r"
+      ]
+    },
+    "vector_a_color": {
+      "type": "color",
+      "label": "Vector a colour",
+      "default": "#16d8f5"
+    },
+    "vector_b_color": {
+      "type": "color",
+      "label": "Vector b colour",
+      "default": "#fbb748"
+    },
+    "calibration_color": {
+      "type": "color",
+      "label": "Calibration text colour",
+      "default": "#7ee081"
+    },
+    "lattice_legend_corner": {
+      "type": "choice",
+      "label": "Lattice values corner",
+      "default": "top_left",
+      "choices": [
+        "top_left",
+        "top_right",
+        "bottom_left",
+        "bottom_right"
+      ]
+    },
+    "calibration_legend_corner": {
+      "type": "choice",
+      "label": "Calibration values corner",
+      "default": "top_right",
+      "choices": [
+        "top_left",
+        "top_right",
+        "bottom_left",
+        "bottom_right"
+      ]
+    },
+    "figure_title": {
+      "type": "string",
+      "label": "Figure title (optional)",
+      "default": ""
+    }
+  },
+  "selection": {
+    "tools": [
+      "rectangle"
+    ],
+    "multiple": false,
+    "preview": "none"
+  }
+}

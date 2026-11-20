@@ -122,7 +122,8 @@ class LivePlot(QWidget):
         p.setPen(QPen(QColor(ui['border']),1))
         p.drawLine(area.bottomLeft(),area.topLeft());p.drawLine(area.bottomLeft(),area.bottomRight())
         finite=[]
-        for _,x,y in self.series:
+        for item in self.series:
+            x,y=item[1],item[2]
             x=np.asarray(x);y=np.asarray(y);mask=np.isfinite(x)&np.isfinite(y)
             if mask.any():finite.append((x[mask],y[mask]))
         if not finite:
@@ -154,7 +155,8 @@ class LivePlot(QWidget):
                 p.setPen(QColor(ui['foreground']))
                 p.drawText(QRectF(area.left(),area.bottom()+21,area.width(),17),
                            Qt.AlignmentFlag.AlignCenter,f'{a:.6g}     to     {b:.6g}  (SI)')
-        for i,(_,x,y) in enumerate(self.series):
+        for i,item in enumerate(self.series):
+            x,y=item[1],item[2]
             x=np.asarray(x);y=np.asarray(y);valid=np.isfinite(x)&np.isfinite(y);x=x[valid];y=y[valid]
             if len(x)<2:continue
             path=QPainterPath()
@@ -163,7 +165,8 @@ class LivePlot(QWidget):
                 py=area.bottom()-area.height()*(float(yy)-yl)/yr
                 if j==0:path.moveTo(px,py)
                 else:path.lineTo(px,py)
-            p.setPen(QPen(QColor(['#6db5ee','#efbb64','#86dba9','#dc96ef'][i%4]),1.5))
+            colour=item[3] if len(item)>3 else ['#6db5ee','#efbb64','#86dba9','#dc96ef'][i%4]
+            p.setPen(QPen(QColor(colour),1.5))
             p.drawPath(path)
         p.setPen(QColor(ui['foreground']))
         p.drawText(QRectF(area.left(),area.bottom()+3,area.width()*.5,15),f'{lo:.4g}')
