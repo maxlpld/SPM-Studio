@@ -422,8 +422,12 @@ class MainWindow(QMainWindow):
         self.slides_button=tool_button('Slides','slides','Presentation editor: new presentation, open, import')
         self.slides_button.setObjectName('OpenSlidesEditorV008')
         self.slides_button.clicked.connect(self.open_slides_editor)
+        self.todo_button=tool_button('To-do','todo','To-do list & notes, connected to the assistant (opens in its own window)')
+        self.todo_button.setObjectName('OpenTodoV0012')
+        self.todo_button.clicked.connect(self.open_todo)
         self.topbar.addWidget(self.latex_button)
         self.topbar.addWidget(self.slides_button)
+        self.topbar.addWidget(self.todo_button)
         self.topbar.addWidget(self.logs_toolbar_button)
         self.topbar.addWidget(self.ai_toolbar_button)
         self.topbar.addWidget(separator())
@@ -603,6 +607,10 @@ class MainWindow(QMainWindow):
         conf=doc_settings.load()
         self.latex_button.setVisible(bool(conf.get('latex_enabled')))
         self.slides_button.setVisible(bool(conf.get('slides_enabled')))
+        self.todo_button.setVisible(bool(conf.get('todo_enabled',True)))
+
+    def open_todo(self):
+        self.documents.open_todo()
 
     def open_latex_editor(self):
         self.documents.launch('latex',self)
@@ -847,6 +855,7 @@ class MainWindow(QMainWindow):
         tools.addAction('Line profiles…',self.open_line_profiles)
         tools.addAction('Place molecules by hand…',self.open_manual_molecules)
         self._action(tools,'Spectroscopy figure composer…',None,self.open_bias_figure_composer)
+        self._action(tools,'3D print (STL / STEP)…',None,self.open_print3d)
         self._action(tools,'Compare saved runs…',None,self.open_research_comparison)
         tools.addSeparator()
         self._action(tools,'Refresh modules','tool.refresh',self.refresh_modules)
@@ -3074,6 +3083,24 @@ class MainWindow(QMainWindow):
         self._log(f'Profile "{selected}" assigned to {len(files)} listed scans (lazy for unopened files).')
         self.statusBar().showMessage(f'Applied profile "{profile.get("name",selected)}" to {len(files)} listed scans',7000)
 
+    def open_print3d(self):
+        """v0.0.12: printable relief (STL / STEP) with a 3D colour bar and a live 3D preview."""
+        try:
+            old=getattr(self,'_print3d_dialog',None)
+            if old is not None and old.isVisible():
+                old.raise_();old.activateWindow();return
+            from .print3d_dialog import create_tool
+            dialog=create_tool(self)
+            dialog.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose,True)
+            dialog.destroyed.connect(lambda *_:setattr(self,'_print3d_dialog',None))
+            self._print3d_dialog=dialog
+            dialog.show()
+            dialog.raise_()
+        except Exception as exc:
+            import traceback
+            self._log('3D print tool could not start:\n'+traceback.format_exc(),important=True)
+            QMessageBox.warning(self,'3D print unavailable',str(exc))
+
     def open_bias_figure_composer(self):
         """Open the native read-only bias/scan publication composer."""
         try:
@@ -3448,6 +3475,11 @@ class MainWindow(QMainWindow):
         composer_item.setToolTip('Scan images + spectra of any method (choose the measurement type at the top) · '
                                  'measurement positions on the scan · PDF/SVG/PNG · no scan needed')
         self.browser.tools.addItem(composer_item)
+        print_item=QListWidgetItem('3D print (STL / STEP) with 3D colour bar')
+        print_item.setData(Qt.ItemDataRole.UserRole,'__print3d__')
+        print_item.setToolTip('Any channel, a lattice or a molecule-placement result as a printable relief · '
+                              '3D colour bar · range cut · live 3D preview · STL / STEP')
+        self.browser.tools.addItem(print_item)
         for msg in issues:self._log('Module discovery: '+msg)
         if quiet:return
         self._log(f'{len(self.modules)} modules detected (manifest-only; no tool code imported)')
@@ -3471,6 +3503,10 @@ class MainWindow(QMainWindow):
         except Exception as exc:self._log(f'Import failed: {exc}',important=True)
 
     def _show_module(self,module_id):
+        if module_id=='__print3d__':
+            self.open_print3d()
+            QTimer.singleShot(0,lambda:self.browser.tools.setCurrentRow(-1))
+            return
         if module_id=='__bias_figure_composer__':
             # Selecting a workspace launcher must not clear active ROIs or tools.
             self.open_bias_figure_composer()

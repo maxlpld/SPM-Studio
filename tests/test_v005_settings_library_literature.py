@@ -98,7 +98,10 @@ def test_assistant_context_points_at_the_guides_and_requires_a_readme(home):
         assert str(paths.customization_dir() / folder / 'README.md') in text
     assert str(paths.scripts_dir() / 'README.md') in text
     assert 'Every tool folder must contain a `README.md`' in text
-    assert 'Literature sources' not in text                  # nothing connected yet
+    # v0.0.12: Consensus and Zotero are on by default; with both off there is no literature section
+    from spm_studio.ai import config
+    config.save({**config.load(), 'consensus_enabled': False, 'zotero_mode': 'off'})
+    assert 'Literature sources' not in spm_context_file(paths.scripts_dir()).read_text(encoding='utf8')
 
 
 # ----------------------------------------------------------------------- profiles
@@ -431,8 +434,8 @@ def test_literature_sources_reach_each_agent(home):
     from spm_studio.ai.cli_events import build_args
     from spm_studio.ai.config import load, save, spm_context_file, DEFAULT
     from spm_studio.core import paths
-    assert DEFAULT['consensus_enabled'] is False and DEFAULT['zotero_mode'] == 'off'      # opt-in
-    assert literature.agent_context(dict(DEFAULT)) == '' and literature.allowed_tools(dict(DEFAULT)) == []
+    assert DEFAULT['consensus_enabled'] is True and DEFAULT['zotero_mode'] == 'auto'      # on by default (v0.0.12)
+    assert literature.agent_context({**DEFAULT, 'consensus_enabled': False, 'zotero_mode': 'off'}) == '' and literature.allowed_tools({**DEFAULT, 'consensus_enabled': False, 'zotero_mode': 'off'}) == []
     conf = load()
     conf.update(consensus_enabled=True, zotero_mode='local')
     save(conf)

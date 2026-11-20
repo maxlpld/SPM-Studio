@@ -149,7 +149,10 @@ class SetupDialog(QDialog):
         self.autonomy.setToolTip('ask: confirm before each coding task · workspace: run inside the staging folder after one confirmation')
         ar.addWidget(self.autonomy);ar.addStretch(1)
         layout.addWidget(self.autonomy_row)
-        self.info=QLabel('Chat runs without tools. Coding tasks ask for permission first.')
+        self.info=QLabel('With Pi, Claude Code or Codex the assistant may read and change files everywhere in '
+                         'SPM Studio (scripts, profiles, templates, documents, the app when you ask) and run '
+                         'commands; Consensus and Zotero are used when connected. Switch tools off at any time '
+                         'with the tools button of the Assistant.')
         self.info.setObjectName('hint')
         self.info.setWordWrap(True);layout.addWidget(self.info)
         layout.addStretch(1)
@@ -804,7 +807,14 @@ class SetupDialog(QDialog):
             if c['judge']=='local' and not c['judge_model']:
                 QMessageBox.warning(self,'Local Judge','Choose an installed model tag or disable the Judge.');return
             c['routing']=self.routing.currentText()
-        c['autonomy']=self.autonomy.currentText();c['configured']=True
+        c['autonomy']=self.autonomy.currentText()
+        if c['backend']=='pi' or c['backend'] in AGENT_BACKENDS:
+            # v0.0.12: an agent set up here may work everywhere in SPM Studio and use Consensus /
+            # Zotero at once (stated in this window; the tools button switches it off).
+            if not self.conf.get('configured') or not c.get('permissions_v0012'):
+                from .config import grant_full_access
+                c=grant_full_access(c)
+        c['configured']=True
         try:save(c)
         except (OSError,ValueError) as exc:
             QMessageBox.warning(self,'Configuration not saved',str(exc));return

@@ -28,7 +28,12 @@ DEFAULT = {'backend': 'none', 'pi_executable': '', 'provider': 'openai', 'model'
            'consensus_enabled': False, 'zotero_mode': 'off', 'zotero_library_id': '',
            'zotero_library_type': 'user',
            # v0.0.7: zotero_mode also takes 'auto' and 'database'; optional Zotero data folder.
-           'zotero_data_dir': ''}
+           'zotero_data_dir': '',
+           # v0.0.12: the assistant may work everywhere in SPM Studio and use the literature sources
+           # from the start (set once by the setup / the first start of this version).
+           'permissions_v0012': False}
+DEFAULT['consensus_enabled']=True
+DEFAULT['zotero_mode']='auto'
 
 
 def base_dir() -> Path:
@@ -69,6 +74,42 @@ def save(conf:dict) -> None:
     if clean['zotero_library_id'] and not str(clean['zotero_library_id']).isdigit():
         raise ValueError('The Zotero library ID is a number')
     atomic_json(base_dir()/'settings.json', clean)
+
+
+def app_folders() -> list[Path]:
+    """Every SPM Studio folder the assistant may change when its tools are on."""
+    from spm_studio.core import paths
+    folders = [paths.scripts_dir(), paths.customization_dir(), paths.data_dir(), paths.config_dir(),
+               paths.bundled_studio_root()]
+    try:
+        from spm_studio.documents import settings as _ds
+        dc = _ds.load()
+        folders += [_ds.latex_root(dc), _ds.slides_root(dc), _ds.documents_home()]
+    except Exception:
+        pass
+    out = []
+    for f in folders:
+        f = Path(f)
+        if f not in out:
+            out.append(f)
+    return out
+
+
+def grant_full_access(conf: dict) -> dict:
+    """Tools on (file + shell, everywhere in SPM Studio) and literature sources on.
+
+    Used when the assistant is set up (the setup window says so) and once when v0.0.12 starts.
+    Consensus still needs its sign-in (Settings › Literature); Zotero 'auto' uses the local
+    Zotero when it exists. Nothing else is changed.
+    """
+    conf = dict(conf)
+    conf['chat_tools'] = True
+    conf['chat_tools_ack'] = True
+    conf['consensus_enabled'] = True
+    if conf.get('zotero_mode', 'off') == 'off':
+        conf['zotero_mode'] = 'auto'
+    conf['permissions_v0012'] = True
+    return conf
 
 
 def detect_pi(include_managed: bool = False) -> list[str]:
@@ -130,7 +171,7 @@ def list_histories() -> list[str]:
     return names
 
 
-def spm_context_file(workspace) -> Path:
+def spm_context_file(workspace, tools: bool = True) -> Path:
     """System-prompt addition telling Pi where it runs inside SPM Studio (written on each start)."""
     from spm_studio.core import paths
     scripts=paths.scripts_dir()
@@ -165,7 +206,8 @@ def spm_context_file(workspace) -> Path:
     try:
         from spm_studio.documents import protocol as _doc_protocol, settings as _doc_settings
         _dc=_doc_settings.load()
-        documents=_doc_protocol.agent_context(bool(_dc.get('latex_enabled')),bool(_dc.get('slides_enabled')))
+        documents=_doc_protocol.agent_context(bool(_dc.get('latex_enabled')),bool(_dc.get('slides_enabled')),
+                                              bool(_dc.get('todo_enabled')))
         if documents:
             documents+=(f"\n- LaTeX projects are folders under `{_doc_settings.latex_root(_dc)}` (each has a root .tex); "
                         f"presentations are folders under `{_doc_settings.slides_root(_dc)}` (`<name>.spmdeck` JSON + `media/`). "
@@ -199,8 +241,19 @@ asks for a new script, a new profile, an export profile, a theme, a colormap, a 
 {guides}
 New or changed files in these folders are picked up without restarting SPM Studio (tools within a few
 seconds; profiles and export profiles when the user opens the list again or uses Settings › Library › Refresh).
-- SPM Studio's own source code (only if the user explicitly asks to patch the app; a restart is then
-  required — say so): {paths.bundled_studio_root()/'src'/'spm_studio'}
+- SPM Studio's own source code: {paths.bundled_studio_root()/'src'/'spm_studio'}
+  You may patch it whenever the user asks for a change of the app itself (back up each file you edit
+  as `name.bak` first, keep the change minimal, check it with `py_compile`); a restart of SPM Studio is
+  then required — say so.
+
+## Your permissions
+{('You HAVE file and shell tools in this session. You are allowed to read, create and change files in '
+  'every SPM Studio folder listed here (tools, customization, documents, to-do list, the app source) and '
+  'to run commands with the Python above. Do not tell the user you lack access: do the work. Ask first '
+  'only before deleting files or changing things outside SPM Studio.') if tools else
+ ('This session runs WITHOUT file or shell tools (chat only). If the user asks you to create or change a '
+  'file, tell them to switch tools on with the tools button in the Assistant header (one click), or give '
+  'the file content to copy. Literature lookups and the editors\' <spm-doc> requests still work.')}
 
 ## Minimal working tool (adapt it)
 `{scripts}/hello_spm/module.json`:
@@ -229,7 +282,7 @@ The user runs a tool by selecting it in Tools (an open scan is required) and cli
   `"{python}" -m json.tool module.json` and `"{python}" -m py_compile module.py`.
 - Offline analysis of saved data only: never send commands to microscopes, Nanonis, heaters,
   vacuum or any laboratory hardware.
-- Do not touch ~/.pi, ~/.claude, ~/.codex, Ollama, credentials or files outside the folders above unless asked.
+- Do not touch ~/.pi, ~/.claude, ~/.codex, Ollama, credentials or files outside the SPM Studio folders unless asked.
 - When finished, say clearly what you created and that it is now in the Tools list.
 {literature}
 {documents}"""

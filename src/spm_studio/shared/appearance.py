@@ -187,6 +187,7 @@ ICONS = {
     'mic': '<rect x="9" y="3.5" width="6" height="11" rx="3"/><path d="M5.5 11v1a6.5 6.5 0 0 0 13 0v-1"/><path d="M12 18v2.5M8.5 20.5h7"/>',
     # v0.0.8: LaTeX editor, presentation editor and Overleaf.
     'latex': '<path d="M6 3.5h8.5L19 8v12.5H6z"/><path d="M14 3.5V8h5"/><path d="M8.5 12.5h2.2l1.3 4 1.6-6h2"/>',
+    'todo': '<rect x="4" y="4" width="16" height="16" rx="2"/><path d="M7.5 9l1.5 1.5 3-3M14 9.5h3M7.5 15l1.5 1.5 3-3M14 15.5h3"/>',
     'slides': '<rect x="3.5" y="4.5" width="17" height="11.5" rx="1.5"/><path d="M12 16v3.5M8.5 19.5h7"/><path d="M8 12.5l2.5-3 2 2 3-3.5"/>',
     'overleaf': '<path d="M19.5 4.5C11 4.5 5 9 5 15.5c0 2.5 1.6 4 3.8 4 5.2 0 8.7-6.5 10.7-15z"/><path d="M5 19.5c2.2-4.4 5.4-7.6 9.5-10"/>',
     'bold': '<path d="M7.5 5h5.5a3.25 3.25 0 0 1 0 6.5H7.5z"/><path d="M7.5 11.5h6.5a3.25 3.25 0 0 1 0 6.5H7.5z"/>',

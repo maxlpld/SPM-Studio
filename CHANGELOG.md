@@ -7,6 +7,32 @@ so write it for users. Add new versions **at the top**.
 The internal builds that preceded the GitHub project (0.7.0 – 0.8.3) are documented in
 [`docs/DEVELOPMENT_HISTORY.md`](docs/DEVELOPMENT_HISTORY.md).
 
+## 0.0.12 — 2026-11-21
+
+### To-do list & notes, connected to the assistant
+
+- New **To-do** button (on by default; Settings › Documents): a to-do list and free notes in their own window, like the LaTeX and presentation editors.
+- Add tasks in one line (`Analysis: CPD map of scan 0024` sets the category), describe what you need in the task's details, tick them when done, drag to reorder.
+- **Ask the assistant ▾**: do the selected task(s), do every open task, plan the open tasks, or write a **report / paper draft** (LaTeX editor) or a **presentation** (Slides) from your notes and finished tasks. The assistant can also read the list, add tasks, tick a task it has finished and note what it did and where the result is.
+- Finished tasks: struck through, normal or hidden (in the window and in Settings › Documents).
+- **Erase everything** button (with confirmation; a copy is kept).
+- Everything is saved automatically in the to-do folder (`<data>/todo/todo.json`, with a backup) and is still there after closing SPM Studio, restarting or updating.
+
+### The assistant may work everywhere in SPM Studio
+
+- With tools on, Pi, Claude Code and Codex may read and change files in every SPM Studio folder: scripts, profiles and templates, LaTeX projects, presentations, the to-do list, and the app's own source when you ask for a change of the app. They may also run commands. Claude Code and Codex now get these folders and the permissions explicitly, so they no longer refuse.
+- **Consensus and Zotero** are on by default. Consensus still needs its sign-in in Settings › Literature; Zotero is found automatically.
+- A new setup (Pi wizard, Claude Code, Codex) switches this on at once; the setup window says so. After updating, the assistant asks once at your next message (the tools button in its header switches tools off at any time).
+- The assistant's instructions now state its permissions clearly, and tell it what to say when tools are off.
+
+### 3D print: STL / STEP relief with a 3D colour bar
+
+- New tool **3D print (STL / STEP)** in Tools: any channel of the open scan (topography, current, dI/dV map, Δf …), a **Lattice measurements** result (vectors raised on the relief, a, b, γ embossed) or a **Molecule placement** result (molecules raised on the relief) becomes a printable relief.
+- **3D colour bar**: a wedge from the lowest value (base) to the highest (base + relief height), with raised ticks and values; place it right, left, top, bottom or not at all.
+- **Cut the range** (percentiles or values) so a single high peak does not flatten everything; values outside are printed flat. Optional smoothing, invert, title, scale bar, text and overlay heights.
+- **Live 3D preview**, rotatable with the mouse; size, highest point and triangle count shown.
+- Exports a watertight binary **STL** and a **STEP** (AP214 faceted solid, grid coarsened automatically to keep CAD imports fast), plus a `.print3d.json` with every parameter.
+
 ## 0.0.11 — 2026-11-20
 
 ### Delete exactly the line you select

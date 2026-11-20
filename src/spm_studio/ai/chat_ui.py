@@ -129,6 +129,7 @@ class AssistantDock(QDockWidget):
         style_dock_titlebar(self)   # single, clear close 'X'; floating stays available via the header button below
         self.host=main_window
         self.conf=load()
+        self._migrate_permissions_v0012()
         self.history=[]
         self.partial=''
         self.rpc=None
@@ -435,7 +436,7 @@ class AssistantDock(QDockWidget):
             elif tools:workspace=_paths.scripts_dir()      # where the app's Tools live (watched live)
             else:workspace=_paths.data_dir()/'ai'/'chat_workspace'
             from .config import spm_context_file
-            try:context=spm_context_file(workspace)
+            try:context=spm_context_file(workspace,tools)
             except OSError:context=None
             self._workspace=workspace
             try:
@@ -521,6 +522,20 @@ class AssistantDock(QDockWidget):
         except OSError as exc:
             self._log('Local Judge proxy unavailable: '+str(exc))
 
+    def _migrate_permissions_v0012(self):
+        """Once with v0.0.12: literature lookups on (read-only), and the tools question is asked
+        again at the next message for anyone who has not switched tools on (with the new scope)."""
+        c=self.conf
+        if c.get('permissions_v0012'):return
+        c['consensus_enabled']=True
+        if c.get('zotero_mode','off')=='off':c['zotero_mode']='auto'
+        if not c.get('chat_tools_ack'):
+            c['chat_tools']=True          # → _ensure_tools_decision asks once more
+        c['permissions_v0012']=True
+        from .config import save
+        try:save(c)
+        except (OSError,ValueError):pass
+
     def _tools_enabled(self):
         c=self.conf
         return (c.get('backend')=='pi' or c.get('backend') in AGENT_BACKENDS) and \
@@ -534,9 +549,11 @@ class AssistantDock(QDockWidget):
     def _ask_tools_consent(self):
         """One-time confirmation before Pi chat gets file and shell tools."""
         from spm_studio.core import paths as _paths
-        answer=QMessageBox.question(self,'Let the assistant create tools?',
-            'The assistant will work in your SPM Studio scripts folder\n'+str(_paths.scripts_dir())+
-            '\nand can read and write files and run commands as your user account (Pi is not sandboxed). '
+        answer=QMessageBox.question(self,'Let the assistant work in SPM Studio?',
+            'The assistant will be allowed to read and change files everywhere in SPM Studio — scripts ('+
+            str(_paths.scripts_dir())+'), profiles and templates, your LaTeX projects, presentations and '
+            'to-do list, and the app itself when you ask for a change — and to run commands as your user '
+            'account (it is not sandboxed). It also searches Consensus and Zotero when they are connected. '
             'New tools appear in the Tools list without restarting. It never controls instruments.\n\n'
             'You can switch this off at any time with the tools button in the Assistant header.')
         ok=answer==QMessageBox.StandardButton.Yes
@@ -715,7 +732,8 @@ class AssistantDock(QDockWidget):
             try:
                 from spm_studio.documents import protocol as _doc_protocol, settings as _doc_settings
                 _dc=_doc_settings.load()
-                docs=_doc_protocol.agent_context(bool(_dc.get('latex_enabled')),bool(_dc.get('slides_enabled')))
+                docs=_doc_protocol.agent_context(bool(_dc.get('latex_enabled')),bool(_dc.get('slides_enabled')),
+                                                 bool(_dc.get('todo_enabled')))
             except Exception:
                 docs=''
             if docs:
