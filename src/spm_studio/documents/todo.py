@@ -10,6 +10,7 @@ from __future__ import annotations
 import datetime as _dt
 import json
 import os
+import time
 import re
 import uuid
 from pathlib import Path
@@ -81,7 +82,17 @@ def _save(data: dict, path: Path | None = None) -> Path:
             pass
     tmp = path.with_name(path.name + f'.{os.getpid()}.tmp')
     tmp.write_text(text, encoding='utf8')
-    os.replace(tmp, path)
+    for attempt in range(8):
+        try:
+            os.replace(tmp, path)
+            return path
+        except PermissionError:          # Windows: the file is briefly held (watcher, indexer, antivirus)
+            time.sleep(.05 * (attempt + 1))
+    path.write_text(text, encoding='utf8')          # last resort: write in place (the .bak is kept)
+    try:
+        tmp.unlink()
+    except OSError:
+        pass
     return path
 
 
