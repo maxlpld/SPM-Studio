@@ -9,7 +9,7 @@ def test_shared_selection_manifest_for_all_modules():
     root=Path(__file__).resolve().parents[1]/'scripts'
     modules,errors=discover_modules([root])
     assert not errors
-    assert set(modules)=={'channel_overlay','cpd_histogram','flake_height','kpfm_edge','lattice_measurements','molecule_placement','multiframe_drift_stack'}
+    assert set(modules)=={'channel_overlay','cpd_histogram','flake_height','kpfm_edge','lattice_measurements','microscope_calibration','molecule_placement','multiframe_drift_stack'}
     assert 'molecule_lattice_overlay' not in modules  # redundant overlay removed
     assert modules['kpfm_edge'].selection['tools']==['line','rectangle']
     assert modules['cpd_histogram'].selection['preview']=='histogram'

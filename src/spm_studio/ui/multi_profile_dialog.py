@@ -157,7 +157,8 @@ class MultiProfileDialog(QDialog):
                     v.line_styles[pts] = style
                 continue
             i = len(self.lines)
-            self.lines.append(LineSpec(pts, shape, f'L{i + 1}', line_color(i), graph=1))
+            colour = v.line_color_of(roi) if hasattr(v, 'line_color_of') else line_color(i)
+            self.lines.append(LineSpec(pts, shape, f'L{i + 1}', colour, graph=1))
         self._rebuild_table()
         self.refresh()
         if not rois:
@@ -216,6 +217,18 @@ class MultiProfileDialog(QDialog):
         for line in self.lines:
             line.graph = min(line.graph, n)
         self._rebuild_table(); self.refresh()
+
+    def remove_points(self, key):
+        """A line deleted on the scan leaves this list; default names are renumbered,
+        custom names and colours are kept (v0.0.11)."""
+        import re
+        key = tuple(map(tuple, key))
+        self.lines = [l for l in self.lines if tuple(map(tuple, l.points_px)) != key]
+        for n, line in enumerate(self.lines, 1):
+            if re.fullmatch(r'L\d+', line.name or ''):
+                line.name = f'L{n}'
+        self._rebuild_table()
+        self.refresh()
 
     def remove_selected(self):
         rows = sorted({i.row() for i in self.table.selectedIndexes()}, reverse=True)

@@ -1,6 +1,7 @@
 """Direct Qt SPM preview: cursor-centred zoom, pan, ROI and physical readout."""
 from __future__ import annotations
 import numpy as np
+import math
 from PySide6.QtCore import Qt, QRectF, QPointF, Signal
 from PySide6.QtGui import QPainter, QImage, QPen, QColor
 from PySide6.QtWidgets import QWidget, QScrollArea
@@ -15,6 +16,7 @@ class ImageView(QWidget):
     roiPreview = Signal(object)
     roiEdited = Signal()
     deleteSelectedRequested = Signal()
+    roiSelected = Signal(int)     # v0.0.11: a click on a line / region selects it
 
     def __init__(self,parent=None):
         super().__init__(parent)
@@ -53,6 +55,9 @@ class ImageView(QWidget):
         self._last_line_pts = None   # vertices of the line that Shift+click extends
         self._poly_cursor = None     # screen position of the dashed next-segment preview
         self._poly_click = False
+        # v0.0.11: every line keeps its colour for its whole life (deleting another line
+        # renumbers the names L1, L2 … but never recolours the remaining lines).
+        self.line_colors = {}
 
     def set_scan(self,image:QImage,data,geometry:Geometry,style:ImageStyle,bounds,channel,unit,
                  *,preserve_view=False,display_zero=False):
@@ -174,12 +179,98 @@ class ImageView(QWidget):
         turn=(absolute-before+180)%360-180
         return absolute,turn
 
+    # ------------------------------------------------------------ line identity (v0.0.11)
+    @staticmethod
+    def line_key(roi):
+        return tuple(map(tuple,roi.points_px))
+
+    def all_rois(self):
+        return list(self.extra_rois)+([self.roi] if self.roi is not None else [])
+
+    def line_color_of(self,roi):
+        """Persistent colour of a line: assigned once (first palette colour not in use)."""
+        from ..core.multi_profiles import line_color,LINE_COLORS
+        key=self.line_key(roi)
+        style=self.line_styles.get(key)
+        if style:
+            return style[0]
+        if key not in self.line_colors:
+            present={self.line_key(r) for r in self.all_rois() if r.kind=='line'}
+            used={c for k,c in self.line_colors.items() if k in present}
+            used|={s[0] for k,s in self.line_styles.items() if k in present}
+            colour=next((line_color(i) for i in range(len(LINE_COLORS)) if line_color(i) not in used),
+                        line_color(len(present)))
+            self.line_colors[key]=colour
+        return self.line_colors[key]
+
+    def line_appearance(self):
+        """[(roi index, colour, name)] for every line, numbered L1, L2 … in drawing order."""
+        out=[];n=0
+        for i,roi in enumerate(self.all_rois()):
+            if roi.kind!='line':continue
+            style=self.line_styles.get(self.line_key(roi))
+            name=style[1] if style else f'L{n+1}'
+            out.append((i,self.line_color_of(roi),name))
+            n+=1
+        return out
+
+    def forget_roi(self,roi):
+        """Remove a line's colour / style when it is deleted."""
+        key=self.line_key(roi)
+        self.line_colors.pop(key,None)
+        self.line_styles.pop(key,None)
+        if self._last_line_pts==key:
+            self._last_line_pts=None
+
+    def renumber_lines(self):
+        """Default names (L1, L2 …) follow the drawing order again; custom names and every
+        colour are kept."""
+        import re
+        n=0
+        for roi in self.all_rois():
+            if roi.kind!='line':continue
+            n+=1
+            key=self.line_key(roi)
+            style=self.line_styles.get(key)
+            if style and re.fullmatch(r'L\d+',str(style[1])):
+                self.line_styles[key]=(style[0],f'L{n}')+tuple(style[2:])
+
+    def roi_at(self,position,tolerance=7.0):
+        """Index (in extra_rois + [roi]) of the line / region / point under the cursor."""
+        if self.geometry is None:
+            return None
+        best=None
+        for i,roi in enumerate(self.all_rois()):
+            pts=[self._to_screen(p) for p in roi.points_px]
+            if roi.kind=='point':
+                d=math.hypot(pts[0].x()-position.x(),pts[0].y()-position.y())
+            elif roi.kind=='rectangle' and len(pts)==2:
+                (x0,y0),(x1,y1)=(pts[0].x(),pts[0].y()),(pts[1].x(),pts[1].y())
+                c=[(x0,y0),(x1,y0),(x1,y1),(x0,y1),(x0,y0)]
+                d=min(_segment_distance(position,a,b) for a,b in zip(c,c[1:]))
+            else:
+                d=min((_segment_distance(position,(a.x(),a.y()),(b.x(),b.y())) for a,b in zip(pts,pts[1:])),
+                      default=1e9)
+            if d<=tolerance and (best is None or d<best[0]):
+                best=(d,i)
+        return None if best is None else best[1]
+
+    def _select_at(self,position):
+        index=self.roi_at(position)
+        if index is not None:
+            self.selected_roi_index=index
+            self.roiSelected.emit(index)
+            self.update()
+        return index
+
     def _replace_line(self,origin,index,old,new):
         if origin=='main':self.roi=new
         else:self.extra_rois[index]=new
         key_old=tuple(map(tuple,old.points_px));key_new=tuple(map(tuple,new.points_px))
         if key_old in self.line_styles:
             self.line_styles[key_new]=self.line_styles.pop(key_old)
+        if key_old in self.line_colors:
+            self.line_colors[key_new]=self.line_colors.pop(key_old)
         if self._last_line_pts==key_old or self._last_line_pts is None:
             self._last_line_pts=key_new
 
@@ -367,19 +458,22 @@ class ImageView(QWidget):
                     painter.drawRect(target)
                 painter.restore()
             painter.restore()
-        from ..core.multi_profiles import line_color
-        line_counter=0
+        appearance={i:(colour,name) for i,colour,name in self.line_appearance()}
         for roi_index,roi in enumerate(self.extra_rois + ([self.roi] if self.roi is not None else [])):
             painter.save()
             painter.setPen(QPen(QColor('#ffffff') if roi_index==self.selected_roi_index else QColor('#ffda55'),2,Qt.PenStyle.DashLine))
             if roi.kind=='line':
                 # v32: every line has its own colour (and name once named in Line profiles)
                 line_style=self.line_styles.get(tuple(map(tuple,roi.points_px)))
-                colour,name=(line_style[:2] if line_style else
-                             (line_color(line_counter),f'L{line_counter+1}'))
-                line_counter+=1
-                width=(line_style[2] if line_style and len(line_style)>2 else
-                       (3 if roi_index==self.selected_roi_index else 2))
+                colour,name=appearance[roi_index]
+                width=(line_style[2] if line_style and len(line_style)>2 else 2)
+                if roi_index==self.selected_roi_index:
+                    # selected line: white halo under its own colour (the colour never changes)
+                    painter.setPen(QPen(QColor(255,255,255,200),width+4,Qt.PenStyle.SolidLine,
+                                        Qt.PenCapStyle.RoundCap,Qt.PenJoinStyle.RoundJoin))
+                    halo=[QPointF(r.left()+(x+.5)/self.geometry.shape[1]*r.width(),
+                                  r.top()+(y+.5)/self.geometry.shape[0]*r.height()) for x,y in roi.points_px]
+                    if len(halo)>=2:painter.drawPolyline(halo)
                 painter.setPen(QPen(QColor(colour),width,Qt.PenStyle.SolidLine))
             points=[QPointF(r.left()+(x+.5)/self.geometry.shape[1]*r.width(),
                             r.top()+(y+.5)/self.geometry.shape[0]*r.height())
@@ -569,10 +663,23 @@ class ImageView(QWidget):
             return
         if self._edit is not None:
             self._edit_to(event.position())
+            origin,index=self._edit[0],self._edit[1]
             self._edit=None
             self.unsetCursor()
             self.roiEdited.emit()
+            combined=len(self.extra_rois) if origin=='main' else index
+            if 0<=combined<len(self.all_rois()):
+                self.selected_roi_index=combined
+                self.roiSelected.emit(combined)
             return
+        if self.drag_start is not None and event.button()==Qt.MouseButton.LeftButton:
+            moved=math.hypot(event.position().x()-self.drag_start.x(),event.position().y()-self.drag_start.y())
+            if moved<4 and self.tool!='point' and self._select_at(event.position()) is not None:
+                # a click on an existing line / region selects it (Delete removes only that one)
+                self.drag_start=self.drag_current=None
+                if self.tool=='pan':self.pan=QPointF(self._origin_pan)
+                self.update()
+                return
         if self.drag_start is not None and self.tool=='point' and self.data is not None:
             point=self._to_pixel(event.position(),clamp=True)
             if point is not None:
@@ -588,3 +695,14 @@ class ImageView(QWidget):
                 self.roiChanged.emit(self.roi)
         self.drag_start=self.drag_current=None
         self.update()
+
+
+def _segment_distance(p, a, b):
+    """Screen distance from point ``p`` (QPointF) to the segment a–b ((x, y) tuples)."""
+    px, py = p.x(), p.y()
+    ax, ay = a
+    bx, by = b
+    dx, dy = bx - ax, by - ay
+    length2 = dx * dx + dy * dy
+    t = 0.0 if length2 <= 0 else max(0.0, min(1.0, ((px - ax) * dx + (py - ay) * dy) / length2))
+    return math.hypot(px - (ax + t * dx), py - (ay + t * dy))

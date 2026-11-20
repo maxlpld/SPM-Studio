@@ -178,6 +178,7 @@ class MainWindow(QMainWindow):
         self._module_upgrade_messages+=paths.upgrade_factory_modules_v043()
         self._module_upgrade_messages+=paths.upgrade_factory_modules_v050()
         self._module_upgrade_messages+=paths.upgrade_factory_modules_v055()
+        self._module_upgrade_messages+=paths.install_new_factory_modules()
         self._module_upgrade_messages += paths.upgrade_factory_lattice_20261108()
         self._module_upgrade_messages += paths.upgrade_factory_lattice_v5()
         # Always heal absent factory helper files even on existing installations
@@ -237,6 +238,7 @@ class MainWindow(QMainWindow):
         self.viewer.roiEdited.connect(self._on_roi_edited)
         self.viewer.deleteSelectedRequested.connect(
             lambda:self._delete_selection(self.viewer.selected_roi_index))
+        self.viewer.roiSelected.connect(self._roi_clicked)
         self.viewer.cursorPixelChanged.connect(self._interactive_cursor_move)
         self.interactive_palette.toolSelected.connect(self._interactive_select)
         self.interactive_palette.actionRequested.connect(self._interactive_action)
@@ -2051,6 +2053,18 @@ class MainWindow(QMainWindow):
         self.viewer.selected_roi_index=index
         self.viewer.update()
 
+    def _roi_clicked(self,index):
+        """A click on a line / region in the scan selects it in the Selections list too."""
+        lst=self.module_panel.selection_list
+        lst.blockSignals(True)
+        if 0<=index<lst.count():lst.setCurrentRow(index)
+        lst.blockSignals(False)
+        self.viewer.selected_roi_index=index
+        names={i:name for i,_c,name in self.viewer.line_appearance()}
+        label=names.get(index,f'selection {index+1}')
+        self.statusBar().showMessage(f'{label} selected — press Delete (Suppr) to remove it',5000)
+        self.viewer.update()
+
     def _choose_roi_tool(self,name):
         if name!='pan' and name not in self._selection_config().get('tools',[]):
             self._log(f'Selection tool {name} was not requested by this module',important=True)
@@ -2058,19 +2072,44 @@ class MainWindow(QMainWindow):
         self.viewer.set_roi_tool(name)
         self._queue_live_preview()
 
-    def _delete_selection(self,index):
+    def _delete_selection(self,index,fallback_last=False):
+        """Delete exactly the selected line / region (v0.0.11: never another one).
+
+        The remaining lines keep their colours; their default names are renumbered
+        (L1, L2 …) in drawing order. Nothing is deleted when nothing is selected, unless
+        ``fallback_last`` (Undo last) asks for the most recent selection.
+        """
         all_rois=list(self.viewer.extra_rois)+([self.viewer.roi] if self.viewer.roi else [])
         if not all_rois:return
-        if not 0<=index<len(all_rois):index=len(all_rois)-1
+        if not 0<=index<len(all_rois):
+            if not fallback_last:
+                self.statusBar().showMessage('Click a line or a region on the scan to select it, then press Delete',
+                                             5000)
+                return
+            index=len(all_rois)-1
+        removed=all_rois[index]
+        self.viewer.forget_roi(removed)
         if index<len(self.viewer.extra_rois):self.viewer.extra_rois.pop(index)
         else:self.viewer.roi=None
+        self.viewer.renumber_lines()
         self._live_preview_roi=None
-        self._sync_selection_list(min(index,len(all_rois)-2))
+        dlg=getattr(self,'_line_profile_dialog',None)
+        if dlg is not None:
+            try:dlg.remove_points(self.viewer.line_key(removed))
+            except Exception:pass
+        self._sync_selection_list()
+        # nothing stays selected, so a second Delete never removes a line by surprise
+        self.module_panel.selection_list.blockSignals(True)
+        self.module_panel.selection_list.setCurrentRow(-1)
+        self.module_panel.selection_list.blockSignals(False)
+        self.viewer.selected_roi_index=-1
+        self.viewer.update()
         self._queue_live_preview()
         self._indicate_staleness()
 
     def _undo_line(self):
-        self._delete_selection(len(self.viewer.extra_rois) if self.viewer.roi else len(self.viewer.extra_rois)-1)
+        self._delete_selection(len(self.viewer.extra_rois) if self.viewer.roi else len(self.viewer.extra_rois)-1,
+                               fallback_last=True)
 
     def _clear_lines(self):
         self._live_preview_roi=None
@@ -2200,6 +2239,7 @@ class MainWindow(QMainWindow):
             if self._live_preview_roi and self._live_preview_roi.kind=='line':
                 rois.append(self._live_preview_roi)
             lines=[]
+            looks={id(self.viewer.all_rois()[i]):(c,n) for i,c,n in self.viewer.line_appearance()}
             for i,roi in enumerate(rois):
                 if roi.kind!='line':continue
                 _,yy=profile_between(self.viewer.data,*roi.points_px)
@@ -2211,7 +2251,8 @@ class MainWindow(QMainWindow):
                     from ..core.analysis_utils import profile_along,geometry_spacing
                     geom=self.scan.channels[active_channel].geometry
                     xx,yy=profile_along(self.viewer.data,roi.points_px,spacing=geometry_spacing(geom,1e9))
-                lines.append((f'Line {i+1}',xx,yy))
+                colour,name=looks.get(id(roi),('#ffda55',f'Line {i+1}'))
+                lines.append((name,xx,yy,colour))
             self.module_panel.preview.profiles(lines)
             self.viewer.mask_overlay=None
             self.viewer.update()
@@ -3233,7 +3274,7 @@ class MainWindow(QMainWindow):
                     if (roi.kind=='rectangle' and len(roi.points_px)==2) or \
                        (roi.kind=='line' and len(roi.points_px)>=2):
                         line_style=self.viewer.line_styles.get(tuple(map(tuple,roi.points_px)))
-                        color=(line_style[0] if roi.kind=='line' and line_style else '#ffda55')
+                        color=(self.viewer.line_color_of(roi) if roi.kind=='line' else '#ffda55')
                         width=(line_style[2] if roi.kind=='line' and line_style and len(line_style)>2 else 2)
                         overlay={'type':'rectangle' if roi.kind=='rectangle' else 'line',
                                  'points_px':[list(p) for p in roi.points_px],
