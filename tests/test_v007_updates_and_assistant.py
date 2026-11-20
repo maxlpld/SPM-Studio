@@ -453,8 +453,9 @@ def test_literature_page_connects_zotero_with_one_click(qt_home, monkeypatch):
     from PySide6.QtWidgets import QMainWindow
     from test_v007_literature_connections import make_zotero
     from spm_studio.ai import literature
-    from spm_studio.ai.config import load
+    from spm_studio.ai.config import load, save
     from spm_studio.ui.settings_dialog import SettingsDialog
+    save({**load(), 'zotero_mode': 'off'})          # v0.0.12 default is 'auto'; start from a disconnected Zotero
     monkeypatch.setattr(literature, 'ZOTERO_LOCAL', 'http://127.0.0.1:9/api')
     monkeypatch.setattr(literature, 'ZOTERO_CONNECTOR', 'http://127.0.0.1:9/connector/ping')
     monkeypatch.setattr(SettingsDialog, '_general_page', lambda self: __import__('PySide6.QtWidgets').QtWidgets.QWidget())
