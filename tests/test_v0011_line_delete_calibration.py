@@ -35,6 +35,13 @@ def test_calibration_tool_own_tests_pass():
                             capture_output=True, text=True, timeout=900)
     assert result.returncode == 0, result.stdout[-4000:] + result.stderr[-2000:]
     assert ' passed' in result.stdout
+    try:
+        import skimage  # noqa: F401
+        import PySide6  # noqa: F401
+    except ImportError:
+        return
+    # full environment: the end-to-end run (real SXM files, Export-panel figure) is not skipped
+    assert 'skipped' not in result.stdout, result.stdout[-2000:]
 
 
 def test_new_tool_is_offered_once_to_existing_installs(tmp_path, monkeypatch):
