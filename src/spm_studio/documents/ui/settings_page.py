@@ -26,7 +26,7 @@ def build_page(dialog):
             window.refresh_document_buttons()
         except Exception:
             pass
-        if values.get('latex_enabled') or values.get('slides_enabled'):
+        if values.get('latex_enabled') or values.get('slides_enabled') or values.get('todo_enabled'):
             # give a connected assistant the editors' instructions now (its conversation is kept)
             dock = getattr(window, 'ai_dock', None)
             try:
@@ -133,6 +133,29 @@ def build_page(dialog):
     hv.addWidget(preamble)
     hv.addWidget(save_preamble, 0, Qt.AlignmentFlag.AlignRight)
     dialog._action_row(v, 'Packages of LaTeX boxes', 'Default \\usepackage lines of new presentations.', holder)
+    layout.addWidget(box)
+
+    # ---------------------------------------------------------------- to-do (v0.0.12)
+    box = QGroupBox('To-do list & notes')
+    v = QVBoxLayout(box)
+    todo_on = QCheckBox('Show the To-do button in the main window')
+    todo_on.setObjectName('DocumentsTodoEnabledV0012')
+    todo_on.setChecked(bool(conf['todo_enabled']))
+    todo_on.toggled.connect(lambda on: changed(todo_enabled=bool(on)))
+    dialog._action_row(v, 'To-do list', 'Tasks (scan analyses, scripts, writing) and notes in their own window. The '
+                                         'assistant can read them, do a task and tick it, or write a report, a paper '
+                                         'or a presentation from your notes. Saved automatically.', todo_on)
+    done_style = QComboBox()
+    for label, key in (('Struck through', 'strike'), ('Normal', 'plain'), ('Hidden', 'hide')):
+        done_style.addItem(label, key)
+    done_style.setCurrentIndex(max(0, done_style.findData(conf['todo_done_style'])))
+    done_style.currentIndexChanged.connect(lambda _i: changed(todo_done_style=done_style.currentData()))
+    dialog._action_row(v, 'Finished tasks', 'How ticked tasks are shown in the list.', done_style)
+    from spm_studio.documents import todo as _todo
+    where = QLabel(str(_todo.file()))
+    where.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+    where.setWordWrap(True)
+    dialog._action_row(v, 'Saved in', 'Kept across restarts and updates; “Erase everything” keeps a copy here.', where)
     layout.addWidget(box)
 
     # ---------------------------------------------------------------- Overleaf

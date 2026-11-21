@@ -15,6 +15,7 @@ ChatGPT account or API key for Codex). SPM Studio never reads their tokens.
   ``turn.completed``, ``turn.failed``, ``error``.
 """
 from __future__ import annotations
+import json
 import shutil
 import subprocess
 from pathlib import Path
@@ -69,11 +70,16 @@ def version(executable: str) -> str:
 
 
 def build_args(agent: str, session: str, tools: bool, system_text: str = '',
-               allowed_tools=()) -> list[str]:
+               allowed_tools=(), extra_dirs=()) -> list[str]:
+    """``extra_dirs`` (v0.0.12): SPM Studio folders the agent may also change when tools are on
+    (scripts, customization, documents, the app's own source), besides its working folder."""
+    dirs = [str(d) for d in extra_dirs if d] if tools else []
     if agent == 'claude-code':
         args = ['-p', '--output-format', 'stream-json', '--verbose', '--include-partial-messages',
                 # plan = read-only analysis; acceptEdits = may write files in its working folder
                 '--permission-mode', 'acceptEdits' if tools else 'plan']
+        for d in dirs:
+            args += ['--add-dir', d]
         if allowed_tools:
             # v0.0.5: the read-only literature servers (Consensus, Zotero) the user connected in
             # Settings › Literature may be called without a prompt; a non-interactive turn cannot ask.
@@ -85,10 +91,14 @@ def build_args(agent: str, session: str, tools: bool, system_text: str = '',
         return args
     if agent == 'codex':
         sandbox = 'workspace-write' if tools else 'read-only'
+        roots = []
+        if dirs:
+            roots = ['-c', 'sandbox_workspace_write.writable_roots=[' +
+                     ','.join(json.dumps(d) for d in dirs) + ']']
         if session:
             return ['exec', 'resume', session, '--json', '--skip-git-repo-check',
-                    '-c', f'sandbox_mode="{sandbox}"', '-']
-        return ['exec', '--json', '--skip-git-repo-check', '--sandbox', sandbox, '-']
+                    '-c', f'sandbox_mode="{sandbox}"'] + roots + ['-']
+        return ['exec', '--json', '--skip-git-repo-check', '--sandbox', sandbox] + roots + ['-']
     raise ValueError('Unknown agent ' + agent)
 
 

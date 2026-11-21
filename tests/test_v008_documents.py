@@ -304,7 +304,9 @@ def test_assistant_context_mentions_the_editors(home):
     from spm_studio.ai.config import spm_context_file
     path = spm_context_file(home / 'work')
     assert 'presentation_templates' in path.read_text(encoding='utf8')
-    assert '<spm-doc>' not in path.read_text(encoding='utf8')
+    assert 'to-do' in path.read_text(encoding='utf8')               # v0.0.12: the to-do list is on by default
+    settings.update(todo_enabled=False)
+    assert '<spm-doc>' not in spm_context_file(home / 'work').read_text(encoding='utf8')
     settings.update(latex_enabled=True, slides_enabled=True)
     text = spm_context_file(home / 'work').read_text(encoding='utf8')
     assert '<spm-doc>' in text and 'LaTeX editor' in text and 'latex_templates' in text

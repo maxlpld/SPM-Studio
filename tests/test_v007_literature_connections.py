@@ -584,7 +584,7 @@ def test_every_backend_is_told_how_to_ask(home):
     from spm_studio.ai import literature, lit_protocol as lp
     from spm_studio.ai.config import DEFAULT, load, save, spm_context_file
     from spm_studio.core import paths
-    assert literature.agent_context(dict(DEFAULT)) == '' and lp.direct_chat_preamble(dict(DEFAULT)) == []
+    assert literature.agent_context({**DEFAULT, 'consensus_enabled': False, 'zotero_mode': 'off'}) == '' and lp.direct_chat_preamble({**DEFAULT, 'consensus_enabled': False, 'zotero_mode': 'off'}) == []
     conf = load()
     conf.update(zotero_mode='auto', consensus_enabled=True)
     save(conf)

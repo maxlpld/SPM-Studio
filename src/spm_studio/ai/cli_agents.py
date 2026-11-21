@@ -100,13 +100,19 @@ class CliAgentBackend(QObject):
             message = '[SPM Studio context — instructions for the assistant]\n' + system + '\n\n[User message]\n' + message
             system = ''
         try:
-            from .config import load as _load_conf
+            from .config import load as _load_conf, app_folders
             from .literature import allowed_tools as _allowed
             allowed = _allowed(_load_conf())
+            folders = app_folders() if self.tools else []
         except Exception:
-            allowed = []
+            allowed, folders = [], []
+        if self.tools and self.agent == 'claude-code':
+            # v0.0.12: a non-interactive turn cannot ask for permission — with tools switched on
+            # (the user agreed once), commands and edits in the SPM Studio folders are allowed.
+            allowed = list(allowed) + ['Bash', 'Read', 'Edit', 'Write', 'Glob', 'Grep', 'WebFetch', 'WebSearch']
         args = prefix + build_args(self.agent, self._session, self.tools,
-                                   system if self.agent == 'claude-code' else '', allowed_tools=allowed)
+                                   system if self.agent == 'claude-code' else '', allowed_tools=allowed,
+                                   extra_dirs=folders)
         env = QProcessEnvironment.systemEnvironment()
         for key, value in pu.command_env().items():
             if key == 'PATH':

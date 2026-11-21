@@ -27,13 +27,15 @@ ACTIONS = {
     'latex': ('read', 'read_file', 'insert', 'replace', 'write_file', 'compile', 'open_file', 'new_project'),
     'slides': ('read', 'add_slide', 'add_text', 'add_latex', 'add_shape', 'set_notes', 'update_item', 'delete_item',
                'delete_slide', 'set_theme', 'go_to', 'new_presentation'),
+    # v0.0.12: to-do list & notes
+    'todo': ('read', 'add_task', 'update_task', 'delete_task', 'append_notes'),
 }
-READ_ACTIONS = {('latex', 'read'), ('latex', 'read_file'), ('latex', 'compile'), ('slides', 'read')}
+READ_ACTIONS = {('latex', 'read'), ('latex', 'read_file'), ('latex', 'compile'), ('slides', 'read'), ('todo', 'read')}
 STRING_KEYS = ('text', 'find', 'replace', 'path', 'at', 'name', 'template', 'layout', 'title', 'body', 'notes',
                'source', 'color', 'item', 'shape', 'fill_color', 'line_color', 'align', 'font', 'background_color',
-               'text_color', 'accent_color', 'title_font', 'body_font', 'transition')
+               'text_color', 'accent_color', 'title_font', 'body_font', 'transition', 'details', 'append', 'category')
 NUMBER_KEYS = ('x', 'y', 'w', 'h', 'size', 'line', 'title_size', 'body_size', 'rotation', 'opacity', 'line_width')
-BOOL_KEYS = ('all', 'bold', 'italic', 'hidden', 'display')
+BOOL_KEYS = ('all', 'bold', 'italic', 'hidden', 'display', 'done')
 
 
 def parse_requests(text: str) -> list[dict]:
@@ -65,6 +67,8 @@ def parse_requests(text: str) -> list[dict]:
             request['slide'] = slide
         elif isinstance(slide, str) and slide.lower() in ('current', 'last', 'new'):
             request['slide'] = slide.lower()
+        if app == 'todo' and isinstance(data.get('item'), int) and not isinstance(data.get('item'), bool):
+            request['item'] = str(data['item'])
         if isinstance(data.get('after'), int) and not isinstance(data.get('after'), bool):
             request['after'] = data['after']
         found.append(request)
@@ -74,7 +78,7 @@ def parse_requests(text: str) -> list[dict]:
 
 
 def describe(request: dict) -> str:
-    app = 'LaTeX' if request['app'] == 'latex' else 'Slides'
+    app = {'latex': 'LaTeX', 'slides': 'Slides', 'todo': 'To-do'}.get(request['app'], request['app'])
     action = request['action'].replace('_', ' ')
     detail = request.get('path') or request.get('title') or request.get('name') or ''
     if request.get('slide') not in (None, 'current'):
@@ -128,11 +132,11 @@ def display_text(role: str, content: str) -> str:
     return content
 
 
-def agent_context(latex: bool, slides: bool) -> str:
+def agent_context(latex: bool, slides: bool, todo: bool = False) -> str:
     """Instructions added to the assistant's system context when an editor is enabled."""
-    if not latex and not slides:
+    if not latex and not slides and not todo:
         return ''
-    lines = ['', '## LaTeX editor and presentation editor of SPM Studio',
+    lines = ['', '## Documents of SPM Studio (LaTeX editor, presentation editor, to-do list & notes)',
              'The user writes papers, reports and talks in SPM Studio\'s own editors (separate windows, '
              'connected to the scan window: figures exported from SPM Studio are inserted there directly). '
              'Help with them exactly as you help with scans: explain, write, fix compile errors, restructure.',
@@ -180,4 +184,18 @@ def agent_context(latex: bool, slides: bool) -> str:
                   '"title_size", "body_size"}`, `new_presentation` `{"name": ..., "template": "Clean_Light"}`',
                   '- Slides are numbered from 1. Keep text short (≤ 6 bullets), titles ≤ 8 words. Templates: '
                   '`<customization>/presentation_templates` (read its README.md before creating one).']
+    if todo:
+        lines += ['',
+                  '### To-do list & notes (`"app": "todo"`) — the user\'s plan of scan analyses, scripts and writing',
+                  '- `read` → every task (`#number [x] (id) category · text` + the details the user wrote: what is '
+                  'needed, files, parameters) and the free notes',
+                  '- `add_task` `{"text": "...", "details": "...", "category": "Analysis" | "Script" | "Writing" | '
+                  '"Figure" | "Other"}`',
+                  '- `update_task` `{"item": "<id or number>", "done": true, "append": "what was done, where the '
+                  'result is", "text" | "details" | "category": ...}` → tick a task when you have finished it',
+                  '- `delete_task` `{"item": ...}` (only when asked), `append_notes` `{"text": "..."}`',
+                  '- When the user asks you to do a task, do it with your normal tools (scripts, analyses, LaTeX, '
+                  'slides), then tick it and append a one-line summary. Reports, papers and presentations from the '
+                  'notes go to the LaTeX / presentation editors (new_project / new_presentation); keep the user\'s '
+                  'numbers exactly and never invent results or references.']
     return '\n'.join(lines)

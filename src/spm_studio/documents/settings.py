@@ -44,6 +44,9 @@ DEFAULTS = {
     'export_targets': ['folder'],   # last choice in the export dialog
     'recent_latex': [],
     'recent_slides': [],
+    # v0.0.12: to-do list & notes window connected to the assistant
+    'todo_enabled': True,
+    'todo_done_style': 'strike',     # strike | plain | hide
 }
 MAX_RECENT = 12
 
@@ -77,6 +80,8 @@ def load() -> dict:
     if data['slides_size'] not in SLIDE_SIZES:
         data['slides_size'] = '16:9'
     data['export_targets'] = [t for t in data['export_targets'] if t in TARGETS] or ['folder']
+    if data['todo_done_style'] not in ('strike', 'plain', 'hide'):
+        data['todo_done_style'] = 'strike'
     return data
 
 

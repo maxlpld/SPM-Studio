@@ -66,6 +66,9 @@ class DocumentHub(QObject):
     @staticmethod
     def kind_of(window) -> str:
         from .latex_editor import LatexEditorWindow
+        from .todo_window import TodoWindow
+        if isinstance(window, TodoWindow):
+            return 'todo'
         return 'latex' if isinstance(window, LatexEditorWindow) else 'slides'
 
     def register(self, window):
@@ -151,6 +154,19 @@ class DocumentHub(QObject):
         except deck_model.DeckError as exc:
             MessageDialog.warning(self.main_window, 'Presentation', str(exc))
             return None
+        self.register(win)
+        win.show()
+        return win
+
+    def open_todo(self):
+        """The to-do list & notes window (one per application; the list is saved on disk)."""
+        from .todo_window import TodoWindow
+        for win in self.windows('todo'):
+            win.show()
+            win.raise_()
+            win.activateWindow()
+            return win
+        win = TodoWindow(self)
         self.register(win)
         win.show()
         return win
@@ -339,6 +355,10 @@ class DocumentHub(QObject):
     def _ai_one(self, r) -> str:
         app, action = r['app'], r['action']
         conf = doc_settings.load()
+        if app == 'todo':
+            from .todo_window import ai_action
+            found = self.windows('todo')
+            return ai_action(r, found[0] if found else None)
         if app == 'latex':
             if action == 'new_project':
                 from spm_studio.documents import templates

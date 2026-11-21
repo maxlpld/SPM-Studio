@@ -219,7 +219,23 @@ def run(win) -> int:
         assert dialog.state()['keys'] == ['bias']
         dialog.close(); dialog.deleteLater()
 
+    def todo_and_print3d():
+        # v0.0.12: to-do window (saved list) and the 3D print tool open and close cleanly.
+        todo_win = win.documents.open_todo()
+        app.processEvents()
+        assert todo_win.isVisible() and win.documents.kind_of(todo_win) == 'todo'
+        todo_win.close()
+        app.processEvents()
+        win.open_print3d()
+        app.processEvents()
+        dialog = win._print3d_dialog
+        assert dialog is not None
+        dialog.update_preview()            # no scan open: a message, no exception
+        dialog.close()
+        app.processEvents()
+
     for name, fn in (('themes', themes), ('menus', menus), ('settings window', settings),
+                     ('to-do and 3D print', todo_and_print3d),
                      ('spectroscopy composer', spectroscopy_composer),
                      ('assistant panel', assistant),
                      ('results options', options), ('live tool detection', live_tools), ('export-panel figures', script_figures),
