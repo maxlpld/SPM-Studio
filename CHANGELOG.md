@@ -7,6 +7,25 @@ so write it for users. Add new versions **at the top**.
 The internal builds that preceded the GitHub project (0.7.0 – 0.8.3) are documented in
 [`docs/DEVELOPMENT_HISTORY.md`](docs/DEVELOPMENT_HISTORY.md).
 
+## 0.0.13 — 2026-11-21
+
+### Guided tutorial on real KBr scans
+
+- First start: a small welcome card offers a **10-minute guided tour** (or “La science n’attend pas !” to skip it; it does not come back by itself).
+- Twelve lessons on three real KBr(001) nc-AFM scans bundled with SPM Studio (unmodified Nanonis files, checked by SHA-256): open the dataset, open a scan, Z channel and forward/backward traces, apply a profile, duplicate a profile safely, compare an up and a down scan, inspect an incomplete scan, use a tool, read the guides, meet the assistant, export a figure.
+- A lesson is completed by doing the real action in SPM Studio (or by **Skip step**), never by Next alone. **Esc** ends the tour at once from anywhere.
+- The tour works offline, needs no AI and changes none of your data; the scans are copied to your tutorial folder, the originals stay untouched.
+- **Settings › Tutorials** and **Help**: start, resume, replay *what’s new*, reset the progress, open the KBr tutorial scans.
+
+### Updates & Beta Tester settings
+
+- **Settings › Updates**: current version, check for public updates, changelog, daily check on/off.
+- **Settings › Beta Tester**: invited testers enter their invitation key once per computer (the same key works on several computers, 5 by default) to receive optional private extensions; see and remove their computers; sign out. Nothing changes for everyone else, and no account is ever needed to use SPM Studio.
+
+### Extensions (for invited testers)
+
+- SPM Studio can load optional extensions installed from Settings › Beta Tester. An extension is installed only after you confirm, and only if its signature (pinned key) and checksum are correct; it can be disabled, rolled back or uninstalled at any time without touching your data.
+
 ## 0.0.12 — 2026-11-21
 
 ### To-do list & notes, connected to the assistant

@@ -215,6 +215,7 @@ class MainWindow(QMainWindow):
         self.documents=_document_hub()
         self.documents.set_main_window(self)
         self.refresh_document_buttons()
+        self._setup_v0013()
         self._load_shortcuts()
         self._setup_shortcut_watch()
         self.refresh_modules()
@@ -642,6 +643,133 @@ class MainWindow(QMainWindow):
         self.documents.send_files_dialog(files,self)
 
     # ---- updates (GitHub releases; see core/updates.py)
+    # ------------------------------------------------------------------ v0.0.13: tutorial, beta, extensions
+    def _setup_v0013(self):
+        import os
+        from spm_studio.beta.api import ExtensionAPI
+        from spm_studio.beta import client as beta_client
+        self.tutorial_counters={}
+        self.tutorial=None
+        self._welcome=None
+        self.beta_session=beta_client.Session()
+        self.extension_api=ExtensionAPI(self)
+        self._beta_workers=[]
+        try:
+            from spm_studio.beta import extensions
+            report=extensions.load_enabled(self.extension_api,beta_client.offline_grace_ok())
+            for ext_id,status in report.items():
+                if status!='disabled':self._log(f'Extension {ext_id}: {status}')
+        except Exception as exc:
+            self._log(f'Extensions were not loaded: {exc}')
+        headless=os.environ.get('QT_QPA_PLATFORM')=='offscreen' and not os.environ.get('SPM_STUDIO_FORCE_ONBOARDING')
+        if not headless and not os.environ.get('SPM_STUDIO_NO_ONBOARDING'):
+            QTimer.singleShot(1500,self._maybe_onboard)
+        if not headless and self.beta_session.signed_in():
+            QTimer.singleShot(8000,self._beta_background_check)
+
+    def tutorial_event(self,name):
+        counters=getattr(self,'tutorial_counters',None)
+        if counters is not None:counters[name]=counters.get(name,0)+1
+
+    def _tutorial_manager(self):
+        from spm_studio.tutorial.ui import TutorialManager
+        if self.tutorial is None:
+            self.tutorial=TutorialManager(self,self.extension_api.tutorial_decorators)
+            self.tutorial.finished.connect(self._tutorial_finished)
+        return self.tutorial
+
+    def start_tutorial(self,position=0):
+        self._close_welcome()
+        self._tutorial_manager().start(position=position,kind='basics')
+
+    def start_whats_new(self):
+        from spm_studio.core.updates import current_version
+        from spm_studio.tutorial.ui import whats_new_steps
+        self._close_welcome()
+        steps=whats_new_steps(current_version())
+        if not steps:
+            self._log('No “what’s new” notes for this version.',important=True)
+            return
+        self._tutorial_manager().start(steps,kind='whats_new')
+
+    def _tutorial_finished(self,reason):
+        if reason=='completed' and self.tutorial is not None and self.tutorial.kind=='basics':
+            self._log('Guided tutorial finished. Replay it from Settings › Tutorials or Help › Guided tutorial.',important=True)
+
+    def open_tutorial_scans(self):
+        from spm_studio.tutorial import dataset
+        try:
+            folder=dataset.prepare_workspace()
+        except Exception as exc:
+            QMessageBox.warning(self,'Tutorial scans',str(exc))
+            return
+        self.browser.tabs.setCurrentIndex(0)
+        for name in dataset.FILES:
+            self._add_file(str(folder/name))
+        self._dialog_folder=folder
+        self._log(f'Tutorial scans (unmodified copies, checksums verified): {folder}')
+
+    def _maybe_onboard(self):
+        from spm_studio.core.updates import current_version
+        from spm_studio.tutorial import state
+        from spm_studio.tutorial.ui import WelcomePanel
+        action=state.startup_action(current_version())
+        if action is None:return
+        if action=='whats_new':
+            self._log('What’s new in this update? Help › What’s new in this version (a 1-minute tour).',important=True)
+            return
+        self._welcome=WelcomePanel(self,offer_whats_new=False)
+        self._welcome.start.connect(lambda:self.start_tutorial(0))
+        self._welcome.skip.connect(self._skip_welcome)
+        self._welcome.place();self._welcome.show()
+        state.update(welcome_shown=True)
+
+    def _skip_welcome(self):
+        from spm_studio.tutorial import state
+        state.update(skipped=True,welcome_shown=True)
+        self._close_welcome()
+
+    def _close_welcome(self):
+        if getattr(self,'_welcome',None) is not None:
+            self._welcome.hide();self._welcome.deleteLater();self._welcome=None
+
+    def _beta_background_check(self):
+        """Renew this computer's beta session (keeps the offline grace fresh); optionally look for updates."""
+        import time
+        from PySide6.QtCore import QThread,Signal
+        from spm_studio.beta import client as beta_client
+        state=beta_client.load_state()
+        want_release=bool(state.get('auto_check')) and time.time()-float(state.get('last_release_check',0) or 0)>86400
+        session=self.beta_session
+
+        class _Check(QThread):
+            done=Signal(str)
+            def run(self):
+                try:
+                    session.refresh()
+                    if want_release:
+                        m=session.latest_release()
+                        from spm_studio.beta import extensions
+                        info=extensions.installed().get(m['id'])
+                        if info is None or info['descriptor']['version']!=m['version']:
+                            self.done.emit(f"{m['name']} {m['version']} is available (Settings › Beta Tester).")
+                            return
+                    self.done.emit('')
+                except Exception as exc:
+                    self.done.emit('Beta: '+beta_client.friendly(exc))
+        worker=_Check(self)
+        worker.done.connect(self._beta_check_done)
+        worker.finished.connect(lambda:self._beta_workers.remove(worker) if worker in self._beta_workers else None)
+        self._beta_workers.append(worker)
+        worker.start()
+
+    def _beta_check_done(self,text):
+        if text:self._log(text)
+
+    def resizeEvent(self,event):
+        super().resizeEvent(event)
+        if getattr(self,'_welcome',None) is not None:self._welcome.place()
+
     def open_update_dialog(self,result=None):
         from .update_dialog import UpdateDialog
         UpdateDialog(self,result).exec()
@@ -893,6 +1021,10 @@ class MainWindow(QMainWindow):
         help_menu.addAction('Customization guide',lambda:QDesktopServices.openUrl(
             QUrl.fromLocalFile(str(paths.customization_dir()/'README_CUSTOMIZATION.md'))))
         help_menu.addAction('Keyboard shortcuts',self.open_shortcut_options)
+        help_menu.addSeparator()
+        help_menu.addAction('Guided tutorial',lambda:self.start_tutorial(0))
+        help_menu.addAction('What’s new in this version',self.start_whats_new)
+        help_menu.addAction('KBr tutorial scans',self.open_tutorial_scans)
         help_menu.addSeparator()
         help_menu.addAction('Check for updates…',lambda:self.open_update_dialog())
         self._action(help_menu,'About SPM Studio',None,self._about_spm_studio)
@@ -2945,6 +3077,7 @@ class MainWindow(QMainWindow):
         selected_key=combo_key(self.profile_combo)
         profile=self.profiles.get(selected_key)
         if not profile:return
+        self.tutorial_event('profile_applied')
         self._scan_profile_keys[str(self.scan.path.resolve())]=selected_key
         self._update_scan_profile_indicator()
         needle=profile.get('channel_contains','').strip()
@@ -3262,6 +3395,7 @@ class MainWindow(QMainWindow):
         if dialog._n_panels()==3:self.settings.setValue('export_triple_arrangement',dialog.arrangement())
         selected=dialog.selection()
         if not selected:return
+        self.tutorial_event('export')
         preset=dialog.resolved_preset()
         for spec in selected:
             if spec['kind']=='report' and spec.get('colorbar_source'):
@@ -4005,6 +4139,11 @@ class MainWindow(QMainWindow):
             if hasattr(self,'documents') and not self.documents.close_all():
                 event.ignore();return
         except RuntimeError:
+            pass
+        try:
+            if self.tutorial is not None:self.tutorial.stop('exited')
+            self.extension_api.shutdown()
+        except (AttributeError,RuntimeError):
             pass
         self._stop_molecule_preview()
         try:

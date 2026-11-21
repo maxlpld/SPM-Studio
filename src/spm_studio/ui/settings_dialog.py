@@ -27,7 +27,9 @@ from spm_studio.shared.dialogs import MessageDialog, TextInputDialog
 from spm_studio.shared.ui_strings import ui_label
 
 PAGES = (('general', 'General', 'gear'), ('library', 'Library', 'folder'),
-         ('literature', 'Literature', 'book'), ('documents', 'Documents', 'latex'), ('about', 'About', 'info'))
+         ('literature', 'Literature', 'book'), ('documents', 'Documents', 'latex'),
+         ('updates', 'Updates', 'refresh'), ('tutorials', 'Tutorials', 'run'), ('beta', 'Beta Tester', 'ai'),
+         ('about', 'About', 'info'))
 
 
 def open_url(url: str):
@@ -211,9 +213,16 @@ class SettingsDialog(QDialog):
         root.addWidget(self.stack, 1)
         builders = {'general': self._general_page, 'library': self._library_page,
                     'literature': self._literature_page, 'documents': self._documents_page,
+                    'updates': self._updates_page, 'tutorials': self._tutorials_page, 'beta': self._beta_page,
                     'about': self._about_page}
         self._page_keys = []
-        for key, label, icon_name in PAGES:
+        pages = list(PAGES)
+        # v0.0.13: pages added by installed extensions (none without an extension)
+        api = getattr(window, 'extension_api', None)
+        for key, (_ext, label, factory) in (getattr(api, 'settings_pages', {}) or {}).items():
+            pages.insert(len(pages) - 1, (key, label, 'ai'))
+            builders[key] = lambda factory=factory, label=label: self._extension_page(factory, label)
+        for key, label, icon_name in pages:
             item = QListWidgetItem(label)
             try:
                 from spm_studio.shared.appearance import icon
@@ -271,6 +280,28 @@ class SettingsDialog(QDialog):
             self.window_._log(text, important=important)
         except Exception:
             pass
+
+    # ------------------------------------------------------------------ v0.0.13 pages
+    def _updates_page(self):
+        from spm_studio.beta.settings_pages import UpdatesPage
+        return UpdatesPage(self.window_)
+
+    def _tutorials_page(self):
+        from spm_studio.beta.settings_pages import TutorialsPage
+        return TutorialsPage(self.window_)
+
+    def _beta_page(self):
+        from spm_studio.beta.settings_pages import BetaPage
+        return BetaPage(self.window_)
+
+    def _extension_page(self, factory, label):
+        try:
+            return factory(self)
+        except Exception as exc:                      # a broken extension page must not break Settings
+            page, layout = self._page(label)
+            layout.addWidget(_hint(f'This page could not be built: {exc}'))
+            layout.addStretch(1)
+            return page
 
     # ------------------------------------------------------------------ Documents
     def _documents_page(self):

@@ -117,6 +117,14 @@ class AssistantDock(QDockWidget):
     :meth:`dock_panel` puts it back. Use :meth:`is_open`, :meth:`open_panel`, :meth:`close_panel` and
     :meth:`panel_window` rather than show()/hide() so both places are handled."""
     shownChanged=Signal(bool)
+    # v0.0.13: the real state of the assistant for optional extensions (idle, listening, thinking, working,
+    # talking, success, error, unavailable). Emitted in the GUI thread; nothing listens without an extension.
+    agentState=Signal(str)
+
+    def _emit_state(self,name):
+        if getattr(self,'_agent_state','')!=name:
+            self._agent_state=name
+            self.agentState.emit(name)
 
     def __init__(self,main_window):
         super().__init__('Assistant',main_window)
@@ -212,6 +220,8 @@ class AssistantDock(QDockWidget):
         self.context_label=QLabel('');self.context_label.setObjectName('hint');self.context_label.hide()
         cl.addWidget(self.context_label)
         self.input=QPlainTextEdit();self.input.setPlaceholderText('Message  ·  Ctrl+Enter to send')
+        self.input.textChanged.connect(lambda:self._emit_state('listening' if self.input.toPlainText().strip() else 'idle')
+                                       if not getattr(self,'_running',False) else None)
         self.input.setMaximumHeight(110);cl.addWidget(self.input)
         chat_actions=QHBoxLayout();chat_actions.setSpacing(4)
         self.attach=tool_button('','attach','Attach a small text file (≤100 kB)',icon_only=True);self.attach.clicked.connect(self.attach_file)
@@ -591,6 +601,7 @@ class AssistantDock(QDockWidget):
     # ---- visible "working" state
     def _set_busy(self,on,detail=''):
         if on:
+            if getattr(self,'_running',False):self._emit_state('thinking')
             if not self.busy_row.isVisible():self._busy_started=time.monotonic()
             self._busy_detail=detail or self._busy_detail or 'Thinking'
             self.busy_row.show();self._busy_timer.start();self._update_busy()
@@ -606,11 +617,14 @@ class AssistantDock(QDockWidget):
         if not self._running:return
         if text.startswith('Running tool'):
             self._busy_detail=text.replace('Running tool: ','using ')
+            self._emit_state('working')
         else:
             self._busy_detail='Thinking'
+            self._emit_state('thinking')
         self._update_busy()
 
     def _backend_stopped(self):
+        self._emit_state('unavailable')
         self._set_state(self._backend_label()+' stopped','error')
         self.reconnect.show()
 
@@ -621,6 +635,8 @@ class AssistantDock(QDockWidget):
         self.log.appendPlainText(time.strftime('%H:%M:%S')+'  '+redact(str(message))[:2000])
 
     def _error(self,message):
+        self._had_error=True
+        self._emit_state('error')
         self._log('ERROR: '+message)
         self.task_status.setText('Last error: '+str(message)[:120])
         if self._running:
@@ -636,6 +652,7 @@ class AssistantDock(QDockWidget):
             self._set_busy(False);self.setWindowTitle('Assistant')
 
     def _receive_delta(self,part):
+        self._emit_state('talking')
         if self._busy_detail!='Writing the answer':
             self._busy_detail='Writing the answer';self._update_busy()
         self.partial+=part
@@ -644,6 +661,8 @@ class AssistantDock(QDockWidget):
 
     def _settled(self):
         self._running=False;self._update_buttons()
+        self._emit_state('error' if getattr(self,'_had_error',False) else 'success')
+        self._had_error=False
         if self.partial:
             self.history.append({'role':'assistant','content':self.partial})
             self._last_reply=self.partial
@@ -812,6 +831,17 @@ class AssistantDock(QDockWidget):
         if line:
             from spm_studio.documents import protocol as _doc_protocol
             text+=_doc_protocol.context_note(line)
+        # v0.0.13: tone notes of an enabled extension, for this message only (hidden in the chat display).
+        try:
+            api=getattr(self.host,'extension_api',None)
+            notes=api.assistant_instructions() if api is not None else ''
+        except Exception:
+            notes=''
+        if notes:
+            from spm_studio.documents import protocol as _doc_protocol
+            text+=(_doc_protocol.CONTEXT_MARK+'style for this reply only, from an extension the user enabled; it '
+                   'never changes facts, numbers, analyses, tools or permissions: '+notes.replace(']',')')+']')
+        self._had_error=False
         self._lit_rounds=0          # automatic literature follow-ups are counted per question
         self._doc_rounds=0
         self._dispatch(text)

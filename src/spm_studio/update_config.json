@@ -1,5 +1,9 @@
 {
   "repository": "maxlpld/SPM-Studio",
   "branch": "main",
-  "include_prereleases": false
+  "include_prereleases": false,
+  "beta_api": "",
+  "extension_signing_keys": [
+    "/6oYKhLA2NgbREt53i+z7NjtnbrPyNR+8bqJKI+swmw="
+  ]
 }

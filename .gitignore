@@ -55,6 +55,8 @@ chat_history*.json
 *.npy
 *.npz
 *.sxm
+# v0.0.13: the three public KBr tutorial scans are part of the app (unmodified, checked by SHA-256)
+!src/spm_studio/resources/tutorial_scan/*.sxm
 *.gwy
 *.nhf
 *.nid
