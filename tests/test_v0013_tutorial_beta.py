@@ -451,8 +451,9 @@ def test_guided_tour_real_actions_and_escape(window):
     assert wait_until(lambda: manager.done)
     assert len({p for p in window._source_paths if Path(p).name in dataset.FILES}) == 3
     manager.callout.next_button.click()
+    from PySide6.QtCore import Qt
     item = next(window.browser.files.item(i) for i in range(window.browser.files.count())
-                if dataset.MAIN in window.browser.files.item(i).text())
+                if Path(str(window.browser.files.item(i).data(Qt.ItemDataRole.UserRole))).name == dataset.MAIN)
     window.browser.files.setCurrentItem(item)
     assert wait_until(lambda: window.scan is not None and Path(window.scan.path).name == dataset.MAIN, 60)
     assert wait_until(lambda: manager.done)
