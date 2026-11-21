@@ -197,6 +197,8 @@ def test_signed_manifest_and_safe_install(home, monkeypatch):
 
 @pytest.mark.parametrize('name', ['../evil.py', '/abs.py', 'a/../../b.py', 'C:\\x.py', 'dir\\x.py'])
 def test_unsafe_archives_are_refused(home, name):
+    if os.name == 'nt' and name == 'dir\\x.py':
+        pytest.skip('zipfile itself reads backslashes as folder separators on Windows (dir/x.py, harmless)')
     from spm_studio.beta import extensions
     from spm_studio.beta.client import BetaError
     archive = home / 'bad.zip'
