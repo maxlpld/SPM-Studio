@@ -219,6 +219,22 @@ def run(win) -> int:
         assert dialog.state()['keys'] == ['bias']
         dialog.close(); dialog.deleteLater()
 
+    def tutorial_and_beta():
+        # v0.0.13: the guided tour starts, Esc-equivalent stop releases it; the new Settings pages build.
+        from spm_studio.tutorial import dataset
+        assert all(dataset.verify().values()), 'bundled tutorial scans damaged'
+        win.start_tutorial(0)
+        app.processEvents()
+        assert win.tutorial.active and win.tutorial.callout.isVisible()
+        win.tutorial.stop('escape')
+        app.processEvents()
+        assert not win.tutorial.active
+        from spm_studio.ui.settings_dialog import SettingsDialog
+        dialog = SettingsDialog(win, 'beta')
+        for key in ('updates', 'tutorials', 'beta'):
+            assert key in dialog._page_keys
+        dialog.close(); dialog.deleteLater()
+
     def todo_and_print3d():
         # v0.0.12: to-do window (saved list) and the 3D print tool open and close cleanly.
         todo_win = win.documents.open_todo()
@@ -235,7 +251,7 @@ def run(win) -> int:
         app.processEvents()
 
     for name, fn in (('themes', themes), ('menus', menus), ('settings window', settings),
-                     ('to-do and 3D print', todo_and_print3d),
+                     ('to-do and 3D print', todo_and_print3d), ('tutorial and beta', tutorial_and_beta),
                      ('spectroscopy composer', spectroscopy_composer),
                      ('assistant panel', assistant),
                      ('results options', options), ('live tool detection', live_tools), ('export-panel figures', script_figures),

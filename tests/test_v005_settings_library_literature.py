@@ -587,8 +587,9 @@ def test_settings_window_pages_and_library_actions(window, tmp_path, monkeypatch
     dialog = SettingsDialog(window, 'about')
     dialog.show()
     QApplication.processEvents()
-    assert [p[0] for p in PAGES] == ['general', 'library', 'literature', 'documents', 'about']   # v0.0.8
-    assert dialog.stack.currentIndex() == 4
+    assert [p[0] for p in PAGES] == ['general', 'library', 'literature', 'documents', 'updates', 'tutorials',
+                                     'beta', 'about']   # v0.0.8 + v0.0.13 (updates, tutorials, beta tester)
+    assert dialog.stack.currentIndex() == 7
     author = dialog.findChild(type(dialog.about_version), 'AboutAuthorV005')
     assert 'maxlpld' in author.text() and 'https://github.com/maxlpld' in author.text()
     current = re.search(r'^version = "(\d+\.\d+\.\d+)"',

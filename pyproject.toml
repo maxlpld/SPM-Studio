@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "spm-studio"
-version = "0.0.12"
+version = "0.0.13"
 description = "SPM Studio — Scientific image & data analysis"
 readme = "README.md"
 requires-python = ">=3.12"
@@ -33,7 +33,7 @@ spm-studio-check = "spm_studio.core.diagnostics:main"
 where = ["src"]
 
 [tool.setuptools.package-data]
-spm_studio = ["update_config.json", "builtin_modules/*/*.json", "builtin_modules/*/*.py", "builtin_modules/*/README.md", "builtin_modules/README_SCRIPT.md", "resources/*.json", "resources/*.png", "resources/fonts/*"]
+spm_studio = ["update_config.json", "builtin_modules/*/*.json", "builtin_modules/*/*.py", "builtin_modules/*/README.md", "builtin_modules/README_SCRIPT.md", "resources/*.json", "resources/*.png", "resources/fonts/*", "resources/tutorial_scan/*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

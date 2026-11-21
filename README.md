@@ -10,7 +10,7 @@
 </p>
 
 <p align="center">
-  <img alt="Version 0.0.12" src="https://img.shields.io/badge/version-0.0.12-57758B">
+  <img alt="Version 0.0.13" src="https://img.shields.io/badge/version-0.0.13-57758B">
   <img alt="Python 3.12+" src="https://img.shields.io/badge/python-3.12%2B-3776AB">
   <img alt="Linux, Windows, macOS" src="https://img.shields.io/badge/platform-Linux%20%7C%20Windows%20%7C%20macOS-555555">
   <img alt="MIT licence" src="https://img.shields.io/badge/licence-MIT-2E7D32">
@@ -30,7 +30,7 @@ without AI.
 
 ## Contents
 
-[Installation](#installation) · [Launch](#launch) · [Updating](#updating) · [Uninstall](#uninstall) ·
+[Installation](#installation) · [Launch](#launch) · [Guided tutorial](#guided-tutorial) · [Updating](#updating) · [Uninstall](#uninstall) ·
 [Features](#features) · [LaTeX & slides](#writing-papers-and-talks-latex-editor-presentation-editor-overleaf-optional) · [AI assistant](#ai-assistant-optional) · [Scientific scope](#scientific-scope-and-limitations) ·
 [Developers](#developers) · [Help and contributing](#help-bugs-and-contributing)
 
@@ -86,6 +86,24 @@ its archive.
 
 Then click **Open** for a `.sxm` or `.gwy` file, or **Dataset** for a folder of scans. Everything else is one
 click away: the **gear button** at the right of the top bar opens *Settings*.
+
+## Guided tutorial
+
+At the first start SPM Studio offers a 10-minute guided tour (or skip it with *La science n’attend pas !*). It uses
+three real KBr(001) nc-AFM scans bundled with the app (`src/spm_studio/resources/tutorial_scan`, unmodified Nanonis
+files with their SHA-256 checksums) and the real controls: you open, inspect, apply a profile, duplicate a profile,
+compare scans, inspect an incomplete scan, use a tool, read the guides, meet the assistant and export. A lesson
+is finished by doing it (or *Skip step*); **Esc** ends the tour at any time. It works offline, needs no AI and
+never changes your data. Replay it from *Settings › Tutorials* or *Help › Guided tutorial*.
+
+## Beta testers
+
+Invited testers can receive optional private extensions: *Settings › Beta Tester*, enter the invitation key
+**once on each computer** (the same key works on several computers, 5 by default), then check and install the
+extension (you confirm; signature and checksum are verified first). *My computers…* lists your computers and can
+remove an old one; *Sign out* / *Disconnect this computer* leave the beta on this computer. SPM Studio itself is
+the same for everyone and never needs an account. A revoked or expired access stops future downloads and
+updates; extensions already installed can be disabled or uninstalled, and your data are never touched.
 
 ## Updating
 

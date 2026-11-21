@@ -1,0 +1,66 @@
+{
+  "schema_version": 1,
+  "folder": "tutorial_scan",
+  "dataset_name": "KBr / Nanonis SXM — Guided SPM Studio Tutorial",
+  "origin": "User-supplied Nanonis SXM acquisition files",
+  "notes": "The binary files are included without modification. Scientific claims should come from actual scan metadata and pixels, not assumptions.",
+  "files": [
+    {
+      "filename": "20261119-KBr001_008.sxm",
+      "role": "main_import",
+      "description": "Complete 256 × 256 example, 10 × 10 nm field, nominal down scan, 90° rotation. Start here.",
+      "bytes": 7346956,
+      "sha256": "cd842999e4257341837771fe2f2911f2d910f04c75324bda3235e87bcb263514",
+      "scan_pixels": [
+        256,
+        256
+      ],
+      "scan_range_nm": [
+        10.0,
+        10.0
+      ],
+      "scan_angle_deg": 90.0,
+      "scan_direction": "down",
+      "recorded_date": "19.11.2026",
+      "bias_v": 0.0
+    },
+    {
+      "filename": "20261119-KBr001_009.sxm",
+      "role": "direction_comparison",
+      "description": "Same nominal area as _008, nominal up scan, 256 × 256. Compare scan-direction metadata and available forward/backward channels.",
+      "bytes": 7346951,
+      "sha256": "b5dfb2f61f69ca44f94e16a6966ee044c513ef47815e98a3b210db8b0ae27554",
+      "scan_pixels": [
+        256,
+        256
+      ],
+      "scan_range_nm": [
+        10.0,
+        10.0
+      ],
+      "scan_angle_deg": 90.0,
+      "scan_direction": "up",
+      "recorded_date": "19.11.2026",
+      "bias_v": 0.0
+    },
+    {
+      "filename": "20261119-KBr001_015.sxm",
+      "role": "incomplete_scan",
+      "description": "192 × 192, 10 × 10 nm field, nominal down scan, 0° rotation. Includes incomplete Z data; teach inspection and safe cropping only when supported.",
+      "bytes": 4135690,
+      "sha256": "6ea4232c8bd5887923a73691e8561466c762963f3bd46b5ef147ab8890d66424",
+      "scan_pixels": [
+        192,
+        192
+      ],
+      "scan_range_nm": [
+        10.0,
+        10.0
+      ],
+      "scan_angle_deg": 0.0,
+      "scan_direction": "down",
+      "recorded_date": "19.11.2026",
+      "bias_v": 0.0
+    }
+  ]
+}
