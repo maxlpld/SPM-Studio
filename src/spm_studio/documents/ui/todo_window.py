@@ -1,24 +1,29 @@
-"""To-do list & notes window, connected to the assistant (v0.0.12)."""
+"""To-do list & notes window, connected to the assistant (v0.0.12; simpler layout in v0.0.14)."""
 from __future__ import annotations
 
 from PySide6.QtCore import Qt, QTimer, QFileSystemWatcher
 from PySide6.QtGui import QFont, QKeySequence, QShortcut
 from PySide6.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QLineEdit, QComboBox, QPushButton,
-                               QListWidget, QListWidgetItem, QPlainTextEdit, QSplitter, QLabel, QTabWidget,
+                               QListWidget, QListWidgetItem, QPlainTextEdit, QLabel, QTabWidget,
                                QToolButton, QMenu, QAbstractItemView, QMessageBox)
 
 from spm_studio.documents import todo as model, settings as doc_settings
 
-DONE_LABELS = (('Done tasks: struck through', 'strike'), ('Done tasks: normal', 'plain'), ('Done tasks: hidden', 'hide'))
+DONE_LABELS = (('crossed out', 'strike'), ('normal', 'plain'), ('hidden', 'hide'))
+EMPTY_HINT = ('No tasks yet.\n\nType a task in the box above and press Enter.\n'
+              'Example: “Line profile across the step in scan 0024”.\n\n'
+              'Tick a task when it is done. Select it to add details or to hand it to the assistant.')
 
 
 class TodoWindow(QMainWindow):
+    """Simple to-do list: add in one line, tick, select for details, notes in a second tab (v0.0.14 layout)."""
+
     def __init__(self, hub, parent=None):
         super().__init__(parent)
         self.hub = hub
         self.setObjectName('TodoWindowV0012')
         self.setWindowTitle('To-do & notes — SPM Studio')
-        self.resize(980, 680)
+        self.resize(760, 640)
         self.data = model.load()
         self._loading = False
         self._save_timer = QTimer(self)
@@ -28,42 +33,111 @@ class TodoWindow(QMainWindow):
         central = QWidget()
         self.setCentralWidget(central)
         root = QVBoxLayout(central)
-        # ------------------------------------------------------------ header
-        head = QHBoxLayout()
+        root.setContentsMargins(14, 12, 14, 8)
+        root.setSpacing(8)
+        # ------------------------------------------------------------ add a task (one line, Enter)
         self.quick = QLineEdit()
         self.quick.setObjectName('TodoQuickAddV0012')
-        self.quick.setPlaceholderText('New task — e.g. “Analysis: CPD map of scan 0024, compare with Ag(111)” '
-                                      '(Enter to add)')
+        self.quick.setPlaceholderText('＋  Add a task and press Enter')
+        self.quick.setClearButtonEnabled(True)
+        self.quick.setMinimumHeight(34)
         self.quick.returnPressed.connect(self.add_from_quick)
-        self.category = QComboBox()
+        self.category = QComboBox()                     # kept for older code paths; tasks need no category
         self.category.addItem('No category', '')
+        self.category.hide()
+        root.addWidget(self.quick)
+        # ------------------------------------------------------------ tasks | notes
+        self.tabs = QTabWidget()
+        self.tabs.setObjectName('TodoTabsV0014')
+        root.addWidget(self.tabs, 1)
+        tasks_page = QWidget()
+        tv = QVBoxLayout(tasks_page)
+        tv.setContentsMargins(0, 6, 0, 0)
+        self.empty = QLabel(EMPTY_HINT)
+        self.empty.setObjectName('TodoEmptyHintV0014')
+        self.empty.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.empty.setWordWrap(True)
+        self.empty.setStyleSheet('color: palette(placeholder-text); padding: 30px;')
+        tv.addWidget(self.empty)
+        self.list = QListWidget()
+        self.list.setObjectName('TodoListV0012')
+        self.list.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
+        self.list.setDragDropMode(QAbstractItemView.DragDropMode.InternalMove)
+        self.list.setEditTriggers(QAbstractItemView.EditTrigger.DoubleClicked |
+                                  QAbstractItemView.EditTrigger.EditKeyPressed)
+        self.list.setSpacing(2)
+        self.list.setStyleSheet('QListWidget::item { padding: 6px 4px; }')
+        self.list.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.list.customContextMenuRequested.connect(self._context_menu)
+        self.list.itemChanged.connect(self._item_changed)
+        self.list.currentItemChanged.connect(self._show_details)
+        self.list.model().rowsMoved.connect(self._rows_moved)
+        tv.addWidget(self.list, 1)
+        # details of the selected task (hidden while nothing is selected)
+        self.panel = QWidget()
+        self.panel.setObjectName('TodoTaskPanelV0014')
+        pv = QVBoxLayout(self.panel)
+        pv.setContentsMargins(0, 6, 0, 0)
+        self.detail_title = QLabel()
+        self.detail_title.setWordWrap(True)
+        self.detail_title.setObjectName('launcherTitle')
+        pv.addWidget(self.detail_title)
+        self.details = QPlainTextEdit()
+        self.details.setObjectName('TodoDetailsV0012')
+        self.details.setPlaceholderText('Details (optional): which scans, channels, parameters, what result you '
+                                        'expect … The assistant reads this when you hand it the task.')
+        self.details.setMaximumHeight(120)
+        self.details.textChanged.connect(self._detail_changed)
+        pv.addWidget(self.details)
+        self.detail_category = QComboBox()              # data model field, not shown in the simple layout
+        self.detail_category.addItem('No category', '')
         for c in model.CATEGORIES:
-            self.category.addItem(c, c)
-        add = QPushButton('Add')
-        add.clicked.connect(self.add_from_quick)
-        head.addWidget(self.quick, 1)
-        head.addWidget(self.category)
-        head.addWidget(add)
-        root.addLayout(head)
+            self.detail_category.addItem(c, c)
+        self.detail_category.hide()
+        prow = QHBoxLayout()
+        self.do_it = QPushButton('✨ Do it with the assistant')
+        self.do_it.setObjectName('TodoDoWithAssistantV0014')
+        self.do_it.setProperty('primary', True)
+        self.do_it.setToolTip('Sends this task (and its details) to the assistant')
+        self.do_it.clicked.connect(lambda: self.ask_tasks('selected'))
+        self.delete_button = QPushButton('Delete')
+        self.delete_button.setObjectName('TodoDeleteV0014')
+        self.delete_button.clicked.connect(self.delete_selected)
+        prow.addWidget(self.do_it)
+        prow.addStretch(1)
+        prow.addWidget(self.delete_button)
+        pv.addLayout(prow)
+        tv.addWidget(self.panel)
+        self.tabs.addTab(tasks_page, 'Tasks')
+        self.notes = QPlainTextEdit()
+        self.notes.setObjectName('TodoNotesV0012')
+        self.notes.setPlaceholderText('Your notes: observations, results, ideas, references …\n\n'
+                                      'The assistant can turn them into a report, a paper draft or slides '
+                                      '(button “Assistant” below).')
+        self.notes.textChanged.connect(self._notes_changed)
+        self.tabs.addTab(self.notes, 'Notes')
+        # ------------------------------------------------------------ bottom bar
         bar = QHBoxLayout()
         self.ask = QToolButton()
         self.ask.setObjectName('TodoAskAssistantV0012')
-        self.ask.setText('Ask the assistant ▾')
+        self.ask.setText('✨ Assistant ▾')
         self.ask.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
         menu = QMenu(self.ask)
-        for label, slot in (('Do the selected task(s)', lambda: self.ask_tasks('selected')),
-                            ('Do every open task, one after the other', lambda: self.ask_tasks('open')),
-                            ('Plan the open tasks (no changes yet)', lambda: self.ask_tasks('plan')),
+        for label, slot in (('Do all open tasks, one after the other', lambda: self.ask_tasks('open')),
+                            ('Make a plan for the open tasks (changes nothing)', lambda: self.ask_tasks('plan')),
                             (None, None),
                             ('Write a report from my notes (LaTeX)', lambda: self.ask_writing('report')),
                             ('Write a paper draft from my notes (LaTeX)', lambda: self.ask_writing('paper')),
-                            ('Make a presentation from my notes (Slides)', lambda: self.ask_writing('slides')),
-                            ('Summarise my notes here', lambda: self.ask_writing('summary'))):
+                            ('Make slides from my notes', lambda: self.ask_writing('slides')),
+                            ('Summarise my notes', lambda: self.ask_writing('summary'))):
             if label is None:
                 menu.addSeparator()
             else:
                 menu.addAction(label, slot)
         self.ask.setMenu(menu)
+        bar.addWidget(self.ask)
+        bar.addStretch(1)
+        bar.addWidget(QLabel('Finished tasks:'))
         self.done_style = QComboBox()
         self.done_style.setObjectName('TodoDoneStyleV0012')
         for label, key in DONE_LABELS:
@@ -71,66 +145,14 @@ class TodoWindow(QMainWindow):
         style = doc_settings.load().get('todo_done_style', 'strike')
         self.done_style.setCurrentIndex(max(0, self.done_style.findData(style)))
         self.done_style.currentIndexChanged.connect(self._done_style_changed)
-        delete = QPushButton('Delete task')
-        delete.clicked.connect(self.delete_selected)
-        self.erase = QPushButton('Erase everything')
+        bar.addWidget(self.done_style)
+        self.erase = QToolButton()
         self.erase.setObjectName('TodoEraseAllV0012')
-        self.erase.setProperty('destructive', True)
+        self.erase.setText('Erase all…')
         self.erase.setToolTip('Remove every task and the notes (a copy is kept in the to-do folder)')
         self.erase.clicked.connect(self.erase_all)
-        bar.addWidget(self.ask)
-        bar.addStretch(1)
-        bar.addWidget(self.done_style)
-        bar.addWidget(delete)
         bar.addWidget(self.erase)
         root.addLayout(bar)
-        # ------------------------------------------------------------ body
-        self.tabs = QTabWidget()
-        root.addWidget(self.tabs, 1)
-        split = QSplitter(Qt.Orientation.Horizontal)
-        self.list = QListWidget()
-        self.list.setObjectName('TodoListV0012')
-        self.list.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
-        self.list.setDragDropMode(QAbstractItemView.DragDropMode.InternalMove)
-        self.list.setEditTriggers(QAbstractItemView.EditTrigger.DoubleClicked |
-                                  QAbstractItemView.EditTrigger.EditKeyPressed)
-        self.list.itemChanged.connect(self._item_changed)
-        self.list.currentItemChanged.connect(self._show_details)
-        self.list.model().rowsMoved.connect(self._rows_moved)
-        split.addWidget(self.list)
-        right = QWidget()
-        rv = QVBoxLayout(right)
-        rv.setContentsMargins(6, 0, 0, 0)
-        self.detail_title = QLabel('Select a task')
-        self.detail_title.setWordWrap(True)
-        self.detail_title.setObjectName('launcherTitle')
-        rv.addWidget(self.detail_title)
-        row = QHBoxLayout()
-        row.addWidget(QLabel('Category'))
-        self.detail_category = QComboBox()
-        self.detail_category.addItem('No category', '')
-        for c in model.CATEGORIES:
-            self.detail_category.addItem(c, c)
-        self.detail_category.currentIndexChanged.connect(self._detail_changed)
-        row.addWidget(self.detail_category)
-        row.addStretch(1)
-        rv.addLayout(row)
-        rv.addWidget(QLabel('What I need — files, scans, channels, parameters, expected result:'))
-        self.details = QPlainTextEdit()
-        self.details.setObjectName('TodoDetailsV0012')
-        self.details.setPlaceholderText('e.g. Use 20260415_KBr_*.sxm, channel Z forward, plane + row align. '
-                                        'Make a script that … and save the figure as SVG.')
-        self.details.textChanged.connect(self._detail_changed)
-        rv.addWidget(self.details, 1)
-        split.addWidget(right)
-        split.setSizes([420, 520])
-        self.tabs.addTab(split, 'Tasks')
-        self.notes = QPlainTextEdit()
-        self.notes.setObjectName('TodoNotesV0012')
-        self.notes.setPlaceholderText('Notes — observations, results, ideas, references … The assistant can turn them '
-                                      'into a report, a paper draft or a presentation (Ask the assistant ▾).')
-        self.notes.textChanged.connect(self._notes_changed)
-        self.tabs.addTab(self.notes, 'Notes')
         self.status = QLabel('')
         self.status.setObjectName('hint')
         root.addWidget(self.status)
@@ -145,6 +167,22 @@ class TodoWindow(QMainWindow):
         self.watcher.fileChanged.connect(self._file_changed)
         self._own_write = False
         self.refresh()
+        self.quick.setFocus()
+
+    def _context_menu(self, pos):
+        item = self.list.itemAt(pos)
+        if item is None:
+            return
+        self.list.setCurrentItem(item)
+        menu = QMenu(self)
+        done = item.checkState() == Qt.CheckState.Checked
+        menu.addAction('Mark as not done' if done else 'Mark as done',
+                       lambda: item.setCheckState(Qt.CheckState.Unchecked if done else Qt.CheckState.Checked))
+        menu.addAction('Rename', lambda: self.list.editItem(item))
+        menu.addAction('✨ Do it with the assistant', lambda: self.ask_tasks('selected'))
+        menu.addSeparator()
+        menu.addAction('Delete', self.delete_selected)
+        menu.exec(self.list.viewport().mapToGlobal(pos))
 
     # ------------------------------------------------------------------ data ↔ view
     def refresh(self):
@@ -177,7 +215,14 @@ class TodoWindow(QMainWindow):
             self.notes.setPlainText(self.data['notes'])
         self._loading = False
         self._show_details(self.list.currentItem())
-        self.status.setText(model.summary(self.data) + f' · saved in {model.file()}')
+        empty = not self.data['tasks']
+        self.empty.setVisible(empty)
+        self.list.setVisible(not empty)
+        open_count = sum(1 for t in self.data['tasks'] if not t['done'])
+        self.tabs.setTabText(0, f'Tasks ({open_count})' if open_count else 'Tasks')
+        self.tabs.setTabText(1, 'Notes ✎' if self.data['notes'].strip() else 'Notes')
+        self.status.setText('Saved automatically.')
+        self.status.setToolTip(str(model.file()))
 
     def current_task(self):
         item = self.list.currentItem() if hasattr(self, 'list') else None
@@ -263,12 +308,12 @@ class TodoWindow(QMainWindow):
         self._loading = True
         self.details.setEnabled(task is not None)
         self.detail_category.setEnabled(task is not None)
+        self.panel.setVisible(task is not None)
         if task is None:
-            self.detail_title.setText('Select a task')
+            self.detail_title.setText('')
             self.details.setPlainText('')
         else:
-            n = self.data['tasks'].index(task) + 1
-            self.detail_title.setText(f"#{n}  {task['text']}" + ('  ✓ done' if task['done'] else ''))
+            self.detail_title.setText(task['text'] + ('   ✓ done' if task['done'] else ''))
             if self.details.toPlainText() != task['details']:
                 self.details.setPlainText(task['details'])
             self.detail_category.setCurrentIndex(max(0, self.detail_category.findData(task['category'])))
@@ -337,7 +382,7 @@ class TodoWindow(QMainWindow):
         if which == 'selected':
             ids = self.selected_ids()
             if not ids:
-                QMessageBox.information(self, 'Ask the assistant', 'Select one or more tasks first.')
+                QMessageBox.information(self, 'Assistant', 'Click a task first.')
                 return
             listing = model.as_text(self.data, only=set(ids))
             intro = 'Please do these tasks from my SPM Studio to-do list:'
@@ -361,7 +406,7 @@ class TodoWindow(QMainWindow):
         notes = self.data['notes'].strip()
         done = model.as_text(self.data, only={t['id'] for t in self.data['tasks'] if t['done']})
         if not notes and done == '(no tasks)':
-            QMessageBox.information(self, 'Ask the assistant', 'Write some notes first (Notes tab).')
+            QMessageBox.information(self, 'Assistant', 'Write some notes first (tab “Notes”).')
             return
         conf = doc_settings.load()
         if kind in ('report', 'paper') and not conf.get('latex_enabled'):

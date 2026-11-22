@@ -10,7 +10,7 @@
 </p>
 
 <p align="center">
-  <img alt="Version 0.0.13" src="https://img.shields.io/badge/version-0.0.13-57758B">
+  <img alt="Version 0.0.14" src="https://img.shields.io/badge/version-0.0.14-57758B">
   <img alt="Python 3.12+" src="https://img.shields.io/badge/python-3.12%2B-3776AB">
   <img alt="Linux, Windows, macOS" src="https://img.shields.io/badge/platform-Linux%20%7C%20Windows%20%7C%20macOS-555555">
   <img alt="MIT licence" src="https://img.shields.io/badge/licence-MIT-2E7D32">
@@ -98,9 +98,11 @@ never changes your data. Replay it from *Settings › Tutorials* or *Help › Gu
 
 ## Beta testers
 
-Invited testers can receive optional private extensions: *Settings › Beta Tester*, enter the invitation key
-**once on each computer** (the same key works on several computers, 5 by default), then check and install the
-extension (you confirm; signature and checksum are verified first). *My computers…* lists your computers and can
+Invited testers can receive optional private extensions: *Settings › Beta Tester*, paste the invitation key,
+name the computer and press *Activate beta access* — **once on each computer** (the same key works on several
+computers, 5 by default). SPM Studio then offers the extension; *Install or update…* shows the release notes, a
+progress bar and the details, then *Restart now* (signature and checksum are verified first). Everything that
+only beta testers have carries a small **BETA** badge. *My computers…* lists your computers and can
 remove an old one; *Sign out* / *Disconnect this computer* leave the beta on this computer. SPM Studio itself is
 the same for everyone and never needs an account. A revoked or expired access stops future downloads and
 updates; extensions already installed can be disabled or uninstalled, and your data are never touched.

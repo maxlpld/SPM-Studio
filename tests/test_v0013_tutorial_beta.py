@@ -25,7 +25,8 @@ def home(tmp_path, monkeypatch):
         monkeypatch.setenv(name, str(tmp_path / folder))
     monkeypatch.setenv('HOME', str(tmp_path / 'home'))
     monkeypatch.setenv('SPM_STUDIO_BETA_NO_KEYRING', '1')
-    monkeypatch.delenv('SPM_STUDIO_BETA_API', raising=False)
+    # never the real beta service from tests (v0.0.14 ships its address): an unreachable local port
+    monkeypatch.setenv('SPM_STUDIO_BETA_API', 'http://127.0.0.1:9')
     (tmp_path / 'home').mkdir()
     return tmp_path
 
@@ -349,13 +350,15 @@ def test_client_requires_https_and_handles_offline(home, monkeypatch):
         client.api_base()
     assert err.value.code == 'NOT_CONFIGURED'
     monkeypatch.delenv('SPM_STUDIO_BETA_API')
+    assert client.api_base() == 'https://spm-beta.spm-beta.workers.dev'      # shipped default (v0.0.14)
+    assert client.signing_keys() and len(client.signing_keys()[0]) == 32
+    monkeypatch.setattr(client, '_update_config', lambda: {})
     with pytest.raises(client.BetaError):
-        client.api_base()                                   # nothing configured in this version: clear message
+        client.api_base()                                   # nothing configured: clear message
     monkeypatch.setenv('SPM_STUDIO_BETA_API', 'http://127.0.0.1:9')
     with pytest.raises(client.BetaError) as err:
         client.request('GET', '/v1/auth/me')
     assert err.value.code == 'OFFLINE'
-    assert client.signing_keys() and len(client.signing_keys()[0]) == 32
     assert client.device_id() == client.device_id()
 
 
@@ -496,7 +499,7 @@ def test_welcome_panel_and_settings_pages(window, monkeypatch):
     page = dialog.findChild(BetaPage)
     page.key.setText('SPM-BETA-ABCDE-FGHJK-LMNPQ-RSTUV-WXYZ2-34567')
     beta.click()
-    assert wait_until(lambda: 'beta service' in page.message.text().lower())       # not configured: clear words
+    assert wait_until(lambda: 'beta service' in page.message.text().lower())       # offline: clear words
     assert page.key.text() == ''                                                     # the key does not stay
     dialog.close()
 
@@ -510,8 +513,8 @@ def test_beta_page_activation_flow(window, fake_service):
     page.key.setText('SPM-BETA-ABCDE-FGHJK-LMNPQ-RSTUV-WXYZ2-34567')
     page.label.setText('Lab PC')
     page.activate.click()
-    assert wait_until(lambda: 'active on this computer' in page.message.text())
-    assert page.active.isVisibleTo(dialog) and '2 / 5' in page.account.text()
+    assert wait_until(lambda: page.active.isVisibleTo(dialog) and not page._workers)
+    assert '2 / 5' in page.account.text() and not page.join.isVisibleTo(dialog)
     assert not page.admin_button.isVisibleTo(dialog)                                 # role from the server
     dialog.close()
 

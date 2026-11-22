@@ -242,7 +242,7 @@ def _error_from(status: int, body: bytes) -> BetaError:
 
 
 def request(method: str, path: str, body: dict | None = None, token: str = '', raw: bool = False,
-            dest: Path | None = None, max_bytes: int = MAX_JSON):
+            dest: Path | None = None, max_bytes: int = MAX_JSON, progress=None):
     """One HTTPS call to the beta service. JSON in/out, or streamed into ``dest``."""
     url = api_base() + path
     data = json.dumps(body).encode('utf8') if body is not None else None
@@ -272,6 +272,8 @@ def request(method: str, path: str, body: dict | None = None, token: str = '', r
                         if total > max_bytes:
                             raise BetaError('BAD_RESPONSE', 'The download is larger than announced')
                         fh.write(block)
+                        if progress is not None:
+                            progress(total, max_bytes)
                 return total
             payload = resp.read(max_bytes + 1)
     except urllib.error.HTTPError as exc:
@@ -403,13 +405,15 @@ class Session:
         save_state(last_release_check=time.time())
         return manifest
 
-    def download(self, manifest: dict) -> Path:
+    def download(self, manifest: dict, progress=None) -> Path:
+        """Download the release archive and check its size and SHA-256; ``progress(done, total)`` in bytes."""
         from . import extensions
         folder = extensions.downloads_dir()
         target = folder / f'download-{secrets.token_hex(8)}.zip'
         size = int(manifest['artifact']['size'])
         try:
-            self.call('GET', manifest['artifact']['download_path'], dest=target, max_bytes=min(size, MAX_ASSET))
+            self.call('GET', manifest['artifact']['download_path'], dest=target, max_bytes=min(size, MAX_ASSET),
+                      progress=progress)
             extensions.check_artifact(target, manifest)
         except BaseException:
             target.unlink(missing_ok=True)

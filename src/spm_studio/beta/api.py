@@ -110,6 +110,16 @@ class ExtensionHandle:
         except Exception:
             pass
 
+    def beta_badge(self, parent=None, text: str = 'BETA'):
+        """The small BETA mark to put next to anything this extension adds (v0.0.14)."""
+        from .badge import beta_badge
+        return beta_badge(parent, text)
+
+    def beta_label(self, text: str) -> str:
+        """Plain-text form for menus and lists: 'My tool  · BETA'."""
+        from .badge import beta_label
+        return beta_label(text)
+
     def own_widget(self, widget):
         """Hide and delete this widget when the extension is disabled or the app quits."""
         self._api._widgets.setdefault(self.id, []).append(widget)

@@ -2,7 +2,7 @@
   "repository": "maxlpld/SPM-Studio",
   "branch": "main",
   "include_prereleases": false,
-  "beta_api": "",
+  "beta_api": "https://spm-beta.spm-beta.workers.dev",
   "extension_signing_keys": [
     "/6oYKhLA2NgbREt53i+z7NjtnbrPyNR+8bqJKI+swmw="
   ]

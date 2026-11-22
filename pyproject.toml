@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "spm-studio"
-version = "0.0.13"
+version = "0.0.14"
 description = "SPM Studio — Scientific image & data analysis"
 readme = "README.md"
 requires-python = ">=3.12"

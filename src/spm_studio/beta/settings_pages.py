@@ -193,36 +193,48 @@ class BetaPage(QWidget):
         layout.setContentsMargins(4, 0, 10, 8)
         _heading(layout, 'Beta Tester', 'Private beta program: invited testers get optional private extensions. '
                                         'SPM Studio itself is the same for everyone and needs no account.')
-        # -- not activated
+        # -- not activated: three explicit steps
         self.join = QGroupBox('Join the beta on this computer')
+        self.join.setObjectName('BetaJoinBoxV0014')
         jv = QVBoxLayout(self.join)
-        jv.addWidget(_hint('Enter your invitation key once on each computer you use (the same key works on several '
-                           'computers, 5 by default). The key is sent once over HTTPS and not stored; this computer '
-                           'then keeps its own sign-in in the system credential store. Private extensions are only '
-                           'installed when you confirm, after their signature and checksum are verified.'))
-        row = QHBoxLayout()
+        jv.addWidget(_hint('Do this once on each computer you use (the same key works on several computers, 5 by '
+                           'default). The key is sent once over HTTPS and is not stored.'))
+        step1 = QLabel('<b>Step 1</b> — paste the invitation key you received (SPM-BETA-…)')
+        jv.addWidget(step1)
         self.key = QLineEdit()
         self.key.setObjectName('BetaInvitationKeyV0013')
-        self.key.setPlaceholderText('SPM-BETA-…')
+        self.key.setPlaceholderText('SPM-BETA-XXXXX-XXXXX-XXXXX-XXXXX-XXXXX-XXXXX')
         self.key.setEchoMode(QLineEdit.EchoMode.Password)
         self.key.setAccessibleName('Invitation key')
+        jv.addWidget(self.key)
+        jv.addWidget(QLabel('<b>Step 2</b> — give this computer a name you will recognise (Desktop, Laptop, Lab PC …)'))
         self.label = QLineEdit(client.load_state().get('device_label') or client.default_device_label())
         self.label.setObjectName('BetaDeviceLabelV0013')
         self.label.setMaxLength(40)
-        self.label.setToolTip('A nickname for this computer (Desktop, Laptop, Lab PC …); no hostname is sent.')
-        self.activate = QPushButton('Activate')
+        self.label.setToolTip('Only this nickname is sent (no hostname, no hardware identifier).')
+        jv.addWidget(self.label)
+        jv.addWidget(QLabel('<b>Step 3</b> — activate; SPM Studio then looks for the private extension and offers '
+                            'to install it.'))
+        row = QHBoxLayout()
+        self.activate = QPushButton('Activate beta access')
         self.activate.setObjectName('BetaActivateV0013')
         self.activate.setProperty('primary', True)
         self.activate.clicked.connect(self.redeem)
-        row.addWidget(self.key, 2)
-        row.addWidget(self.label, 1)
         row.addWidget(self.activate)
+        row.addStretch(1)
         jv.addLayout(row)
-        service = QPushButton('Beta service address…')
+        service_row = QHBoxLayout()
+        self.service_label = QLabel()
+        self.service_label.setObjectName('hint')
+        self.service_label.setWordWrap(True)
+        service_row.addWidget(self.service_label, 1)
+        service = QPushButton('Change…')
         service.setObjectName('BetaServiceAddressV0013')
         service.setFlat(True)
+        service.setToolTip('Only if the administrator gave you another beta service address')
         service.clicked.connect(self.set_service)
-        jv.addWidget(service, 0, Qt.AlignmentFlag.AlignLeft)
+        service_row.addWidget(service)
+        jv.addLayout(service_row)
         layout.addWidget(self.join)
         # -- active
         self.active = QGroupBox('Beta access')
@@ -316,6 +328,10 @@ class BetaPage(QWidget):
     def refresh(self):
         state = client.load_state()
         signed = self.session.signed_in()
+        try:
+            self.service_label.setText(f'Beta service: {client.api_base()}')
+        except client.BetaError:
+            self.service_label.setText('Beta service: not set — press Change… and paste the address you received.')
         self.join.setVisible(not signed)
         self.active.setVisible(signed)
         self.ext_box.setVisible(signed or bool(extensions.installed()))
@@ -395,26 +411,11 @@ class BetaPage(QWidget):
                     return
             except ValueError:
                 pass
-        box = QMessageBox(self)
-        box.setWindowTitle('Install private extension?')
-        box.setIcon(QMessageBox.Icon.Question)
-        box.setText(f"Install <b>{m['name']} {m['version']}</b> from {m['vendor']}?")
-        box.setInformativeText('It is Python code that runs inside SPM Studio. Its signature and checksum are '
-                               'verified before installation. You can disable or uninstall it at any time; your '
-                               'data are not touched.\n\nPermissions: ' + ', '.join(m.get('permissions', []))
-                               + '\n\n' + str(m.get('changelog', ''))[:1500])
-        box.setStandardButtons(QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
-        if box.exec() != QMessageBox.StandardButton.Yes:
-            return
-        self.say('Downloading and verifying…')
-
-        def job():
-            path = self.session.download(m)
-            try:
-                return extensions.install_archive(path, m)
-            finally:
-                path.unlink(missing_ok=True)
-        self._run('install', job)
+        dialog = BetaInstallDialog(self, self.session, m)
+        dialog.exec()
+        if dialog.installed:
+            self.say(f"Installed {m['name']} {m['version']}. Restart SPM Studio to start it.")
+        self.refresh()
 
     def toggle_extension(self):
         installed = extensions.installed()
@@ -489,7 +490,10 @@ class BetaPage(QWidget):
             self.refresh()
             return
         if tag == 'redeem':
-            self.say('Beta access is active on this computer. Check for the private extension below.')
+            self.say('Beta access is active on this computer. Looking for the private extension…')
+            self.refresh()
+            self.check()
+            return
         elif tag == 'me':
             self.say('')
         elif tag == 'check':
@@ -497,9 +501,8 @@ class BetaPage(QWidget):
             installed = extensions.installed().get(result['id'])
             same = installed and installed['descriptor']['version'] == result['version']
             self.say('You have the latest private extension.' if same else
-                     f"{result['name']} {result['version']} is available.")
-        elif tag == 'install':
-            self.say(f"Installed {result['name']} {result['version']}. Restart SPM Studio to start it.")
+                     f"{result['name']} {result['version']} is available — press “Install or update…”.")
+            self.install_button.setText('Install or update…' if not same else 'Reinstall…')
         elif tag == 'signout':
             self.say('Signed out on this computer.')
         elif tag == 'rename':
@@ -556,3 +559,150 @@ class DevicesDialog(QDialog):
             return
         self.list.takeItem(self.list.row(item))
         self.page.refresh()
+
+
+class _InstallWorker(QThread):
+    progress = Signal(int, str)
+    log = Signal(str)
+    done = Signal(object)
+    failed = Signal(str)
+
+    def __init__(self, session, manifest, parent=None):
+        super().__init__(parent)
+        self.session, self.manifest = session, manifest
+        self.cancelled = False
+
+    def run(self):
+        m = self.manifest
+        size = int(m['artifact']['size'])
+        path = None
+        try:
+            self.log.emit(f"Signature of the release manifest verified with the key built into SPM Studio.")
+            self.log.emit(f"Downloading {m['artifact']['name']} ({size / 1e6:.1f} MB) from the beta service …")
+            last = [-1]
+
+            def tick(done, _total):
+                if self.cancelled:
+                    raise client.BetaError('CANCELLED', 'Cancelled')
+                percent = int(80 * done / max(1, size))
+                if percent != last[0]:
+                    last[0] = percent
+                    self.progress.emit(percent, f'Downloading … {done / 1e6:.1f} / {size / 1e6:.1f} MB')
+            path = self.session.download(m, progress=tick)
+            self.log.emit(f"Size and SHA-256 match the signed manifest ({m['artifact']['sha256'][:16]}…).")
+            self.progress.emit(85, 'Unpacking safely …')
+            descriptor = extensions.install_archive(path, m)
+            folder = extensions.root() / descriptor['id'] / descriptor['version']
+            self.log.emit(f'Installed in {folder}')
+            self.progress.emit(100, 'Installed. Restart SPM Studio to start it.')
+            self.done.emit(descriptor)
+        except Exception as exc:
+            self.failed.emit(client.friendly(exc))
+        finally:
+            if path is not None:
+                path.unlink(missing_ok=True)
+
+
+class BetaInstallDialog(QDialog):
+    """Install a private extension like an update: what is new, progress bar, details, Restart now / Later."""
+
+    def __init__(self, page, session, manifest):
+        super().__init__(page)
+        from PySide6.QtGui import QFontDatabase
+        from PySide6.QtWidgets import QPlainTextEdit, QProgressBar
+        from .badge import beta_badge
+        self.page, self.session, self.manifest = page, session, manifest
+        self.installed = False
+        self.worker = None
+        self.setObjectName('BetaInstallDialogV0014')
+        self.setWindowTitle('Install private extension')
+        self.resize(640, 520)
+        v = QVBoxLayout(self)
+        head = QHBoxLayout()
+        title = QLabel(f"<b>{manifest['name']} {manifest['version']}</b> — {manifest['vendor']}")
+        title.setObjectName('heading')
+        head.addWidget(title)
+        head.addWidget(beta_badge(self))
+        head.addStretch(1)
+        v.addLayout(head)
+        v.addWidget(_hint('Python code that runs inside SPM Studio. Its signature and checksum are verified before '
+                          'it is installed; you can disable or uninstall it at any time, your data are not touched. '
+                          'Permissions: ' + ', '.join(manifest.get('permissions', []))))
+        notes = QTextBrowser()
+        notes.setMarkdown(str(manifest.get('changelog') or 'No release notes.'))
+        v.addWidget(notes, 1)
+        self.bar = QProgressBar()
+        self.bar.setObjectName('BetaInstallProgressV0014')
+        self.bar.setRange(0, 100)
+        self.bar.hide()
+        v.addWidget(self.bar)
+        self.status = QLabel('')
+        self.status.setWordWrap(True)
+        v.addWidget(self.status)
+        self.log = QPlainTextEdit()
+        self.log.setObjectName('BetaInstallLogV0014')
+        self.log.setReadOnly(True)
+        self.log.setFont(QFontDatabase.systemFont(QFontDatabase.SystemFont.FixedFont))
+        self.log.hide()
+        v.addWidget(self.log, 1)
+        row = QHBoxLayout()
+        self.details = QCheckBox('Show details')
+        self.details.toggled.connect(self.log.setVisible)
+        row.addWidget(self.details)
+        row.addStretch(1)
+        self.later = QPushButton('Cancel')
+        self.later.clicked.connect(self.reject)
+        self.go = QPushButton('Install')
+        self.go.setObjectName('BetaInstallStartV0014')
+        self.go.setProperty('primary', True)
+        self.go.clicked.connect(self.start)
+        self.restart = QPushButton('Restart now')
+        self.restart.setObjectName('BetaInstallRestartV0014')
+        self.restart.setProperty('primary', True)
+        self.restart.clicked.connect(self.restart_now)
+        self.restart.hide()
+        for button in (self.later, self.go, self.restart):
+            row.addWidget(button)
+        v.addLayout(row)
+
+    def start(self):
+        self.go.setEnabled(False)
+        self.bar.show()
+        self.bar.setValue(0)
+        self.later.setText('Cancel')
+        self.worker = _InstallWorker(self.session, self.manifest, self)
+        self.worker.progress.connect(self._progress)
+        self.worker.log.connect(self.log.appendPlainText)
+        self.worker.done.connect(self._done)
+        self.worker.failed.connect(self._failed)
+        self.worker.start()
+
+    def _progress(self, percent, text):
+        self.bar.setValue(percent)
+        self.status.setText(text)
+
+    def _done(self, _descriptor):
+        self.installed = True
+        self.go.hide()
+        self.later.setText('Later')
+        self.restart.show()
+        self.restart.setFocus()
+
+    def _failed(self, message):
+        self.status.setText('⚠ ' + message + ' Nothing was installed.')
+        self.log.appendPlainText('ERROR: ' + message)
+        self.details.setChecked(True)
+        self.go.setEnabled(True)
+        self.go.setText('Try again')
+
+    def restart_now(self):
+        from spm_studio.ui.update_dialog import restart_app
+        window = getattr(self.page, 'window_', None)
+        self.accept()
+        restart_app(window)
+
+    def reject(self):
+        if self.worker is not None and self.worker.isRunning():
+            self.worker.cancelled = True
+            self.worker.wait(15000)
+        super().reject()
