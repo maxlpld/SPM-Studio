@@ -7,6 +7,28 @@ so write it for users. Add new versions **at the top**.
 The internal builds that preceded the GitHub project (0.7.0 – 0.8.3) are documented in
 [`docs/DEVELOPMENT_HISTORY.md`](docs/DEVELOPMENT_HISTORY.md).
 
+## 0.0.15 — 2026-11-22
+
+### 3D print (Tools › 3D print)
+
+- **Much better print quality**: every text, tick and scale bar is now drawn from bold vector font outlines on a
+  0.05 mm grid with vertical walls (sharp, printable letters); the relief has Draft / Standard / Fine quality
+  presets (the grid can still be set by hand) and the files only keep detail where it is visible.
+- **Bigger default text** (5 mm, bold) and higher labels (1 mm).
+- **Centred layout**: the plate gets equal margins on all four sides, with or without a title or colour bar.
+- **Several channels on one plate**: one, two side by side or stacked, three in a row or as a triangle, four
+  (2 × 2 or in a row) or a custom rows × columns grid; each panel has its own channel, range and 3D colour bar.
+- **Channel titles** on/off and a **main title** centred on top of the plate.
+- **Fridge magnet** option: four round pockets (radius 5.1 mm, 2 mm deep by default, adjustable) under the
+  corners for small magnets; the plate is thickened automatically when needed.
+- **Save 3MF (colour gradient)**: one part per channel (relief + its 3D colour bar) with its own low → high
+  colours, plus the plate & labels part; the gradient recipe for Bambu Studio colour mixing (Gradient mode,
+  along the height) is stored inside the file and in a `.colour_gradient.txt` next to it. Each channel can get
+  a different gradient. Because the gradient follows the height, the 3D colour bar and the relief show the same
+  colour at the same value.
+- The plate is made of separate closed solids (plate, reliefs, colour bars, labels); STEP files contain one
+  solid per part. The previous single-relief engine stays available in the code.
+
 ## 0.0.14 — 2026-11-22
 
 ### Simpler to-do list

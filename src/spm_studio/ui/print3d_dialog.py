@@ -1,17 +1,51 @@
-"""Tools › 3D print: STL / STEP relief of a scan channel with a 3D colour bar, live 3D preview."""
+"""Tools › 3D print: STL / STEP / 3MF plates of one or several scan channels with 3D colour bars, live preview.
+
+v0.0.15: sharp bold labels, centred layout, several channels per plate (2 / 3 / triangle / 4 / custom grid),
+channel titles on/off, main title, fridge-magnet pockets and a 3MF with one colour-gradient part per channel.
+"""
 from __future__ import annotations
 
 import json
-from dataclasses import asdict
 from pathlib import Path
 
 import numpy as np
 from PySide6.QtCore import Qt, QTimer, QSettings
 from PySide6.QtWidgets import (QDialog, QHBoxLayout, QVBoxLayout, QFormLayout, QComboBox, QDoubleSpinBox, QSpinBox,
                                QCheckBox, QLineEdit, QPushButton, QLabel, QGroupBox, QFileDialog, QScrollArea,
-                               QWidget, QSizePolicy, QMessageBox)
+                               QWidget, QSizePolicy, QMessageBox, QGridLayout, QColorDialog)
+from PySide6.QtGui import QColor
 
 from ..core import print3d as P
+from ..core import print3d_plate as Q
+
+GRADIENTS = (('#1D3F8F', '#F5C342'), ('#5B1A72', '#F28C28'), ('#0B6E4F', '#E8F1A0'), ('#7A1020', '#F7D9C4'),
+             ('#202020', '#E0E0E0'), ('#0E4D64', '#F2A65A'))
+
+
+class ColorButton(QPushButton):
+    """Small button showing a colour; click to choose another one."""
+
+    def __init__(self, color, on_change=None):
+        super().__init__()
+        self.setMaximumWidth(46)
+        self._on_change = on_change
+        self.set_color(color)
+        self.clicked.connect(self._pick)
+
+    def color(self):
+        return self._color
+
+    def set_color(self, color):
+        self._color = QColor(color).name().upper()
+        self.setToolTip(self._color)
+        self.setStyleSheet(f'background:{self._color}; min-height:18px; border:1px solid #888; border-radius:3px;')
+
+    def _pick(self):
+        chosen = QColorDialog.getColor(QColor(self._color), self, 'Filament colour')
+        if chosen.isValid():
+            self.set_color(chosen.name())
+            if self._on_change:
+                self._on_change()
 
 SOURCES = (('Scan channel', 'channel'), ('Lattice result (vectors + legend)', 'lattice'),
            ('Molecule placement (molecules + vectors)', 'molecules'))
@@ -55,12 +89,14 @@ class Print3DDialog(QDialog):
     def __init__(self, main_window, parent=None):
         super().__init__(parent or main_window)
         self.main_window = main_window
-        self.setWindowTitle('3D print — STL / STEP relief with 3D colour bar')
+        self.setWindowTitle('3D print — STL / STEP / 3MF plate with 3D colour bars')
         self.setObjectName('Print3DDialogV0012')
         self.setWindowFlag(Qt.WindowType.Window, True)
         self.resize(1250, 780)
         self.settings = QSettings()
         self.model = None
+        self.plate = None
+        self.panel_rows = []
         self._timer = QTimer(self)
         self._timer.setSingleShot(True)
         self._timer.setInterval(350)
@@ -109,6 +145,42 @@ class Print3DDialog(QDialog):
         f.addRow(self.source_hint)
         form_layout.addWidget(box)
 
+        box = QGroupBox('Layout and titles')
+        f = QFormLayout(box)
+        self.layout_combo = QComboBox()
+        for key, (label, _slots) in Q.LAYOUTS.items():
+            self.layout_combo.addItem(label, key)
+        self.layout_rows = QSpinBox()
+        self.layout_rows.setRange(1, 4)
+        self.layout_cols = QSpinBox()
+        self.layout_cols.setRange(1, 4)
+        self.layout_cols.setValue(2)
+        grid_row = QHBoxLayout()
+        grid_row.setContentsMargins(0, 0, 0, 0)
+        grid_row.addWidget(self.layout_rows)
+        grid_row.addWidget(QLabel('×'))
+        grid_row.addWidget(self.layout_cols)
+        self.grid_holder = QWidget()
+        self.grid_holder.setLayout(grid_row)
+        self.channel_titles = QCheckBox('Channel titles above each scan')
+        self.channel_titles.setChecked(True)
+        self.main_title = QLineEdit()
+        self.main_title.setPlaceholderText('optional, centred on top of the plate')
+        f.addRow('Channels on the plate', self.layout_combo)
+        f.addRow('Custom rows × columns', self.grid_holder)
+        f.addRow('', self.channel_titles)
+        f.addRow('Main title', self.main_title)
+        self.panels_box = QWidget()
+        self.panels_grid = QGridLayout(self.panels_box)
+        self.panels_grid.setContentsMargins(0, 0, 0, 0)
+        f.addRow(self.panels_box)
+        hint = QLabel('Panel 1 is the source above; choose the channel of the other panels. The two colours are '
+                      'the low → high colour gradient of the 3MF export.')
+        hint.setWordWrap(True)
+        hint.setObjectName('hint')
+        f.addRow(hint)
+        form_layout.addWidget(box)
+
         def dspin(lo, hi, value, step=.1, decimals=2, suffix=' mm'):
             s = QDoubleSpinBox()
             s.setRange(lo, hi)
@@ -123,15 +195,29 @@ class Print3DDialog(QDialog):
         self.width_mm = dspin(10, 400, 80, 5, 1)
         self.base_mm = dspin(.4, 30, 2, .2, 1)
         self.relief_mm = dspin(.2, 80, 6, .5, 1)
-        self.resolution = dspin(.05, 2, .25, .05, 2)
+        self.quality = QComboBox()
+        for key, label in (('draft', 'Draft (light file)'), ('standard', 'Standard'), ('fine', 'Fine (large file)'),
+                           ('custom', 'Custom grid')):
+            self.quality.addItem(label, key)
+        self.quality.setCurrentIndex(1)
+        self.resolution = dspin(.05, 2, Q.QUALITY['standard'], .05, 2)
         self.smooth = dspin(0, 10, 0, .5, 1, ' px')
         self.invert = QCheckBox('Invert (low values high)')
+        self.magnets = QCheckBox('Fridge magnet: 4 round pockets under the corners')
+        self.magnet_radius = dspin(1, 20, 5.1, .1, 2)
+        self.magnet_depth = dspin(.4, 10, 2.0, .1, 2)
+        self.base_color = ColorButton('#F2F2F2', self.schedule)
         f.addRow('Scan width', self.width_mm)
         f.addRow('Base plate', self.base_mm)
         f.addRow('Relief (low → high)', self.relief_mm)
+        f.addRow('Quality', self.quality)
         f.addRow('Grid resolution', self.resolution)
         f.addRow('Smoothing', self.smooth)
         f.addRow('', self.invert)
+        f.addRow('', self.magnets)
+        f.addRow('Magnet pocket radius', self.magnet_radius)
+        f.addRow('Magnet pocket depth', self.magnet_depth)
+        f.addRow('Plate & labels colour', self.base_color)
         form_layout.addWidget(box)
 
         box = QGroupBox('Colour-bar range (= printed heights)')
@@ -160,11 +246,10 @@ class Print3DDialog(QDialog):
         self.ticks = QSpinBox()
         self.ticks.setRange(2, 11)
         self.ticks.setValue(5)
-        self.font = dspin(1.5, 15, 4, .5, 1)
-        self.label_mm = dspin(.2, 5, .8, .1, 1)
+        self.font = dspin(1.5, 15, 5, .5, 1)
+        self.label_mm = dspin(.2, 5, 1.0, .1, 1)
         self.overlay_mm = dspin(.2, 10, 1, .1, 1)
-        self.title = QLineEdit()
-        self.title.setPlaceholderText('optional, embossed above the scan')
+        self.title = self.main_title          # v0.0.12 name of the title field
         self.scale_bar = QCheckBox('Scale bar')
         self.scale_bar.setChecked(True)
         f.addRow('Colour bar', self.colorbar)
@@ -174,7 +259,6 @@ class Print3DDialog(QDialog):
         f.addRow('Text size', self.font)
         f.addRow('Text height', self.label_mm)
         f.addRow('Vectors / molecules height', self.overlay_mm)
-        f.addRow('Title', self.title)
         f.addRow('', self.scale_bar)
         form_layout.addWidget(box)
         form_layout.addStretch(1)
@@ -184,9 +268,13 @@ class Print3DDialog(QDialog):
         self.save_step = QPushButton('Save STEP…')
         self.save_stl.clicked.connect(lambda: self.export('stl'))
         self.save_step.clicked.connect(lambda: self.export('step'))
+        self.save_3mf = QPushButton('Save 3MF (colour gradient)…')
+        self.save_3mf.setToolTip('One part per channel with its low → high colours, for Bambu Studio colour mixing')
+        self.save_3mf.clicked.connect(lambda: self.export('3mf'))
         buttons.addWidget(self.save_stl)
         buttons.addWidget(self.save_step)
         form_layout.addLayout(buttons)
+        form_layout.addWidget(self.save_3mf)
         # ------------------------------------------------------------ preview
         right = QVBoxLayout()
         from matplotlib.figure import Figure
@@ -202,14 +290,23 @@ class Print3DDialog(QDialog):
         root.addLayout(right, 1)
         self._restore()
         self._fill_channels()
+        self._layout_changed()
         for w in (self.source, self.channel, self.trace, self.range_mode, self.colorbar):
             w.currentIndexChanged.connect(self.schedule)
         for w in (self.width_mm, self.base_mm, self.relief_mm, self.resolution, self.smooth, self.low, self.high,
-                  self.bar_width, self.bar_gap, self.font, self.label_mm, self.overlay_mm):
+                  self.bar_width, self.bar_gap, self.font, self.label_mm, self.overlay_mm, self.magnet_radius,
+                  self.magnet_depth):
             w.valueChanged.connect(self.schedule)
         self.ticks.valueChanged.connect(self.schedule)
-        for w in (self.processed, self.invert, self.scale_bar):
+        for w in (self.processed, self.invert, self.scale_bar, self.channel_titles, self.magnets):
             w.toggled.connect(self.schedule)
+        self.magnets.toggled.connect(self._magnets_changed)
+        self._magnets_changed()
+        self.layout_combo.currentIndexChanged.connect(self._layout_changed)
+        self.layout_rows.valueChanged.connect(self._layout_changed)
+        self.layout_cols.valueChanged.connect(self._layout_changed)
+        self.quality.currentIndexChanged.connect(self._quality_changed)
+        self.resolution.valueChanged.connect(self._resolution_edited)
         self.title.textChanged.connect(self.schedule)
         self.result_file.editingFinished.connect(self.schedule)
         self.range_mode.currentIndexChanged.connect(self._range_mode_changed)
@@ -219,7 +316,8 @@ class Print3DDialog(QDialog):
 
     # ------------------------------------------------------------------ settings
     _KEYS = ('width_mm', 'base_mm', 'relief_mm', 'resolution', 'smooth', 'bar_width', 'bar_gap', 'font',
-             'label_mm', 'overlay_mm')
+             'label_mm', 'overlay_mm', 'magnet_radius', 'magnet_depth')
+    _COMBOS = ('quality', 'layout_combo')
 
     def _restore(self):
         for key in self._KEYS:
@@ -232,11 +330,29 @@ class Print3DDialog(QDialog):
         position = self.settings.value('print3d/colorbar')
         if position:
             self.colorbar.setCurrentIndex(max(0, self.colorbar.findData(position)))
+        for key in self._COMBOS:
+            value = self.settings.value(f'print3d/{key}')
+            if value:
+                combo = getattr(self, key)
+                combo.setCurrentIndex(max(0, combo.findData(value)))
+        for key in ('layout_rows', 'layout_cols'):
+            try:
+                getattr(self, key).setValue(int(self.settings.value(f'print3d/{key}') or getattr(self, key).value()))
+            except (TypeError, ValueError):
+                pass
+        titles = self.settings.value('print3d/channel_titles')
+        if titles is not None:
+            self.channel_titles.setChecked(str(titles).lower() in ('true', '1'))
 
     def _store(self):
         for key in self._KEYS:
             self.settings.setValue(f'print3d/{key}', getattr(self, key).value())
         self.settings.setValue('print3d/colorbar', self.colorbar.currentData())
+        for key in self._COMBOS:
+            self.settings.setValue(f'print3d/{key}', getattr(self, key).currentData())
+        for key in ('layout_rows', 'layout_cols'):
+            self.settings.setValue(f'print3d/{key}', getattr(self, key).value())
+        self.settings.setValue('print3d/channel_titles', self.channel_titles.isChecked())
 
     def closeEvent(self, event):
         self._store()
@@ -287,6 +403,96 @@ class Print3DDialog(QDialog):
                 self.high.setValue(float(hi))
             except Exception:
                 pass
+
+    def _quality_changed(self, *_):
+        key = self.quality.currentData()
+        if key in Q.QUALITY:
+            self.resolution.blockSignals(True)
+            self.resolution.setValue(Q.QUALITY[key])
+            self.resolution.blockSignals(False)
+            self.schedule()
+
+    def _resolution_edited(self, *_):
+        if self.quality.currentData() != 'custom' and \
+                abs(self.resolution.value() - Q.QUALITY.get(self.quality.currentData(), -1)) > 1e-6:
+            self.quality.blockSignals(True)
+            self.quality.setCurrentIndex(self.quality.findData('custom'))
+            self.quality.blockSignals(False)
+
+    def _magnets_changed(self, *_):
+        for w in (self.magnet_radius, self.magnet_depth):
+            w.setEnabled(self.magnets.isChecked())
+
+    def layout_params(self):
+        return {'layout': self.layout_combo.currentData(), 'layout_rows': self.layout_rows.value(),
+                'layout_cols': self.layout_cols.value()}
+
+    def _layout_changed(self, *_):
+        """One row per extra panel: channel, trace, low and high gradient colours."""
+        self.grid_holder.setEnabled(self.layout_combo.currentData() == 'custom')
+        n = Q.panel_count(self.layout_params())
+        old = [(r['channel'].currentText(), r['trace'].currentText(), r['low'].color(), r['high'].color())
+               for r in self.panel_rows]
+        while self.panels_grid.count():
+            item = self.panels_grid.takeAt(0)
+            if item.widget():
+                item.widget().deleteLater()
+        self.panel_rows = []
+        scan = getattr(self.main_window, 'scan', None)
+        names = list(scan.channels) if scan is not None else []
+        for k in range(n):
+            label = QLabel(f'Panel {k + 1}')
+            if k == 0:
+                channel = QLabel('source above')
+                trace = QLabel('')
+            else:
+                channel = QComboBox()
+                channel.addItems(names)
+                if names:
+                    channel.setCurrentIndex(k % len(names))
+                trace = QComboBox()
+                trace.addItems(['forward', 'backward'])
+            low, high = GRADIENTS[k % len(GRADIENTS)]
+            if k < len(old):
+                if k and old[k][0]:
+                    channel.setCurrentText(old[k][0])
+                    trace.setCurrentText(old[k][1])
+                low, high = old[k][2], old[k][3]
+            row = {'channel': channel, 'trace': trace, 'low': ColorButton(low, self.schedule),
+                   'high': ColorButton(high, self.schedule)}
+            if k:
+                channel.currentIndexChanged.connect(self.schedule)
+                trace.currentIndexChanged.connect(self.schedule)
+            else:          # keep the same API for panel 1
+                channel.currentText = lambda: ''
+                trace.currentText = lambda: ''
+            for col, w in enumerate((label, channel, trace, row['low'], row['high'])):
+                self.panels_grid.addWidget(w, k, col)
+            self.panel_rows.append(row)
+        self.schedule()
+
+    def panels(self):
+        """Q.Panel list of the plate (panel 1 = the chosen source)."""
+        data, size_nm, unit, factor, overlay = self._data()
+        rows = self.panel_rows or [{'low': ColorButton(GRADIENTS[0][0]), 'high': ColorButton(GRADIENTS[0][1])}]
+        title = self.channel.currentText() if self.source.currentData() == 'channel' else \
+            {'lattice': 'Lattice', 'molecules': 'Molecules'}.get(self.source.currentData(), '')
+        if self.source.currentData() == 'channel' and self.trace.currentText() == 'backward':
+            title += ' (backward)'
+        out = [Q.Panel(data, size_nm, unit, factor, title, overlay, (rows[0]['low'].color(), rows[0]['high'].color()))]
+        absolute = self.range_mode.currentData() == 'absolute'
+        for row in rows[1:]:
+            name = row['channel'].currentText()
+            if not name:
+                raise ValueError('Open a scan to choose the channels of the other panels')
+            a, cd = self._channel_array(name, row['trace'].currentText(), self.processed.isChecked())
+            size = cd.geometry.size_m
+            f, u = P.display_unit(cd.unit or '', a)
+            rng = {'range_mode': 'percentile', 'low': 1.0, 'high': 99.0} if absolute else {}
+            label = name + (' (backward)' if row['trace'].currentText() == 'backward' else '')
+            out.append(Q.Panel(a, (size[0] * 1e9, size[1] * 1e9) if size else None, u, f, label, None,
+                               (row['low'].color(), row['high'].color()), rng))
+        return out
 
     def _pick_result(self):
         path, _ = QFileDialog.getOpenFileName(self, 'Lattice / molecule result', str(Path.home()), 'JSON (*.json)')
@@ -363,34 +569,41 @@ class Print3DDialog(QDialog):
                 'colorbar_gap_mm': self.bar_gap.value(), 'colorbar_ticks': self.ticks.value(),
                 'font_mm': self.font.value(), 'label_mm': self.label_mm.value(),
                 'overlay_mm': self.overlay_mm.value(), 'title': self.title.text(),
-                'scale_bar': self.scale_bar.isChecked(), 'unit': unit, 'value_scale': factor}
+                'scale_bar': self.scale_bar.isChecked(), 'unit': unit, 'value_scale': factor,
+                'quality': self.quality.currentData(), 'main_title': self.main_title.text(),
+                'channel_titles': self.channel_titles.isChecked(), 'magnets': self.magnets.isChecked(),
+                'magnet_radius_mm': self.magnet_radius.value(), 'magnet_depth_mm': self.magnet_depth.value(),
+                'base_color': self.base_color.color(), **self.layout_params()}
 
     # ------------------------------------------------------------------ preview
     def schedule(self, *_):
         self._timer.start()
 
     def _build(self, preview=False):
-        data, size_nm, unit, factor, overlay = self._data()
-        p = self.params(factor, unit)
+        panels = self.panels()
+        p = self.params(panels[0].factor, panels[0].unit)
+        p['title'] = ''                       # the title is the plate's main title
         if preview:
-            # a coarser grid keeps the live preview fast; the files use the chosen resolution
-            plate = p['width_mm'] * 1.6
-            p['resolution_mm'] = max(p['resolution_mm'], plate / 260)
-        return P.build_model(data, size_nm, p, overlay), p
+            # coarser grids keep the live preview fast; the files use the chosen quality
+            p['resolution_mm'] = max(p['resolution_mm'], p['width_mm'] / 110)
+            p['text_resolution_mm'] = .2
+        return Q.build_plate(panels, p), p
 
     def update_preview(self):
         try:
-            model, p = self._build(preview=True)
+            plate, p = self._build(preview=True)
         except Exception as exc:
             self.figure.clear()
             self.canvas.draw_idle()
             self.info.setText('⚠ ' + str(exc))
-            self.save_stl.setEnabled(False)
-            self.save_step.setEnabled(False)
+            for b in (self.save_stl, self.save_step, self.save_3mf):
+                b.setEnabled(False)
             return
-        self.save_stl.setEnabled(True)
-        self.save_step.setEnabled(True)
-        z, cell = P.decimate(model.z, model.cell_mm, 22000)
+        self.plate = plate
+        for b in (self.save_stl, self.save_step, self.save_3mf):
+            b.setEnabled(True)
+        z, cell = plate.preview
+        z, cell = P.decimate(z, cell, 30000)
         rows, cols = z.shape
         x = (np.arange(cols) + .5) * cell
         y = ((rows - 1 - np.arange(rows)) + .5) * cell
@@ -404,7 +617,7 @@ class Print3DDialog(QDialog):
         shade = light.shade(z, cmap=__import__('matplotlib').colormaps['Greys_r'], vert_exag=1, blend_mode='soft',
                             vmin=0, vmax=float(z.max()))
         ax.plot_surface(X, Y, z, facecolors=shade, rstride=1, cstride=1, linewidth=0, antialiased=False, shade=False)
-        W, H = model.size_mm
+        W, H = plate.size_mm
         top = float(z.max())
         ax.set_box_aspect((W, H, max(top, 1e-3) * 1.0))
         ax.set_xlabel('mm')
@@ -413,17 +626,19 @@ class Print3DDialog(QDialog):
         ax.view_init(*view)
         self.figure.tight_layout()
         self.canvas.draw_idle()
-        cells = int(np.ceil(W / p_res(self)) * np.ceil(H / p_res(self)))
-        lo, hi = model.low * p['value_scale'], model.high * p['value_scale']
-        text = (f'Plate {W:.0f} × {H:.0f} mm, highest point {top:.1f} mm · range {lo:.4g} … {hi:.4g} {p["unit"]} '
-                f'→ {p["base_mm"]:.1f} … {p["base_mm"] + p["relief_mm"]:.1f} mm · STL ≈ {2 * cells / 1e6:.2f} M '
-                f'triangles at {p_res(self):.2f} mm (preview is coarser). Drag the view to rotate.')
-        if model.notes:
-            text += '\n' + ' · '.join(model.notes)
+        first = plate.panels[0]
+        lo, hi = first['low'] * first['factor'], first['high'] * first['factor']
+        base = plate.params['base_mm']
+        text = (f'Plate {W:.0f} × {H:.0f} mm, highest point {base + p["relief_mm"]:.1f} mm · {len(plate.panels)} '
+                f'channel(s) · range {lo:.4g} … {hi:.4g} {first["unit"]} → {base:.1f} … '
+                f'{base + p["relief_mm"]:.1f} mm · relief grid {p_res(self):.2f} mm, labels 0.05 mm '
+                f'(preview is coarser). Drag the view to rotate.')
+        if plate.notes:
+            text += '\n' + ' · '.join(plate.notes)
         self.info.setText(text)
 
     def export(self, fmt):
-        suffix = 'stl' if fmt == 'stl' else 'step'
+        suffix = {'stl': 'stl', '3mf': '3mf'}.get(fmt, 'step')
         scan = getattr(self.main_window, 'scan', None)
         folder = Path(getattr(self.main_window, 'last_export_dir', Path.home()) or Path.home())
         name = (scan.path.stem + '_' + self.channel.currentText().replace(' ', '_') if scan else 'relief')
@@ -432,21 +647,25 @@ class Print3DDialog(QDialog):
         if not path:
             return
         try:
-            model, p = self._build(preview=False)
-            written, triangles, notes = P.export(model, path, suffix)
+            plate, p = self._build(preview=False)
+            written, triangles, notes = Q.export_plate(plate, path, suffix)
             sidecar = Path(path).with_suffix('.print3d.json')
-            sidecar.write_text(json.dumps({'source': self.source.currentData(),
-                                           'scan': str(scan.path) if scan else None,
-                                           'channel': self.channel.currentText(), 'parameters': p,
-                                           'range': [model.low, model.high], 'plate_mm': list(model.size_mm),
-                                           'triangles': triangles}, indent=2, ensure_ascii=False, default=float),
-                               encoding='utf8')
+            info = {'source': self.source.currentData(), 'scan': str(scan.path) if scan else None,
+                    'channel': self.channel.currentText(), 'parameters': p,
+                    'range': [plate.panels[0]['low'], plate.panels[0]['high']],
+                    'panels': [{k: v for k, v in panel.items() if k != 'box'} for panel in plate.panels],
+                    'plate_mm': list(plate.size_mm), 'triangles': triangles}
+            if suffix == '3mf':
+                info['colour_gradients'] = Q.gradient_recipe(plate)
+                Path(path).with_suffix('.colour_gradient.txt').write_text(
+                    Q.recipe_text(info['colour_gradients']), encoding='utf8')
+            sidecar.write_text(json.dumps(info, indent=2, ensure_ascii=False, default=float), encoding='utf8')
         except Exception as exc:
             QMessageBox.warning(self, '3D export failed', str(exc))
             return
-        message = f'{written.name}: {triangles:,} triangles, {model.size_mm[0]:.0f} × {model.size_mm[1]:.0f} mm'
-        if notes:
-            message += '\n' + '\n'.join(notes)
+        message = f'{written.name}: {triangles:,} triangles, {plate.size_mm[0]:.0f} × {plate.size_mm[1]:.0f} mm'
+        if notes or plate.notes:
+            message += '\n' + '\n'.join(list(plate.notes) + list(notes))
         try:
             self.main_window._log('3D print: ' + message + f' → {written}', important=True)
         except Exception:
