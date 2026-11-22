@@ -311,27 +311,9 @@ class UpdateDialog(QDialog):
 
     def _restart_now(self):
         """Close this SPM Studio and open the newly installed one."""
-        argv = updates.restart_argv()
         window = self.parent()
         self.accept()
-        try:
-            if window is not None:
-                window.close()                        # saves layout, stops the assistant
-        except RuntimeError:
-            pass
-        started = QProcess.startDetached(argv[0], argv[1:])
-        if isinstance(started, tuple):
-            started = started[0]
-        app = QApplication.instance()
-        if started and app is not None:
-            QTimer.singleShot(0, app.quit)
-        elif window is not None:
-            try:
-                window.show()
-                QMessageBox.information(window, 'Restart', 'SPM Studio could not be started automatically. '
-                                        'Close it and open it again to use the new version.')
-            except RuntimeError:
-                pass
+        restart_app(window)
 
     def reject(self):
         if self.installing:
@@ -372,3 +354,26 @@ class StartupCheck(QThread):
                 self.available.emit(result)
         except Exception:
             pass                                        # offline / not configured: stay silent
+
+
+def restart_app(window=None):
+    """Close SPM Studio (saving layout, stopping the assistant) and start it again (updates, extensions)."""
+    argv = updates.restart_argv()
+    try:
+        if window is not None:
+            window.close()
+    except RuntimeError:
+        pass
+    started = QProcess.startDetached(argv[0], argv[1:])
+    if isinstance(started, tuple):
+        started = started[0]
+    app = QApplication.instance()
+    if started and app is not None:
+        QTimer.singleShot(0, app.quit)
+    elif window is not None:
+        try:
+            window.show()
+            QMessageBox.information(window, 'Restart', 'SPM Studio could not be started automatically. '
+                                    'Close it and open it again.')
+        except RuntimeError:
+            pass

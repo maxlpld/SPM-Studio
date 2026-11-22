@@ -219,8 +219,9 @@ class SettingsDialog(QDialog):
         pages = list(PAGES)
         # v0.0.13: pages added by installed extensions (none without an extension)
         api = getattr(window, 'extension_api', None)
+        from spm_studio.beta.badge import beta_label
         for key, (_ext, label, factory) in (getattr(api, 'settings_pages', {}) or {}).items():
-            pages.insert(len(pages) - 1, (key, label, 'ai'))
+            pages.insert(len(pages) - 1, (key, beta_label(label), 'ai'))
             builders[key] = lambda factory=factory, label=label: self._extension_page(factory, label)
         for key, label, icon_name in pages:
             item = QListWidgetItem(label)
@@ -295,13 +296,25 @@ class SettingsDialog(QDialog):
         return BetaPage(self.window_)
 
     def _extension_page(self, factory, label):
+        """An extension's page, always under a BETA banner (only beta testers have it)."""
+        from spm_studio.beta.badge import beta_badge
+        holder = QWidget()
+        holder.setObjectName('ExtensionPageV0014')
+        v = QVBoxLayout(holder)
+        v.setContentsMargins(0, 0, 0, 0)
+        banner = QHBoxLayout()
+        banner.addWidget(beta_badge(holder))
+        note = QLabel('Only available to beta testers (private extension).')
+        note.setObjectName('hint')
+        banner.addWidget(note)
+        banner.addStretch(1)
+        v.addLayout(banner)
         try:
-            return factory(self)
+            v.addWidget(factory(self), 1)
         except Exception as exc:                      # a broken extension page must not break Settings
-            page, layout = self._page(label)
-            layout.addWidget(_hint(f'This page could not be built: {exc}'))
-            layout.addStretch(1)
-            return page
+            v.addWidget(_hint(f'This page could not be built: {exc}'))
+            v.addStretch(1)
+        return holder
 
     # ------------------------------------------------------------------ Documents
     def _documents_page(self):

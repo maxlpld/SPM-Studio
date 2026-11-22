@@ -7,6 +7,21 @@ so write it for users. Add new versions **at the top**.
 The internal builds that preceded the GitHub project (0.7.0 – 0.8.3) are documented in
 [`docs/DEVELOPMENT_HISTORY.md`](docs/DEVELOPMENT_HISTORY.md).
 
+## 0.0.14 — 2026-11-22
+
+### Simpler to-do list
+
+- One box at the top: type a task, press Enter. Tick it when it is done. A hint explains what to do when the list is empty.
+- Click a task to add details (optional) and press **✨ Do it with the assistant**, or **Delete**. Right-click a task for the same actions; double-click to rename; drag to reorder.
+- **Tasks** and **Notes** tabs (the number of open tasks is shown on the tab). **✨ Assistant ▾** does all open tasks, makes a plan, or writes a report, a paper draft or slides from your notes.
+- Finished tasks: crossed out, normal or hidden. Everything is still saved automatically.
+
+### Beta testers
+
+- The beta service address is built in: just paste your invitation key, name the computer, press **Activate beta access** (three numbered steps). SPM Studio then looks for the private extension by itself.
+- Installing a private extension now works like an update: release notes, a progress bar, **Show details** (log), then **Restart now** or **Later**.
+- Everything that only beta testers have is marked with a small **BETA** badge (pages in Settings, options and tools of private extensions).
+
 ## 0.0.13 — 2026-11-21
 
 ### Guided tutorial on real KBr scans
