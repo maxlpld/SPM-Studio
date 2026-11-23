@@ -84,7 +84,7 @@ def test_wheel_scrolls_the_panel_not_the_options(app):
     area.resize(300, 200)
     area.show()
     app.processEvents()
-    assert combo.focusPolicy() == Qt.FocusPolicy.StrongFocus          # the wheel does not give focus
+    assert combo.focusPolicy() != Qt.FocusPolicy.WheelFocus           # the wheel does not give focus (macOS: Tab)
     before = area.verticalScrollBar().value()
     _wheel(combo)
     _wheel(spin)
