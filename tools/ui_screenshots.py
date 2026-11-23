@@ -218,6 +218,19 @@ def main(argv=None) -> int:
                      ('3D print', print3d), ('tutorial', tutorial), ('narrow', narrow)):
         step(name, fn)
     print('FAILED SHOTS:', failures if failures else 'none', flush=True)
+    if os.environ.get('SPM_SHOTS_TO_LOG') == '1':
+        # Pictures also as base64 text in the job log (for reviewers who cannot download artifacts).
+        import base64
+        from PySide6.QtGui import QImage
+        for png in sorted(out.glob('*.png')):
+            image = QImage(str(png))
+            jpg = png.with_suffix('.jpg')
+            image.save(str(jpg), 'JPG', 82)
+            data = base64.b64encode(jpg.read_bytes()).decode()
+            print(f'=====BEGIN {jpg.name}', flush=True)
+            for i in range(0, len(data), 4000):
+                print('B64:' + data[i:i + 4000])
+            print(f'=====END {jpg.name}', flush=True)
     QTimer.singleShot(0, app.quit)
     app.exec()
     os._exit(0)

@@ -16,6 +16,7 @@ jobs:
     env:
       QT_QPA_PLATFORM: offscreen
       PYTHONUTF8: '1'
+      SPM_SHOTS_TO_LOG: '1'
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-python@v6
