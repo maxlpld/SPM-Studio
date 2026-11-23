@@ -816,6 +816,13 @@ class MainWindow(QMainWindow):
             self._settings_dialog=None
             dialog.deleteLater()
 
+    @staticmethod
+    def _fit_combo(combo):
+        """v0.0.18: a top-bar list is always wide enough for its longest entry (never "Single colur")."""
+        fm=combo.fontMetrics()
+        longest=max((fm.horizontalAdvance(combo.itemText(i)) for i in range(combo.count())),default=60)
+        combo.setMinimumWidth(min(320,longest+52))
+
     def _toggle_logs(self):
         self.log_dock.setVisible(not self.log_dock.isVisible())
         self.logs_toolbar_button.setChecked(self.log_dock.isVisible())
@@ -1261,6 +1268,7 @@ class MainWindow(QMainWindow):
         self.profiles=presets
         self.profile_combo.clear()
         add_key_items(self.profile_combo,presets)
+        self._fit_combo(self.profile_combo)
 
     def _load_colormaps(self):
         from ..core.display import PALETTES, read_colormap_csv
@@ -1297,6 +1305,7 @@ class MainWindow(QMainWindow):
         self.export_presets=presets
         self.export_preset_combo.clear()
         add_key_items(self.export_preset_combo,presets)
+        self._fit_combo(self.export_preset_combo)
 
     def import_export_preset(self):
         from ..core.presets import validate_export
