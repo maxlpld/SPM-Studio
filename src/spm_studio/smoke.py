@@ -258,4 +258,31 @@ def run(win) -> int:
                      ('svg result preview', results_view), ('LaTeX and presentation editors', documents)):
         _check(name, fn, failures)
     print('SMOKE ' + ('FAILED: ' + ', '.join(failures) if failures else 'PASSED'), flush=True)
+    _wait_for_threads(app)
     return 1 if failures else 0
+
+
+def _wait_for_threads(app, timeout_ms=20000):
+    """Let background QThreads (network checks started by the windows) finish before the app quits.
+
+    Qt aborts the process ("QThread: Destroyed while thread is still running") when a running thread is
+    deleted at exit; that crash says nothing about the app, so the smoke test waits for them first.
+    """
+    import gc
+    from PySide6.QtCore import QThread
+    threads = set()
+    for widget in app.topLevelWidgets():
+        threads.update(widget.findChildren(QThread))
+    for obj in gc.get_objects():
+        try:
+            if isinstance(obj, QThread):
+                threads.add(obj)
+        except Exception:
+            pass
+    for thread in threads:
+        try:
+            if thread is not app.thread() and thread.isRunning():
+                thread.wait(timeout_ms)
+        except RuntimeError:          # already deleted on the C++ side
+            pass
+    app.processEvents()
