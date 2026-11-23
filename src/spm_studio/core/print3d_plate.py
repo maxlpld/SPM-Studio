@@ -618,54 +618,75 @@ def _shift(item, dx, dy):
     return ('line', x0 + dx, y0 + dy, x1 + dx, y1 + dy, w)
 
 
+PREVIEW_CELLS = 260      # preview grid along the long side of the plate
+
+
 def _preview_grid(W, H, base, relief, bodies, label_mask, tres, panels, p, cell=None):
-    """Coarse height field of the whole plate for the 3D preview (top surface only) and its colours."""
-    cell = cell or max(W, H) / 220
-    cols, rows = max(2, int(W / cell)), max(2, int(H / cell))
-    z = np.full((rows, cols), base)
-    kind = np.zeros((rows, cols), int)          # 0 plate, 1 labels, 2 + k panel k
+    """Height field of the whole plate for the 3D preview (top surface) and its print colours.
+
+    Reliefs are sampled exactly from their own height grid; texts are averaged from the fine label raster, so
+    their edges are smooth instead of blocky.
+    """
+    cell = cell or max(W, H) / PREVIEW_CELLS
+    cols, rows = max(2, int(round(W / cell))), max(2, int(round(H / cell)))
+    z = np.full((rows, cols), float(base))
+    cover = np.zeros((rows, cols))               # label coverage 0…1
+    kind = np.zeros((rows, cols), int)          # 0 plate / labels, 2 + k panel k
     if label_mask.any():
         from scipy.ndimage import zoom
         k = max(1, int(round(cell / tres)))
         r2, c2 = label_mask.shape[0] // k * k, label_mask.shape[1] // k * k
         if r2 and c2:
-            pooled = label_mask[:r2, :c2].reshape(r2 // k, k, c2 // k, k).max(axis=(1, 3)).astype(float)
-            pooled = zoom(pooled, (rows / pooled.shape[0], cols / pooled.shape[1]), order=0) > .5
-            z[pooled[:rows, :cols]] = base + float(p['label_mm'])
-            kind[pooled[:rows, :cols]] = 1
+            pooled = label_mask[:r2, :c2].reshape(r2 // k, k, c2 // k, k).mean(axis=(1, 3))
+            pooled = np.clip(zoom(pooled, (rows / pooled.shape[0], cols / pooled.shape[1]), order=1), 0, 1)
+            cover[:pooled.shape[0], :pooled.shape[1]] = pooled[:rows, :cols]
+            z += float(p['label_mm']) * cover
+    gx = (np.arange(cols) + .5) * cell
+    gy = H - (np.arange(rows) + .5) * cell              # mesh y of every preview row
     for body in bodies:
         if not body.name.startswith(('relief', '3D colour bar')):
             continue
-        v = body.verts
-        top = v[v[:, 2] > base - OVERLAP / 2]
-        if not len(top):
-            continue
-        from scipy.interpolate import griddata
-        xs, ys = top[:, 0], top[:, 1]
-        c0, c1 = int(xs.min() / cell), int(math.ceil(xs.max() / cell))
-        r0, r1 = int((H - ys.max()) / cell), int(math.ceil((H - ys.min()) / cell))
-        c0, r0 = max(0, c0), max(0, r0)
-        c1, r1 = min(cols, c1), min(rows, r1)
-        if c1 <= c0 or r1 <= r0:
-            continue
-        gx, gy = np.meshgrid((np.arange(c0, c1) + .5) * cell, H - (np.arange(r0, r1) + .5) * cell)
-        step = max(1, len(top) // 60000)
-        sample = top[::step]
-        vals = griddata(sample[:, :2], sample[:, 2], (gx, gy), method='linear')
-        ok = np.isfinite(vals)
-        block = z[r0:r1, c0:c1]
-        kblock = kind[r0:r1, c0:c1]
         k = int(body.name.split()[-1]) - 1 if body.name.split()[-1].isdigit() else 0
-        higher = ok & (vals >= block - 1e-9)
-        block[ok] = np.maximum(block[ok], vals[ok])
-        kblock[higher] = 2 + k
-    rgb = np.zeros((rows, cols, 3))
+        g = body.grid
+        if g is not None:
+            zz = np.asarray(g['z'], float)
+            fx = (gx - g['x0']) / g['dx']
+            fy = (g['y_top'] - gy) / g['dy']
+            cs = np.flatnonzero((fx >= 0) & (fx <= zz.shape[1] - 1))
+            rs = np.flatnonzero((fy >= 0) & (fy <= zz.shape[0] - 1))
+            if not len(cs) or not len(rs):
+                continue
+            from scipy.ndimage import map_coordinates
+            FY, FX = np.meshgrid(fy[rs], fx[cs], indexing='ij')
+            vals = map_coordinates(zz, [FY.ravel(), FX.ravel()], order=1, mode='nearest').reshape(FY.shape)
+        else:                                   # wedge: plane through its top corners
+            v = body.verts
+            top = v[v[:, 2] > base - OVERLAP / 2]
+            if len(top) < 3:
+                continue
+            cs = np.flatnonzero((gx >= top[:, 0].min()) & (gx <= top[:, 0].max()))
+            rs = np.flatnonzero((gy >= top[:, 1].min()) & (gy <= top[:, 1].max()))
+            if not len(cs) or not len(rs):
+                continue
+            A = np.column_stack([top[:, 0], top[:, 1], np.ones(len(top))])
+            coef = np.linalg.lstsq(A, top[:, 2], rcond=None)[0]
+            GX, GY = np.meshgrid(gx[cs], gy[rs])
+            vals = coef[0] * GX + coef[1] * GY + coef[2]
+        block = z[np.ix_(rs, cs)]
+        higher = vals >= block - 1e-9
+        z[np.ix_(rs, cs)] = np.maximum(block, vals)
+        kb = kind[np.ix_(rs, cs)]
+        kb[higher] = 2 + k
+        kind[np.ix_(rs, cs)] = kb
+        cb = cover[np.ix_(rs, cs)]
+        cb[higher] = 0
+        cover[np.ix_(rs, cs)] = cb
 
     def c(hexa):
         h = str(hexa).lstrip('#')
         return np.array([int(h[i:i + 2], 16) / 255 for i in (0, 2, 4)]) if len(h) >= 6 else np.array([.8, .8, .8])
-    rgb[kind == 0] = c(p.get('background_color', '#FFFFFF'))
-    rgb[kind == 1] = c(p.get('text_color', '#000000'))
+    back, text = c(p.get('background_color', '#FFFFFF')), c(p.get('text_color', '#000000'))
+    rgb = back[None, None, :] * (1 - cover[..., None]) + text[None, None, :] * cover[..., None]
     t = np.clip((z - base) / max(relief, 1e-9), 0, 1)
     for k, info in enumerate(panels):
         m = kind == 2 + k
