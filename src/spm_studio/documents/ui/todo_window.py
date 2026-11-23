@@ -10,9 +10,7 @@ from PySide6.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, Q
 from spm_studio.documents import todo as model, settings as doc_settings
 
 DONE_LABELS = (('crossed out', 'strike'), ('normal', 'plain'), ('hidden', 'hide'))
-EMPTY_HINT = ('No tasks yet.\n\nType a task in the box above and press Enter.\n'
-              'Example: “Line profile across the step in scan 0024”.\n\n'
-              'Tick a task when it is done. Select it to add details or to hand it to the assistant.')
+EMPTY_HINT = 'No tasks yet.\nType one above and press Enter.'      # v0.0.18: only the essential
 
 
 class TodoWindow(QMainWindow):
@@ -57,7 +55,9 @@ class TodoWindow(QMainWindow):
         self.empty.setObjectName('TodoEmptyHintV0014')
         self.empty.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.empty.setWordWrap(True)
-        self.empty.setStyleSheet('color: palette(placeholder-text); padding: 30px;')
+        self.empty.setProperty('class', 'emptyState')
+        self.empty.setToolTip('Tick a task when it is done. Select it to add details or to hand it to the assistant.')
+        self.empty.setContentsMargins(30, 30, 30, 30)
         tv.addWidget(self.empty)
         self.list = QListWidget()
         self.list.setObjectName('TodoListV0012')

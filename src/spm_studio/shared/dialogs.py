@@ -39,14 +39,56 @@ def configure_dialog(dialog: QDialog, *, minimum_width: int = 360) -> QDialog:
             if candidates:
                 candidates[0].setDefault(True)
                 break
+    _normalise_buttons(dialog)
     dialog.setProperty('researchDialog', True)
     return dialog
+
+
+def _normalise_buttons(dialog: QDialog) -> None:
+    """v0.0.18: one look for every pop-up: the confirming button is the primary (accent) button.
+
+    Applies to the button boxes of message boxes, input dialogs and custom dialogs; buttons that already chose a
+    style (primary / destructive / flat) keep it.
+    """
+    for box in dialog.findChildren(QDialogButtonBox):
+        buttons = box.buttons()
+        if any(b.property('primary') for b in buttons):
+            continue
+        accept = (QDialogButtonBox.ButtonRole.AcceptRole, QDialogButtonBox.ButtonRole.YesRole,
+                  QDialogButtonBox.ButtonRole.ApplyRole)
+        chosen = [b for b in buttons if b.isDefault() and box.buttonRole(b) in accept] or \
+                 [b for b in buttons if box.buttonRole(b) in accept]
+        if len(buttons) == 1:
+            chosen = buttons
+        if chosen and not chosen[0].property('destructive'):
+            button = chosen[0]
+            button.setProperty('primary', True)
+            button.style().unpolish(button)
+            button.style().polish(button)
+
+
+def fit_to_screen(widget) -> None:
+    """Keep a window inside the available screen area (no part off-screen, no overlap with the task bar)."""
+    screen = widget.screen() or QApplication.primaryScreen()
+    if screen is None:
+        return
+    area = screen.availableGeometry().adjusted(12, 12, -12, -12)
+    w, h = min(widget.width(), area.width()), min(widget.height(), area.height())
+    if (w, h) != (widget.width(), widget.height()):
+        widget.resize(w, h)
+    frame = widget.frameGeometry()
+    x = min(max(frame.x(), area.x()), area.right() - frame.width())
+    y = min(max(frame.y(), area.y()), area.bottom() - frame.height())
+    if (x, y) != (frame.x(), frame.y()) and widget.isWindow():
+        widget.move(x, y)
 
 
 class _DialogStyle(QObject):
     def eventFilter(self, watched, event):
         if event.type() == QEvent.Type.Show and isinstance(watched, QDialog):
             configure_dialog(watched)
+            if not isinstance(watched, QFileDialog):
+                fit_to_screen(watched)
         return False
 
 

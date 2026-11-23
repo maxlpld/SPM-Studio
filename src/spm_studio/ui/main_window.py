@@ -232,6 +232,8 @@ class MainWindow(QMainWindow):
         if geometry:self.restoreGeometry(geometry)
         state=self.settings.value('window_state')
         if state:self.restoreState(state)
+        # v0.0.18: the Logs panel starts closed; it opens with its button or on an error.
+        self.log_dock.hide()
         self._update_channel_navigation()
         self.viewer.cursorChanged.connect(self.statusBar().showMessage)
         self.viewer.roiChanged.connect(self._on_roi)
@@ -333,6 +335,7 @@ class MainWindow(QMainWindow):
         set_icon(self.folder_button,'dataset')
         self.folder_button.clicked.connect(self.open_folder)
         self.profile_combo=QComboBox()
+        self.profile_combo.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToContents)   # v0.0.18: never clipped
         self.profile_combo.setMinimumWidth(150)
         self.profile_combo.setToolTip('Processing / display profile')
         self.apply_profile_button=QPushButton('Apply profile')
@@ -352,6 +355,7 @@ class MainWindow(QMainWindow):
         self.save_profile_button.setToolTip('Save visible channels, their individual processing steps, colormaps, and display titles under a new name')
         self.save_profile_button.clicked.connect(self.save_profile)
         self.export_preset_combo=QComboBox()
+        self.export_preset_combo.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToContents)   # v0.0.18: never clipped
         self.export_preset_combo.setMinimumWidth(130)
         self.export_preset_combo.setToolTip('Figure size preset (Export… and analysis figures)')
         self.compare_button=QPushButton('Compare…')
@@ -596,6 +600,7 @@ class MainWindow(QMainWindow):
         style_dock_titlebar(dock)
         self.log_dock=dock
         dock.visibilityChanged.connect(lambda _visible:self.logs_toolbar_button.setChecked(self.log_dock.isVisible()))
+        dock.visibilityChanged.connect(lambda visible:visible and self._set_logs_attention(False))
         # v0.0.8: a result (graph, figure) can be sent to the LaTeX editor, a presentation or Overleaf.
         self.logs.outputs.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.logs.outputs.customContextMenuRequested.connect(self._result_menu)
@@ -1317,9 +1322,29 @@ class MainWindow(QMainWindow):
             self._log(f'Theme imported and applied: {target.name}')
         except Exception as exc:self._log(str(exc),important=True)
 
-    def _log(self,text,*,important=False):
+    def _log(self,text,*,important=False,error=False):
+        """Add a line to the Logs panel.
+
+        v0.0.18: the panel only opens by itself for an ``error`` (a script that fails, a crash); an ``important``
+        message marks the Logs button instead (dot + tooltip) so the user can open it when they want.
+        """
         self.logs.add_log(str(text))
-        if important:self.log_dock.show()
+        if error:
+            self.log_dock.show()
+        elif important and not self.log_dock.isVisible():
+            self._set_logs_attention(True,str(text))
+
+    def _set_logs_attention(self,on,text=''):
+        button=getattr(self,'logs_toolbar_button',None)
+        if button is None:return
+        if bool(button.property('attention'))!=bool(on):
+            button.setProperty('attention',bool(on))
+            button.style().unpolish(button);button.style().polish(button)
+        base='Show / hide the Logs panel (run output and result files)'
+        button.setToolTip(base+('\nNew message: '+text[:160] if on and text else ''))
+
+    def _logs_open_on_run(self):
+        return str(self.settings.value('logs/open_on_run',False)).lower() in ('true','1')
 
     @Slot(str)
     def _add_file(self,path):
@@ -3927,13 +3952,15 @@ class MainWindow(QMainWindow):
         self._job_token+=1
         token=self._job_token
         self._run_module=mod
+        self._cancel_requested=False
         self._run_files=[]
         self._run_started=time.monotonic()
         self.logs.state.setText('Preparing snapshot…')
         self.module_panel.set_run_state('preparing',f'Preparing {mod.name}…')
         self.logs.cancel.setEnabled(True)
-        self.log_dock.show()
-        self.logs.tabs.setCurrentIndex(0)
+        if self._logs_open_on_run():          # v0.0.18: off by default (Settings › General)
+            self.log_dock.show()
+            self.logs.tabs.setCurrentIndex(0)
         task=Task(token,make_snapshot,run_dir,self.scan,key[1],key[2],self.processed,
                   params,self._source_paths,self.viewer.roi or (self.viewer.extra_rois[-1] if self.viewer.extra_rois else None),self.pipelines.get(key,[]),
                   list(self.viewer.extra_rois),{**self._plot_profile_for_run(),'viewer_config':self.viewer_config_for_run()},
@@ -3946,7 +3973,7 @@ class MainWindow(QMainWindow):
         self.logs.cancel.setEnabled(False)
         self.logs.state.setText('Failed to prepare')
         self.module_panel.set_run_state('failed','Could not prepare the run — see Logs')
-        self._log(error,important=True)
+        self._log(error,error=True)
 
     def _snapshot_prepared(self,token,context):
         if token!=self._job_token:return
@@ -4024,7 +4051,8 @@ class MainWindow(QMainWindow):
             except Exception as exc:
                 self._log(f'Invalid module event ({exc}): {line}',important=True)
                 return
-        self._log(('! ' if stderr else '')+line,important=stderr and ('Traceback' in line or 'Error' in line))
+        self._log(('! ' if stderr else '')+line,important=stderr and ('Traceback' in line or 'Error' in line),
+                  error=stderr and line.startswith('Traceback'))
 
     def _run_finished(self,exit_code,status):
         self._read_stdout()
@@ -4041,7 +4069,8 @@ class MainWindow(QMainWindow):
         self.logs.progress.setValue(100 if ok else 0)
         self.module_panel.set_run_state('done' if ok else 'failed',
                                         (f'Completed in {elapsed:.1f} s' if ok else 'Failed or cancelled — see Logs'))
-        self._log(f'■ Exit code {exit_code} after {elapsed:.1f}s; folder: {self._run_context.parent}',important=not ok)
+        self._log(f'■ Exit code {exit_code} after {elapsed:.1f}s; folder: {self._run_context.parent}',
+                  important=not ok,error=not ok and not getattr(self,'_cancel_requested',False))
         # Every tool gets the same Images / Plots / Data layout. Organize *after*
         # execution, to avoid invalidating paths while the script is running.
         try:
@@ -4070,6 +4099,7 @@ class MainWindow(QMainWindow):
     def cancel_job(self):
         if self.job and self.job.state()!=QProcess.ProcessState.NotRunning:
             p=self.job
+            self._cancel_requested=True
             p.terminate()
             QTimer.singleShot(2000,lambda: p.kill() if p.state()!=QProcess.ProcessState.NotRunning else None)
             self._log('Requested process termination')

@@ -12,8 +12,7 @@ def beta_badge(parent=None, text: str = 'BETA') -> QLabel:
     label.setObjectName('BetaBadgeV0014')
     label.setToolTip(TOOLTIP)
     label.setAccessibleName('Beta feature')
-    label.setStyleSheet('#BetaBadgeV0014 { background: #7c3aed; color: white; border-radius: 6px; padding: 1px 6px;'
-                        ' font-size: 10px; font-weight: 700; letter-spacing: 0.5px; }')
+    # v0.0.18: styled by the application theme (QLabel#BetaBadgeV0014), like every other control
     return label
 
 
