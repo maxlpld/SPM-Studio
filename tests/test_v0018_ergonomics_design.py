@@ -67,10 +67,12 @@ def _wheel(widget, dy=-120):
 
 def test_wheel_scrolls_the_panel_not_the_options(app):
     from PySide6.QtCore import Qt
-    from PySide6.QtWidgets import QComboBox, QScrollArea, QSpinBox, QVBoxLayout, QWidget
+    from PySide6.QtWidgets import QComboBox, QLineEdit, QScrollArea, QSpinBox, QVBoxLayout, QWidget
     area = QScrollArea()
     inner = QWidget()
     lay = QVBoxLayout(inner)
+    elsewhere = QLineEdit()                 # the keyboard focus is somewhere else (macOS focuses the first control)
+    lay.addWidget(elsewhere)
     combo = QComboBox()
     combo.addItems([str(i) for i in range(10)])
     spin = QSpinBox()
@@ -85,6 +87,10 @@ def test_wheel_scrolls_the_panel_not_the_options(app):
     area.show()
     app.processEvents()
     assert combo.focusPolicy() != Qt.FocusPolicy.WheelFocus           # the wheel does not give focus (macOS: Tab)
+    elsewhere.setFocus()
+    app.processEvents()
+    if combo.hasFocus() or spin.hasFocus():
+        pytest.skip('this platform keeps the focus on the controls')
     before = area.verticalScrollBar().value()
     _wheel(combo)
     _wheel(spin)
