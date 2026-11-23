@@ -41,6 +41,7 @@ DEFAULTS.update({
     'font_mm': 5.0, 'label_mm': 1.0, 'margin_mm': 5.0, 'panel_gap_mm': 8.0,
     'layout': 'single', 'layout_rows': 1, 'layout_cols': 1,
     'channel_titles': True, 'main_title': '', 'base_color': '#F2F2F2',
+    'background_color': '#FFFFFF', 'text_color': '#000000', 'nozzle_mm': 0.4,
     'magnets': False, 'magnet_radius_mm': 5.1, 'magnet_depth_mm': 2.0, 'magnet_inset_mm': 3.0,
 })
 OVERLAP = 0.05                 # solids sink this much into the plate so that slicers merge them
@@ -59,6 +60,7 @@ class Panel:
     overlay: P.Overlay | None = None
     colors: tuple = ('#1D3F8F', '#F5C342')     # 3MF gradient: lowest → highest
     range: dict = field(default_factory=dict)  # per-panel range overrides ('range_mode', 'low', 'high', 'invert')
+    zero_reference: bool = False               # Fix Zero: colour-bar labels start at 0 (values − low)
 
 
 @dataclass
@@ -68,6 +70,7 @@ class Body:
     faces: np.ndarray
     part: str                                   # 3MF part this solid belongs to
     color: str = '#F2F2F2'
+    grid: dict | None = None                    # height field source (lets STEP use a lighter grid)
 
 
 @dataclass
@@ -78,6 +81,7 @@ class Plate:
     panels: list                                # per panel: {'title','low','high','unit','factor','box','bar','colors'}
     notes: list
     preview: tuple                              # (z grid, cell) for the live 3D preview
+    preview_rgb: np.ndarray | None = None       # colours of the preview grid (plate, labels, gradients)
 
     @property
     def triangles(self) -> int:
@@ -353,7 +357,10 @@ def panel_count(params) -> int:
     return len(LAYOUTS.get(key, LAYOUTS['single'])[1])
 
 
-def _ticks(lo, hi, factor, n):
+def _ticks(lo, hi, factor, n, zero=False):
+    """(fraction, label) of the colour-bar ticks; zero=True labels them from 0 (Fix Zero)."""
+    if zero:
+        lo, hi = 0.0, hi - lo
     step = (hi - lo) * factor / (n - 1)
     decimals = max(0, int(-math.floor(math.log10(abs(step)))) + 1) if step else 0
     out = []
@@ -378,9 +385,10 @@ def _panel_layout(p, panel, lo, hi):
     bw, gap = float(p['colorbar_width_mm']), float(p['colorbar_gap_mm'])
     rng = {**p, **panel.range}
     draw = _Drawing()
-    stroke = max(0.8, font * .16)                       # ≥ 2 nozzle widths
+    stroke = max(0.8, font * .16, 2 * float(p.get('nozzle_mm', .4)))   # ≥ 2 nozzle widths
     bar = None
-    ticks = _ticks(lo, hi, panel.factor, max(2, int(p.get('colorbar_ticks', 5)))) if pos != 'none' else []
+    ticks = _ticks(lo, hi, panel.factor, max(2, int(p.get('colorbar_ticks', 5))),
+                   bool(getattr(panel, 'zero_reference', False))) if pos != 'none' else []
     invert = bool(rng.get('invert'))
     if pos in ('right', 'left'):
         bx = iw + gap if pos == 'right' else -gap - bw
@@ -514,7 +522,13 @@ def build_plate(panels: list, params: dict | None = None, preview_cell: float | 
     def mesh_y(y):                                           # plate y (down) → mesh y (up)
         return H - y
     bodies = []
-    base_color = str(p.get('base_color', '#F2F2F2'))
+    if params and 'base_color' in params and 'background_color' not in params:
+        p['background_color'] = params['base_color']          # v0.0.15 name of the plate colour
+    base_color = str(p.get('background_color') or '#FFFFFF')
+    text_color = str(p.get('text_color') or '#000000')
+    nozzle = float(p.get('nozzle_mm', .4))
+    if font < 10 * nozzle:
+        notes.append(f'Text {font:g} mm is small for a {nozzle:g} mm nozzle (≥ {10 * nozzle:g} mm recommended)')
     # ---- plate (with magnet pockets: lower slab with round holes + upper slab)
     if p.get('magnets'):
         depth, rad, inset = float(p['magnet_depth_mm']), float(p['magnet_radius_mm']), float(p['magnet_inset_mm'])
@@ -530,13 +544,13 @@ def build_plate(panels: list, params: dict | None = None, preview_cell: float | 
         for cx, cy in centres:
             mask &= (X - cx) ** 2 + (Y - cy) ** 2 > rad ** 2
         v, f = mask_body(mask, res, 0.0, H, 0.0, depth)
-        bodies.append(Body('plate lower slab (magnet pockets)', v, f, 'Plate & labels', base_color))
+        bodies.append(Body('plate lower slab (magnet pockets)', v, f, 'Plate', base_color))
         v, f = box_body(0, 0, W, H, depth - OVERLAP, base)
-        bodies.append(Body('plate', v, f, 'Plate & labels', base_color))
+        bodies.append(Body('plate', v, f, 'Plate', base_color))
         notes.append(f'Fridge magnet: 4 pockets Ø {2 * rad:.1f} mm, {depth:.1f} mm deep, under the corners')
     else:
         v, f = box_body(0, 0, W, H, 0.0, base)
-        bodies.append(Body('plate', v, f, 'Plate & labels', base_color))
+        bodies.append(Body('plate', v, f, 'Plate', base_color))
     # ---- reliefs and 3D colour bars
     panel_info = []
     for k, (panel, lo, hi, lay, ox, oy) in enumerate(placed):
@@ -565,8 +579,9 @@ def build_plate(panels: list, params: dict | None = None, preview_cell: float | 
             if rmask is not None:
                 z = z + float(p['overlay_mm']) * rmask
         px, py = ox + sx, oy + sy
+        grid = {'z': z, 'x0': px, 'y_top': mesh_y(py), 'dx': iw / (nx - 1), 'dy': ih / (ny - 1), 'zb': base - OVERLAP}
         v, f = heightfield_body(z, px, mesh_y(py), iw / (nx - 1), ih / (ny - 1), base - OVERLAP)
-        bodies.append(Body(f'relief {k + 1}', v, f, part, panel.colors[0]))
+        bodies.append(Body(f'relief {k + 1}', v, f, part, panel.colors[0], grid))
         bar = None
         if lay['bar']:
             b = lay['bar']
@@ -580,16 +595,16 @@ def build_plate(panels: list, params: dict | None = None, preview_cell: float | 
             bodies.append(Body(f'3D colour bar {k + 1}', v, f, part, panel.colors[0]))
         panel_info.append({'title': panel.title.strip(), 'low': lo, 'high': hi, 'unit': panel.unit,
                            'factor': panel.factor, 'box': (px, py, iw, ih), 'bar': bar, 'part': part,
-                           'colors': tuple(panel.colors)})
+                           'colors': tuple(panel.colors), 'zero_reference': bool(panel.zero_reference)})
     # ---- labels: every text / tick / scale bar, sharp
     tres = float(p.get('text_resolution_mm', .05))
     tres = max(tres, math.sqrt(W * H / 14e6))                 # keep the raster below ~14 M pixels
     label_mask = draw.raster(W, H, tres, shift=(sx, sy))
     if label_mask.any():
         v, f = mask_body(label_mask, tres, 0.0, H, base - OVERLAP, base + float(p['label_mm']))
-        bodies.append(Body('labels', v, f, 'Plate & labels', base_color))
-    preview = _preview_grid(W, H, base, relief, bodies, label_mask, tres, panel_info, p, preview_cell)
-    return Plate(bodies, (W, H), p, panel_info, notes, preview)
+        bodies.append(Body('labels', v, f, 'Labels', text_color))
+    preview, rgb = _preview_grid(W, H, base, relief, bodies, label_mask, tres, panel_info, p, preview_cell)
+    return Plate(bodies, (W, H), p, panel_info, notes, preview, rgb)
 
 
 def _shift(item, dx, dy):
@@ -604,10 +619,11 @@ def _shift(item, dx, dy):
 
 
 def _preview_grid(W, H, base, relief, bodies, label_mask, tres, panels, p, cell=None):
-    """Coarse height field of the whole plate for the 3D preview (top surface only)."""
+    """Coarse height field of the whole plate for the 3D preview (top surface only) and its colours."""
     cell = cell or max(W, H) / 220
     cols, rows = max(2, int(W / cell)), max(2, int(H / cell))
     z = np.full((rows, cols), base)
+    kind = np.zeros((rows, cols), int)          # 0 plate, 1 labels, 2 + k panel k
     if label_mask.any():
         from scipy.ndimage import zoom
         k = max(1, int(round(cell / tres)))
@@ -616,6 +632,7 @@ def _preview_grid(W, H, base, relief, bodies, label_mask, tres, panels, p, cell=
             pooled = label_mask[:r2, :c2].reshape(r2 // k, k, c2 // k, k).max(axis=(1, 3)).astype(float)
             pooled = zoom(pooled, (rows / pooled.shape[0], cols / pooled.shape[1]), order=0) > .5
             z[pooled[:rows, :cols]] = base + float(p['label_mm'])
+            kind[pooled[:rows, :cols]] = 1
     for body in bodies:
         if not body.name.startswith(('relief', '3D colour bar')):
             continue
@@ -637,8 +654,25 @@ def _preview_grid(W, H, base, relief, bodies, label_mask, tres, panels, p, cell=
         vals = griddata(sample[:, :2], sample[:, 2], (gx, gy), method='linear')
         ok = np.isfinite(vals)
         block = z[r0:r1, c0:c1]
+        kblock = kind[r0:r1, c0:c1]
+        k = int(body.name.split()[-1]) - 1 if body.name.split()[-1].isdigit() else 0
+        higher = ok & (vals >= block - 1e-9)
         block[ok] = np.maximum(block[ok], vals[ok])
-    return z, cell
+        kblock[higher] = 2 + k
+    rgb = np.zeros((rows, cols, 3))
+
+    def c(hexa):
+        h = str(hexa).lstrip('#')
+        return np.array([int(h[i:i + 2], 16) / 255 for i in (0, 2, 4)]) if len(h) >= 6 else np.array([.8, .8, .8])
+    rgb[kind == 0] = c(p.get('background_color', '#FFFFFF'))
+    rgb[kind == 1] = c(p.get('text_color', '#000000'))
+    t = np.clip((z - base) / max(relief, 1e-9), 0, 1)
+    for k, info in enumerate(panels):
+        m = kind == 2 + k
+        if m.any():
+            lo, hi = c(info['colors'][0]), c(info['colors'][1])
+            rgb[m] = lo[None, :] * (1 - t[m, None]) + hi[None, :] * t[m, None]
+    return (z, cell), rgb
 
 
 # ====================================================================== writers
@@ -651,58 +685,45 @@ def merged(bodies):
     return np.vstack(verts), np.vstack(faces)
 
 
-def write_step_bodies(path, bodies, name='SPM Studio plate'):
-    """AP214 STEP with one FACETED_BREP per solid."""
-    import datetime
-    path = Path(path)
-    lines = []
-    n = [0]
+MAX_STEP_RELIEF_CELLS = 12_000     # per relief: CAD/slicer STEP import meshes every face, keep it light
 
-    def add(text):
-        n[0] += 1
-        lines.append(f'#{n[0]}={text};')
-        return n[0]
-    app = add("APPLICATION_CONTEXT('automotive design')")
-    add(f"APPLICATION_PROTOCOL_DEFINITION('international standard','automotive_design',2000,#{app})")
-    pc = add(f"PRODUCT_CONTEXT('',#{app},'mechanical')")
-    pdc = add(f"PRODUCT_DEFINITION_CONTEXT('part definition',#{app},'design')")
-    prod = add(f"PRODUCT('{name}','{name}','',(#{pc}))")
-    add(f"PRODUCT_RELATED_PRODUCT_CATEGORY('part',$,(#{prod}))")
-    pdf = add(f"PRODUCT_DEFINITION_FORMATION('','',#{prod})")
-    pd = add(f"PRODUCT_DEFINITION('design','',#{pdf},#{pdc})")
-    pds = add(f"PRODUCT_DEFINITION_SHAPE('','',#{pd})")
-    length = add("(LENGTH_UNIT()NAMED_UNIT(*)SI_UNIT(.MILLI.,.METRE.))")
-    angle = add("(NAMED_UNIT(*)PLANE_ANGLE_UNIT()SI_UNIT($,.RADIAN.))")
-    solid = add("(NAMED_UNIT(*)SI_UNIT($,.STERADIAN.)SOLID_ANGLE_UNIT())")
-    unc = add(f"UNCERTAINTY_MEASURE_WITH_UNIT(LENGTH_MEASURE(1.E-04),#{length},'distance_accuracy_value','')")
-    ctx = add(f"(GEOMETRIC_REPRESENTATION_CONTEXT(3)GLOBAL_UNCERTAINTY_ASSIGNED_CONTEXT((#{unc}))"
-              f"GLOBAL_UNIT_ASSIGNED_CONTEXT((#{length},#{angle},#{solid}))REPRESENTATION_CONTEXT('',''))")
-    origin = add("CARTESIAN_POINT('',(0.,0.,0.))")
-    zdir = add("DIRECTION('',(0.,0.,1.))")
-    xdir = add("DIRECTION('',(1.,0.,0.))")
-    axis = add(f"AXIS2_PLACEMENT_3D('',#{origin},#{zdir},#{xdir})")
-    breps = []
-    for body in bodies:
-        first = n[0] + 1
-        for x, y, zz in body.verts:
-            add(f"CARTESIAN_POINT('',({x:.5f},{y:.5f},{zz:.5f}))")
-        face_ids = []
-        for i, j, k in body.faces:
-            loop = add(f"POLY_LOOP('',(#{first + i},#{first + j},#{first + k}))")
-            bound = add(f"FACE_OUTER_BOUND('',#{loop},.T.)")
-            face_ids.append(add(f"FACE('',(#{bound}))"))
-        shell = add("CLOSED_SHELL('',(" + ','.join(f'#{i}' for i in face_ids) + '))')
-        label = body.name.replace("'", ' ')
-        breps.append(add(f"FACETED_BREP('{label}',#{shell})"))
-    rep = add("FACETED_BREP_SHAPE_REPRESENTATION('',(" + ','.join(f'#{b}' for b in breps) + f",#{axis}),#{ctx})")
-    add(f"SHAPE_DEFINITION_REPRESENTATION(#{pds},#{rep})")
-    stamp = datetime.datetime.now().strftime('%Y-%m-%dT%H:%M:%S')
-    header = ['ISO-10303-21;', 'HEADER;', "FILE_DESCRIPTION(('SPM Studio 3D print plate'),'2;1');",
-              f"FILE_NAME('{path.name}','{stamp}',('SPM Studio'),(''),'SPM Studio','SPM Studio','');",
-              "FILE_SCHEMA(('AUTOMOTIVE_DESIGN { 1 0 10303 214 1 1 1 1 }'));", 'ENDSEC;', 'DATA;']
-    with path.open('w', encoding='ascii', newline='\n') as fh:
-        fh.write('\n'.join(header) + '\n' + '\n'.join(lines) + '\nENDSEC;\nEND-ISO-10303-21;\n')
-    return path
+
+def step_bodies(bodies, max_cells=MAX_STEP_RELIEF_CELLS):
+    """Bodies for STEP: reliefs on a lighter grid (every triangle of a relief is a CAD face)."""
+    out, notes = [], []
+    for b in bodies:
+        g = b.grid
+        if g is not None:
+            z = np.asarray(g['z'])
+            rows, cols = z.shape
+            step = max(1, int(math.ceil(math.sqrt((rows - 1) * (cols - 1) / max_cells))))
+            if step > 1:
+                ri = np.unique(np.r_[np.arange(0, rows, step), rows - 1])
+                ci = np.unique(np.r_[np.arange(0, cols, step), cols - 1])
+                # keep the exact outline: last row/column even when the stride does not land on it
+                zz = z[np.ix_(ri, ci)]
+                x = g['x0'] + ci * g['dx']
+                y = g['y_top'] - ri * g['dy']
+                v, f = heightfield_body(zz, 0.0, 0.0, 1.0, 1.0, g['zb'])
+                n = len(ri) * len(ci)
+                X, Y = np.meshgrid(x, y)
+                v[:n, 0], v[:n, 1] = X.ravel(), Y.ravel()
+                ring = np.arange(n).reshape(len(ri), len(ci))
+                ring = np.concatenate([ring[0, :], ring[1:, -1], ring[-1, -2::-1], ring[-2:0:-1, 0]])
+                v[n:n + len(ring), 0], v[n:n + len(ring), 1] = X.ravel()[ring], Y.ravel()[ring]
+                v[-1, 0], v[-1, 1] = x.mean(), y.mean()
+                out.append(Body(b.name, v, f, b.part, b.color))
+                notes.append(f'STEP: {b.name} on a {g["dx"] * step:.2f} mm grid (lighter for CAD; STL / 3MF keep '
+                             f'the full {g["dx"]:.2f} mm)')
+                continue
+        out.append(b)
+    return out, notes
+
+
+def write_step_bodies(path, bodies, name='SPM Studio plate'):
+    """AP214 STEP with one B-rep solid (planar faces, shared edges) per body."""
+    from .print3d_step import write_step_solids
+    return write_step_solids(path, [(b.name, b.verts, b.faces) for b in bodies], name)
 
 
 def _xml(text) -> str:
@@ -715,17 +736,21 @@ def gradient_recipe(plate: Plate) -> dict:
                   'choose them, tick Gradient (low colour first), OK; then assign that mixed filament to the panel '
                   'part. The gradient follows the height: the 3D colour bar shows exactly the same colours as the '
                   'relief at the same height.',
-           'plate_and_labels_colour': plate.params.get('base_color', '#F2F2F2'), 'panels': []}
+           'plate_and_labels_colour': plate.params.get('background_color', '#FFFFFF'),
+           'plate_colour': plate.params.get('background_color', '#FFFFFF'),
+           'text_colour': plate.params.get('text_color', '#000000'), 'panels': []}
     base, relief = plate.params['base_mm'], plate.params['relief_mm']
     for info in plate.panels:
+        shift = info['low'] if info.get('zero_reference') else 0.0
         out['panels'].append({'part': info['part'], 'low_colour': info['colors'][0], 'high_colour': info['colors'][1],
-                              'low_value': info['low'] * info['factor'], 'high_value': info['high'] * info['factor'],
+                              'low_value': (info['low'] - shift) * info['factor'],
+                              'high_value': (info['high'] - shift) * info['factor'],
                               'unit': info['unit'], 'low_height_mm': base, 'high_height_mm': base + relief})
     return out
 
 
 def write_3mf(path, plate: Plate, name='SPM Studio plate'):
-    """3MF (core specification): one object assembled from parts — "Plate & labels" and one part per panel
+    """3MF (core specification): one object assembled from parts — "Plate", "Labels" and one part per panel
     (relief + its 3D colour bar) — each with its display colour; the gradient recipe is stored inside."""
     path = Path(path)
     parts = plate.parts()
@@ -782,7 +807,9 @@ def write_3mf(path, plate: Plate, name='SPM Studio plate'):
 
 def recipe_text(recipe: dict) -> str:
     lines = ['SPM Studio — colour gradient for Bambu Studio (Color Mixing, Gradient mode)', '', recipe['how'], '',
-             f"Plate & labels: one solid filament (suggested colour {recipe['plate_and_labels_colour']}).", '']
+             f"Plate: one solid filament (colour {recipe.get('plate_colour', recipe['plate_and_labels_colour'])}).",
+             f"Labels (texts, ticks, scale bar): one solid filament (colour {recipe.get('text_colour', '#000000')}).",
+             '']
     for panel in recipe['panels']:
         lines.append(f"{panel['part']}: gradient {panel['low_colour']} (lowest, {panel['low_value']:.4g} "
                      f"{panel['unit']} at {panel['low_height_mm']:.1f} mm) → {panel['high_colour']} (highest, "
@@ -793,16 +820,27 @@ def recipe_text(recipe: dict) -> str:
 MAX_STEP_TRIANGLES = 400_000
 
 
-def export_plate(plate: Plate, path, fmt=None, name='SPM Studio plate'):
-    """Write STL / STEP / 3MF; returns (path, triangles, notes)."""
+def export_plate(plate: Plate, path, fmt=None, name='SPM Studio plate', bambu=None):
+    """Write STL / STEP / 3MF; returns (path, triangles, notes).
+
+    bambu: for 3MF, a dict {'printer': model, 'nozzle': 0.4, 'gradient': True} writes a Bambu Studio project
+    (printer, nozzle, filaments and one mixed gradient filament per channel already set); None writes the
+    generic 3MF of v0.0.15.
+    """
     fmt = (fmt or Path(path).suffix or 'stl').lower().lstrip('.')
     notes = []
     if fmt in ('step', 'stp'):
-        if plate.triangles > MAX_STEP_TRIANGLES:
-            notes.append(f'STEP with {plate.triangles:,} triangles: CAD programs may need a while to open it '
+        bodies, notes = step_bodies(plate.bodies)
+        triangles = int(sum(len(b.faces) for b in bodies))
+        if triangles > MAX_STEP_TRIANGLES:
+            notes.append(f'STEP with {triangles:,} triangles: CAD programs may need a while to open it '
                          '(choose Draft quality for a lighter file)')
-        return write_step_bodies(path, plate.bodies, name), plate.triangles, notes
+        return write_step_bodies(path, bodies, name), triangles, notes
     if fmt == '3mf':
+        if bambu:
+            from . import print3d_bambu as B
+            written, extra = B.write_bambu_3mf(path, plate, name=name, **bambu)
+            return written, plate.triangles, extra
         notes.append('3MF: in Bambu Studio create one gradient mixed filament per panel part (recipe inside the file '
                      'and in the .txt next to it)')
         return write_3mf(path, plate, name), plate.triangles, notes

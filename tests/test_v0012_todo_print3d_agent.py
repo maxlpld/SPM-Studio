@@ -101,7 +101,10 @@ def test_stl_and_step_files(tmp_path):
     ids = set(map(int, re.findall(r'^#(\d+)=', text, re.M)))
     refs = set(map(int, re.findall(r'#(\d+)', text))) - ids
     assert not refs                                          # every reference is defined
-    assert text.count('FACE_OUTER_BOUND') == n and 'FACETED_BREP(' in text and 'CLOSED_SHELL' in text
+    # v0.0.16: standard B-rep (ADVANCED_FACE on PLANE) so OpenCASCADE importers (Bambu Studio…) see geometry
+    from spm_studio.core.print3d_step import check_step
+    assert check_step(text)['solids'] == 1 and 'MANIFOLD_SOLID_BREP(' in text and 'CLOSED_SHELL' in text
+    assert 'POLY_LOOP' not in text and text.count('ADVANCED_FACE(') <= n
     big = P.build_model(_scan(), (20, 15), {'resolution_mm': .1})
     _p, n_big, notes = P.export(big, tmp_path / 'big.step')
     assert n_big <= 4 * P.MAX_STEP_CELLS * 1.05 + 20_000 and notes

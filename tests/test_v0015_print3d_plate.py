@@ -81,7 +81,7 @@ def test_multi_channel_layouts():
         n = Q.panel_count(params)
         assert n == (6 if key == 'custom' else len(slots))
         plate = Q.build_plate([_panel(f'C{i}', i) for i in range(n)], params)
-        assert len(plate.panels) == n and len(plate.parts()) == n + 1
+        assert len(plate.panels) == n and len(plate.parts()) == n + 2      # + Plate, Labels (v0.0.16)
         for body in plate.bodies:
             _closed(body)
         sizes[key] = plate.size_mm
@@ -133,7 +133,9 @@ def test_stl_step_and_3mf_files(tmp_path):
     text = step.read_text()
     ids = set(map(int, re.findall(r'^#(\d+)=', text, re.M)))
     assert not set(map(int, re.findall(r'#(\d+)', text))) - ids
-    assert text.count('FACETED_BREP(') == len(plate.bodies) and text.count('FACE_OUTER_BOUND') == n
+    # v0.0.16: one B-rep solid per body (standard ADVANCED_FACE form, readable by Bambu Studio)
+    from spm_studio.core.print3d_step import check_step
+    assert check_step(text)['solids'] == len(plate.bodies) and text.count('MANIFOLD_SOLID_BREP(') == len(plate.bodies)
     mf, n, notes = Q.export_plate(plate, tmp_path / 'plate.3mf')
     assert notes and zipfile.is_zipfile(mf)
     with zipfile.ZipFile(mf) as zf:
@@ -145,11 +147,12 @@ def test_stl_step_and_3mf_files(tmp_path):
     ns = {'m': 'http://schemas.microsoft.com/3dmanufacturing/core/2015/02'}
     objects = root.findall('.//m:object', ns)
     parts = [o.get('name') for o in objects if o.find('m:mesh', ns) is not None]
-    assert parts[0] == 'Plate & labels' and parts[1].startswith('Panel 1') and parts[2].startswith('Panel 2')
+    assert parts[0] == 'Plate' and parts[1].startswith('Panel 1') and parts[2].startswith('Panel 2')
+    assert parts[-1] == 'Labels'                     # own text colour since v0.0.16
     colours = [b.get('displaycolor') for b in root.findall('.//m:base', ns)]
     assert colours[1] == '#102030FF' and colours[2] == '#5B1A72FF'
     assembly = [o for o in objects if o.find('m:components', ns) is not None]
-    assert len(assembly) == 1 and len(assembly[0].findall('.//m:component', ns)) == 3
+    assert len(assembly) == 1 and len(assembly[0].findall('.//m:component', ns)) == 4
     triangles = sum(len(o.findall('.//m:triangle', ns)) for o in objects)
     assert triangles == plate.triangles
     assert [p['high_colour'] for p in recipe['panels']] == ['#F0E010', '#F28C28']

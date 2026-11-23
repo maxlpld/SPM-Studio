@@ -17,6 +17,7 @@ from PySide6.QtGui import QColor
 
 from ..core import print3d as P
 from ..core import print3d_plate as Q
+from ..core import print3d_bambu as B
 
 GRADIENTS = (('#1D3F8F', '#F5C342'), ('#5B1A72', '#F28C28'), ('#0B6E4F', '#E8F1A0'), ('#7A1020', '#F7D9C4'),
              ('#202020', '#E0E0E0'), ('#0E4D64', '#F2A65A'))
@@ -206,7 +207,8 @@ class Print3DDialog(QDialog):
         self.magnets = QCheckBox('Fridge magnet: 4 round pockets under the corners')
         self.magnet_radius = dspin(1, 20, 5.1, .1, 2)
         self.magnet_depth = dspin(.4, 10, 2.0, .1, 2)
-        self.base_color = ColorButton('#F2F2F2', self.schedule)
+        self.base_color = ColorButton('#FFFFFF', self.schedule)       # plate / background colour
+        self.text_color = ColorButton('#000000', self.schedule)       # every text, tick and scale bar
         f.addRow('Scan width', self.width_mm)
         f.addRow('Base plate', self.base_mm)
         f.addRow('Relief (low → high)', self.relief_mm)
@@ -217,12 +219,12 @@ class Print3DDialog(QDialog):
         f.addRow('', self.magnets)
         f.addRow('Magnet pocket radius', self.magnet_radius)
         f.addRow('Magnet pocket depth', self.magnet_depth)
-        f.addRow('Plate & labels colour', self.base_color)
         form_layout.addWidget(box)
 
         box = QGroupBox('Colour-bar range (= printed heights)')
         f = QFormLayout(box)
         self.range_mode = QComboBox()
+        self.range_mode.addItem('Same as the image (its contrast)', 'display')
         self.range_mode.addItem('Percentiles of the scan', 'percentile')
         self.range_mode.addItem('Values (display unit)', 'absolute')
         self.low = dspin(-1e9, 1e9, 1, 1, 3, '')
@@ -230,7 +232,12 @@ class Print3DDialog(QDialog):
         self.range_hint = QLabel('Values outside the range are printed flat (cuts a too high peak).')
         self.range_hint.setWordWrap(True)
         self.range_hint.setObjectName('hint')
+        self.zero_mode = QComboBox()
+        self.zero_mode.addItem('As the image (Fix Zero when it is on)', 'image')
+        self.zero_mode.addItem('Measured values', 'values')
+        self.zero_mode.addItem('From 0 (low end = 0)', 'zero')
         f.addRow('Mode', self.range_mode)
+        f.addRow('Colour-bar labels', self.zero_mode)
         f.addRow('Low', self.low)
         f.addRow('High', self.high)
         f.addRow(self.range_hint)
@@ -260,6 +267,27 @@ class Print3DDialog(QDialog):
         f.addRow('Text height', self.label_mm)
         f.addRow('Vectors / molecules height', self.overlay_mm)
         f.addRow('', self.scale_bar)
+        f.addRow('Text colour', self.text_color)
+        f.addRow('Background colour', self.base_color)
+        form_layout.addWidget(box)
+
+        box = QGroupBox('Bambu Lab 3MF')
+        f = QFormLayout(box)
+        self.printer = QComboBox()
+        for name in B.printer_names():
+            self.printer.addItem(name.replace('Bambu Lab ', ''), name)
+        self.printer.setCurrentIndex(max(0, self.printer.findData(B.DEFAULT_PRINTER)))
+        self.nozzle = QComboBox()
+        for n in B.NOZZLES:
+            self.nozzle.addItem(f'{n} mm', n)
+        self.nozzle.setCurrentIndex(self.nozzle.findData('0.4'))
+        self.bambu_project = QCheckBox('Bambu Studio project with the colour gradient already set')
+        self.bambu_project.setChecked(True)
+        self.bambu_project.setToolTip('Printer, nozzle, filaments and one gradient mixed filament per channel '
+                                      '(scan + colour bar) are set in the 3MF; untick for a plain 3MF')
+        f.addRow('Printer', self.printer)
+        f.addRow('Nozzle', self.nozzle)
+        f.addRow('', self.bambu_project)
         form_layout.addWidget(box)
         form_layout.addStretch(1)
         buttons = QHBoxLayout()
@@ -269,7 +297,7 @@ class Print3DDialog(QDialog):
         self.save_stl.clicked.connect(lambda: self.export('stl'))
         self.save_step.clicked.connect(lambda: self.export('step'))
         self.save_3mf = QPushButton('Save 3MF (colour gradient)…')
-        self.save_3mf.setToolTip('One part per channel with its low → high colours, for Bambu Studio colour mixing')
+        self.save_3mf.setToolTip('Bambu Studio project: scan + colour bar printed as a low → high colour gradient')
         self.save_3mf.clicked.connect(lambda: self.export('3mf'))
         buttons.addWidget(self.save_stl)
         buttons.addWidget(self.save_step)
@@ -291,7 +319,8 @@ class Print3DDialog(QDialog):
         self._restore()
         self._fill_channels()
         self._layout_changed()
-        for w in (self.source, self.channel, self.trace, self.range_mode, self.colorbar):
+        for w in (self.source, self.channel, self.trace, self.range_mode, self.colorbar, self.zero_mode,
+                  self.printer, self.nozzle):
             w.currentIndexChanged.connect(self.schedule)
         for w in (self.width_mm, self.base_mm, self.relief_mm, self.resolution, self.smooth, self.low, self.high,
                   self.bar_width, self.bar_gap, self.font, self.label_mm, self.overlay_mm, self.magnet_radius,
@@ -310,6 +339,7 @@ class Print3DDialog(QDialog):
         self.title.textChanged.connect(self.schedule)
         self.result_file.editingFinished.connect(self.schedule)
         self.range_mode.currentIndexChanged.connect(self._range_mode_changed)
+        self._range_mode_changed()
         self.source.currentIndexChanged.connect(self._source_changed)
         self._source_changed()
         self.schedule()
@@ -317,7 +347,7 @@ class Print3DDialog(QDialog):
     # ------------------------------------------------------------------ settings
     _KEYS = ('width_mm', 'base_mm', 'relief_mm', 'resolution', 'smooth', 'bar_width', 'bar_gap', 'font',
              'label_mm', 'overlay_mm', 'magnet_radius', 'magnet_depth')
-    _COMBOS = ('quality', 'layout_combo')
+    _COMBOS = ('quality', 'layout_combo', 'printer', 'nozzle', 'zero_mode')
 
     def _restore(self):
         for key in self._KEYS:
@@ -340,6 +370,10 @@ class Print3DDialog(QDialog):
                 getattr(self, key).setValue(int(self.settings.value(f'print3d/{key}') or getattr(self, key).value()))
             except (TypeError, ValueError):
                 pass
+        for key, button in (('text_color', self.text_color), ('background_color', self.base_color)):
+            value = self.settings.value(f'print3d/{key}')
+            if value and QColor(str(value)).isValid():
+                button.set_color(str(value))
         titles = self.settings.value('print3d/channel_titles')
         if titles is not None:
             self.channel_titles.setChecked(str(titles).lower() in ('true', '1'))
@@ -353,6 +387,8 @@ class Print3DDialog(QDialog):
         for key in ('layout_rows', 'layout_cols'):
             self.settings.setValue(f'print3d/{key}', getattr(self, key).value())
         self.settings.setValue('print3d/channel_titles', self.channel_titles.isChecked())
+        self.settings.setValue('print3d/text_color', self.text_color.color())
+        self.settings.setValue('print3d/background_color', self.base_color.color())
 
     def closeEvent(self, event):
         self._store()
@@ -388,6 +424,15 @@ class Print3DDialog(QDialog):
         self.source_hint.setText(hints[key])
 
     def _range_mode_changed(self, *_):
+        display = self.range_mode.currentData() == 'display'
+        for w in (self.low, self.high):
+            w.setEnabled(not display)
+        if display:
+            self.range_hint.setText('The colour-bar range of each channel is the contrast range of its image in '
+                                    'SPM Studio. Values outside are printed flat.')
+            self.schedule()
+            return
+        self.range_hint.setText('Values outside the range are printed flat (cuts a too high peak).')
         if self.range_mode.currentData() == 'percentile':
             self.low.setSuffix(' %')
             self.high.setSuffix(' %')
@@ -479,7 +524,10 @@ class Print3DDialog(QDialog):
             {'lattice': 'Lattice', 'molecules': 'Molecules'}.get(self.source.currentData(), '')
         if self.source.currentData() == 'channel' and self.trace.currentText() == 'backward':
             title += ' (backward)'
-        out = [Q.Panel(data, size_nm, unit, factor, title, overlay, (rows[0]['low'].color(), rows[0]['high'].color()))]
+        source_channel = self.channel.currentText() if self.source.currentData() == 'channel' else None
+        rng0, zero0 = self._panel_options(data, source_channel, self.trace.currentText())
+        out = [Q.Panel(data, size_nm, unit, factor, title, overlay, (rows[0]['low'].color(), rows[0]['high'].color()),
+                       rng0, zero0)]
         absolute = self.range_mode.currentData() == 'absolute'
         for row in rows[1:]:
             name = row['channel'].currentText()
@@ -488,10 +536,12 @@ class Print3DDialog(QDialog):
             a, cd = self._channel_array(name, row['trace'].currentText(), self.processed.isChecked())
             size = cd.geometry.size_m
             f, u = P.display_unit(cd.unit or '', a)
-            rng = {'range_mode': 'percentile', 'low': 1.0, 'high': 99.0} if absolute else {}
+            rng, zero = self._panel_options(a, name, row['trace'].currentText())
+            if absolute:
+                rng = {'range_mode': 'percentile', 'low': 1.0, 'high': 99.0}
             label = name + (' (backward)' if row['trace'].currentText() == 'backward' else '')
             out.append(Q.Panel(a, (size[0] * 1e9, size[1] * 1e9) if size else None, u, f, label, None,
-                               (row['low'].color(), row['high'].color()), rng))
+                               (row['low'].color(), row['high'].color()), rng, zero))
         return out
 
     def _pick_result(self):
@@ -499,6 +549,39 @@ class Print3DDialog(QDialog):
         if path:
             self.result_file.setText(path)
             self.schedule()
+
+    def _is_current(self, channel, trace):
+        try:
+            insp = self.main_window.inspector
+            return insp.channel.currentText() == channel and insp.selected_trace() == trace
+        except Exception:
+            return False
+
+    def _steps(self, channel, trace):
+        """Processing steps of a channel, as in the main window (the inspector for the shown channel)."""
+        mw = self.main_window
+        scan = mw.scan
+        key = (str(scan.path), channel, trace)
+        steps = list(getattr(mw, 'pipelines', {}).get(key, []))
+        if self._is_current(channel, trace):
+            try:
+                steps = list(mw.inspector.steps())
+            except Exception:
+                pass
+        return steps
+
+    def _style(self, channel, trace):
+        """ImageStyle of a channel (contrast mode / range) as shown in the main window, or None."""
+        mw = self.main_window
+        if self._is_current(channel, trace):
+            try:
+                return mw.inspector.get_style()
+            except Exception:
+                pass
+        try:
+            return getattr(mw, 'styles', {}).get((str(mw.scan.path), channel, trace))
+        except Exception:
+            return None
 
     def _channel_array(self, channel, trace, processed):
         mw = self.main_window
@@ -508,17 +591,32 @@ class Print3DDialog(QDialog):
             trace = next(iter(cd.traces))
         data = np.asarray(cd.get(trace), float)
         if processed:
-            key = (str(scan.path), channel, trace)
-            steps = list(getattr(mw, 'pipelines', {}).get(key, []))
-            try:
-                if mw.inspector.channel.currentText() == channel and mw.inspector.selected_trace() == trace:
-                    steps = list(mw.inspector.steps())
-            except Exception:
-                pass
+            steps = self._steps(channel, trace)
             if steps:
                 from ..core.processing import apply
                 data = apply(data, steps)
         return data, cd
+
+    def _panel_options(self, data, channel=None, trace=None):
+        """(range override, zero_reference) of a panel from the range mode and the Fix Zero setting."""
+        from ..core.processing import display_zero_enabled
+        rng = {}
+        if self.range_mode.currentData() == 'display':
+            style = self._style(channel, trace) if channel else None
+            if style is not None:
+                from ..core.display import bounds
+                lo, hi = bounds(data, style)
+            else:
+                lo, hi = P.value_range(data, {'range_mode': 'percentile', 'low': 1, 'high': 99})
+            rng = {'range_mode': 'absolute', 'low': lo, 'high': hi}
+        mode = self.zero_mode.currentData()
+        if mode == 'zero':
+            zero = True
+        elif mode == 'values' or not channel or not self.processed.isChecked():
+            zero = False
+        else:
+            zero = display_zero_enabled(self._steps(channel, trace))
+        return rng, zero
 
     def _data(self):
         """(array, size_nm, unit, display factor, overlay)."""
@@ -559,9 +657,10 @@ class Print3DDialog(QDialog):
 
     def params(self, factor=1.0, unit=''):
         absolute = self.range_mode.currentData() == 'absolute'
+        mode = self.range_mode.currentData()
         return {'width_mm': self.width_mm.value(), 'base_mm': self.base_mm.value(),
                 'relief_mm': self.relief_mm.value(), 'resolution_mm': self.resolution.value(),
-                'range_mode': self.range_mode.currentData(),
+                'range_mode': 'percentile' if mode == 'display' else mode, 'range_source': mode,
                 'low': self.low.value() / factor if absolute else self.low.value(),
                 'high': self.high.value() / factor if absolute else self.high.value(),
                 'invert': self.invert.isChecked(), 'smooth_px': self.smooth.value(),
@@ -573,7 +672,15 @@ class Print3DDialog(QDialog):
                 'quality': self.quality.currentData(), 'main_title': self.main_title.text(),
                 'channel_titles': self.channel_titles.isChecked(), 'magnets': self.magnets.isChecked(),
                 'magnet_radius_mm': self.magnet_radius.value(), 'magnet_depth_mm': self.magnet_depth.value(),
-                'base_color': self.base_color.color(), **self.layout_params()}
+                'base_color': self.base_color.color(), 'background_color': self.base_color.color(),
+                'text_color': self.text_color.color(), 'nozzle_mm': float(self.nozzle.currentData() or .4),
+                'printer': self.printer.currentData(), **self.layout_params()}
+
+    def bambu_options(self):
+        if not self.bambu_project.isChecked():
+            return None
+        return {'printer': self.printer.currentData(), 'nozzle': float(self.nozzle.currentData() or .4),
+                'gradient': True}
 
     # ------------------------------------------------------------------ preview
     def schedule(self, *_):
@@ -603,7 +710,12 @@ class Print3DDialog(QDialog):
         for b in (self.save_stl, self.save_step, self.save_3mf):
             b.setEnabled(True)
         z, cell = plate.preview
-        z, cell = P.decimate(z, cell, 30000)
+        rgb = plate.preview_rgb
+        z2, cell2 = P.decimate(z, cell, 30000)
+        if rgb is not None and z2.shape != z.shape:
+            k = max(1, int(round(cell2 / cell)))
+            rgb = rgb[::k, ::k][:z2.shape[0], :z2.shape[1]]
+        z, cell = z2, cell2
         rows, cols = z.shape
         x = (np.arange(cols) + .5) * cell
         y = ((rows - 1 - np.arange(rows)) + .5) * cell
@@ -614,8 +726,11 @@ class Print3DDialog(QDialog):
         ax = self.figure.add_subplot(projection='3d')
         from matplotlib.colors import LightSource
         light = LightSource(azdeg=315, altdeg=45)
-        shade = light.shade(z, cmap=__import__('matplotlib').colormaps['Greys_r'], vert_exag=1, blend_mode='soft',
-                            vmin=0, vmax=float(z.max()))
+        if rgb is not None and rgb.shape[:2] == z.shape:
+            shade = light.shade_rgb(rgb, z, vert_exag=1, blend_mode='soft')    # print colours, lit
+        else:
+            shade = light.shade(z, cmap=__import__('matplotlib').colormaps['Greys_r'], vert_exag=1, blend_mode='soft',
+                                vmin=0, vmax=float(z.max()))
         ax.plot_surface(X, Y, z, facecolors=shade, rstride=1, cstride=1, linewidth=0, antialiased=False, shade=False)
         W, H = plate.size_mm
         top = float(z.max())
@@ -627,12 +742,18 @@ class Print3DDialog(QDialog):
         self.figure.tight_layout()
         self.canvas.draw_idle()
         first = plate.panels[0]
-        lo, hi = first['low'] * first['factor'], first['high'] * first['factor']
+        shift = first['low'] if first.get('zero_reference') else 0.0
+        lo, hi = (first['low'] - shift) * first['factor'], (first['high'] - shift) * first['factor']
         base = plate.params['base_mm']
+        bed = B.PRINTERS.get(self.printer.currentData(), {}).get('bed')
         text = (f'Plate {W:.0f} × {H:.0f} mm, highest point {base + p["relief_mm"]:.1f} mm · {len(plate.panels)} '
                 f'channel(s) · range {lo:.4g} … {hi:.4g} {first["unit"]} → {base:.1f} … '
                 f'{base + p["relief_mm"]:.1f} mm · relief grid {p_res(self):.2f} mm, labels 0.05 mm '
                 f'(preview is coarser). Drag the view to rotate.')
+        if bed:
+            fits = W <= bed[0] and H <= bed[1]
+            text += (f'\n{"✓ fits" if fits else "⚠ larger than"} the {self.printer.currentText()} bed '
+                     f'({bed[0]} × {bed[1]} mm)')
         if plate.notes:
             text += '\n' + ' · '.join(plate.notes)
         self.info.setText(text)
@@ -648,7 +769,8 @@ class Print3DDialog(QDialog):
             return
         try:
             plate, p = self._build(preview=False)
-            written, triangles, notes = Q.export_plate(plate, path, suffix)
+            bambu = self.bambu_options() if suffix == '3mf' else None
+            written, triangles, notes = Q.export_plate(plate, path, suffix, bambu=bambu)
             sidecar = Path(path).with_suffix('.print3d.json')
             info = {'source': self.source.currentData(), 'scan': str(scan.path) if scan else None,
                     'channel': self.channel.currentText(), 'parameters': p,
@@ -657,6 +779,7 @@ class Print3DDialog(QDialog):
                     'plate_mm': list(plate.size_mm), 'triangles': triangles}
             if suffix == '3mf':
                 info['colour_gradients'] = Q.gradient_recipe(plate)
+                info['bambu'] = bambu
                 Path(path).with_suffix('.colour_gradient.txt').write_text(
                     Q.recipe_text(info['colour_gradients']), encoding='utf8')
             sidecar.write_text(json.dumps(info, indent=2, ensure_ascii=False, default=float), encoding='utf8')
