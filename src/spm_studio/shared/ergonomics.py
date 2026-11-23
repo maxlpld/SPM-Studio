@@ -64,7 +64,7 @@ def compact_hint(label: QLabel, force_full: bool | None = None):
     """Show the short form of a long hint label (full text in its tooltip)."""
     full = label.property('spmFullText')
     if full is None:
-        if label.textFormat() == Qt.TextFormat.RichText or Qt.mightBeRichText(label.text()):
+        if label.textFormat() == Qt.TextFormat.RichText or re.search(r'<[a-zA-Z/][^>]*>', label.text()):
             return
         full = label.text()
         if len(' '.join(full.split())) <= HINT_LIMIT:
@@ -80,6 +80,12 @@ def compact_hint(label: QLabel, force_full: bool | None = None):
 
 class _Ergonomics(QObject):
     def eventFilter(self, obj, event):
+        try:
+            return self._filter(obj, event)
+        except Exception:                       # an ergonomic helper must never break the application
+            return False
+
+    def _filter(self, obj, event):
         kind = event.type()
         if kind == QEvent.Type.Wheel and isinstance(obj, QWidget) and _is_value_control(obj):
             if not obj.hasFocus():
