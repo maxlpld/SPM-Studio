@@ -17,6 +17,11 @@ The internal builds that preceded the GitHub project (0.7.0 – 0.8.3) are docum
 - After saving a Bambu Studio 3MF, the message now reminds that Bambu Studio shows a mixed filament in one
   blended colour in the Prepare view; the gradient is computed when slicing and appears in the Preview tab.
 
+### Maintenance
+
+- The start-up smoke test waits for background network checks to finish before closing, so a slow network
+  no longer makes it crash at exit on Linux.
+
 ## 0.0.16 — 2026-11-23
 
 ### 3D print (Tools › 3D print)
