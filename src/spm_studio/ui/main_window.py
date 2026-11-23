@@ -336,6 +336,7 @@ class MainWindow(QMainWindow):
         self.folder_button.clicked.connect(self.open_folder)
         self.profile_combo=QComboBox()
         self.profile_combo.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToContents)   # v0.0.18: never clipped
+        self.profile_combo.setSizePolicy(QSizePolicy.Policy.Fixed,QSizePolicy.Policy.Fixed)
         self.profile_combo.setMinimumWidth(150)
         self.profile_combo.setToolTip('Processing / display profile')
         self.apply_profile_button=QPushButton('Apply profile')
@@ -356,6 +357,7 @@ class MainWindow(QMainWindow):
         self.save_profile_button.clicked.connect(self.save_profile)
         self.export_preset_combo=QComboBox()
         self.export_preset_combo.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToContents)   # v0.0.18: never clipped
+        self.export_preset_combo.setSizePolicy(QSizePolicy.Policy.Fixed,QSizePolicy.Policy.Fixed)
         self.export_preset_combo.setMinimumWidth(130)
         self.export_preset_combo.setToolTip('Figure size preset (Export… and analysis figures)')
         self.compare_button=QPushButton('Compare…')

@@ -52,7 +52,7 @@ def short_text(text: str, limit: int = HINT_LIMIT) -> str:
     plain = ' '.join(str(text).split())
     if len(plain) <= limit:
         return plain
-    m = re.match(r'^(.{20,}?[.!?:])\s', plain)
+    m = re.match(r'^(.{20,}?[.!?])\s', plain)
     first = m.group(1) if m else plain
     if len(first) > limit:
         cut = first[:limit].rsplit(' ', 1)[0]
