@@ -44,6 +44,26 @@ def main(argv=None) -> int:
     win.resize(*size)
     win.show()
     failures = []
+    modal_count = [0]
+
+    def close_modals():
+        """A dialog opened with exec() would block the run: photograph it, then close it."""
+        widget = app.activeModalWidget()
+        if widget is not None:
+            modal_count[0] += 1
+            try:
+                widget.grab().save(str(out / f'99_modal_{modal_count[0]:02d}.png'))
+                print('modal closed:', widget.windowTitle(), flush=True)
+            except Exception:
+                pass
+            widget.close()
+            try:
+                widget.reject()
+            except Exception:
+                pass
+    watchdog = QTimer()
+    watchdog.timeout.connect(close_modals)
+    watchdog.start(1500)
 
     def pump(seconds=.3):
         end = time.monotonic() + seconds
