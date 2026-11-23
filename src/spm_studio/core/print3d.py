@@ -435,59 +435,13 @@ def write_stl(path, verts, faces, name='SPM Studio relief'):
 
 
 def write_step(path, verts, faces, name='SPM Studio relief'):
-    """ISO 10303-21 (AP214) file with one FACETED_BREP solid (triangles, millimetres)."""
-    import datetime
-    path = Path(path)
-    v = np.asarray(verts, float)
-    f = np.asarray(faces)
-    lines = []
-    n = [0]
+    """ISO 10303-21 (AP214) file with one B-rep solid (planar faces with shared edges, millimetres).
 
-    def add(text):
-        n[0] += 1
-        lines.append(f'#{n[0]}={text};')
-        return n[0]
-    app = add("APPLICATION_CONTEXT('automotive design')")
-    add(f"APPLICATION_PROTOCOL_DEFINITION('international standard','automotive_design',2000,#{app})")
-    pc = add(f"PRODUCT_CONTEXT('',#{app},'mechanical')")
-    pdc = add(f"PRODUCT_DEFINITION_CONTEXT('part definition',#{app},'design')")
-    prod = add(f"PRODUCT('{name}','{name}','',(#{pc}))")
-    add(f"PRODUCT_RELATED_PRODUCT_CATEGORY('part',$,(#{prod}))")
-    pdf = add(f"PRODUCT_DEFINITION_FORMATION('','',#{prod})")
-    pd = add(f"PRODUCT_DEFINITION('design','',#{pdf},#{pdc})")
-    pds = add(f"PRODUCT_DEFINITION_SHAPE('','',#{pd})")
-    length = add("(LENGTH_UNIT()NAMED_UNIT(*)SI_UNIT(.MILLI.,.METRE.))")
-    angle = add("(NAMED_UNIT(*)PLANE_ANGLE_UNIT()SI_UNIT($,.RADIAN.))")
-    solid = add("(NAMED_UNIT(*)SI_UNIT($,.STERADIAN.)SOLID_ANGLE_UNIT())")
-    unc = add(f"UNCERTAINTY_MEASURE_WITH_UNIT(LENGTH_MEASURE(1.E-04),#{length},'distance_accuracy_value','')")
-    ctx = add(f"(GEOMETRIC_REPRESENTATION_CONTEXT(3)GLOBAL_UNCERTAINTY_ASSIGNED_CONTEXT((#{unc}))"
-              f"GLOBAL_UNIT_ASSIGNED_CONTEXT((#{length},#{angle},#{solid}))REPRESENTATION_CONTEXT('',''))")
-    origin = add("CARTESIAN_POINT('',(0.,0.,0.))")
-    zdir = add("DIRECTION('',(0.,0.,1.))")
-    xdir = add("DIRECTION('',(1.,0.,0.))")
-    axis = add(f"AXIS2_PLACEMENT_3D('',#{origin},#{zdir},#{xdir})")
-    first = n[0] + 1
-    for x, y, zz in v:
-        add(f"CARTESIAN_POINT('',({x:.5f},{y:.5f},{zz:.5f}))")
-    face_ids = []
-    for i, j, k in f:
-        loop = add(f"POLY_LOOP('',(#{first + i},#{first + j},#{first + k}))")
-        bound = add(f"FACE_OUTER_BOUND('',#{loop},.T.)")
-        face_ids.append(add(f"FACE('',(#{bound}))"))
-    shell = add("CLOSED_SHELL(''," + '(' + ','.join(f'#{i}' for i in face_ids) + '))')
-    brep = add(f"FACETED_BREP('{name}',#{shell})")
-    rep = add(f"FACETED_BREP_SHAPE_REPRESENTATION('',(#{brep},#{axis}),#{ctx})")
-    add(f"SHAPE_DEFINITION_REPRESENTATION(#{pds},#{rep})")
-    stamp = datetime.datetime.now().strftime('%Y-%m-%dT%H:%M:%S')
-    header = ['ISO-10303-21;', 'HEADER;',
-              "FILE_DESCRIPTION(('SPM Studio 3D print relief'),'2;1');",
-              f"FILE_NAME('{path.name}','{stamp}',('SPM Studio'),(''),'SPM Studio','SPM Studio','');",
-              "FILE_SCHEMA(('AUTOMOTIVE_DESIGN { 1 0 10303 214 1 1 1 1 }'));", 'ENDSEC;', 'DATA;']
-    with path.open('w', encoding='ascii', newline='\n') as fh:
-        fh.write('\n'.join(header) + '\n')
-        fh.write('\n'.join(lines) + '\n')
-        fh.write('ENDSEC;\nEND-ISO-10303-21;\n')
-    return path
+    v0.0.16: written as ADVANCED_FACE / PLANE / EDGE_CURVE (what CAD programs write) instead of the bare
+    FACETED_BREP faces, which OpenCASCADE-based importers such as Bambu Studio read as "no geometry".
+    """
+    from .print3d_step import write_step_solids
+    return write_step_solids(path, [(name, verts, faces)], name)
 
 
 MAX_STEP_CELLS = 40_000     # ≈ 80 000 triangles — CAD programs import faceted STEP slowly

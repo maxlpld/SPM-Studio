@@ -7,6 +7,28 @@ so write it for users. Add new versions **at the top**.
 The internal builds that preceded the GitHub project (0.7.0 – 0.8.3) are documented in
 [`docs/DEVELOPMENT_HISTORY.md`](docs/DEVELOPMENT_HISTORY.md).
 
+## 0.0.16 — 2026-11-23
+
+### 3D print (Tools › 3D print)
+
+- **Colour bar = image**: new range mode *Same as the image* (default) uses the contrast range of each channel
+  in SPM Studio, and the colour-bar labels follow **Fix Zero** (they start at 0 when it is on). A
+  *Colour-bar labels* choice forces measured values or 0-based labels.
+- **STEP files open in Bambu Studio** (and other OpenCASCADE-based slicers / CAD programs): solids are now
+  written as standard B-rep faces with shared edges instead of bare faceted faces, which those programs read
+  as "no geometry". Flat areas are merged into single faces and the relief uses a lighter grid in STEP
+  (STL and 3MF keep the full quality).
+- **Automatic colour gradient for Bambu Studio**: *Save 3MF (colour gradient)* now writes a Bambu Studio
+  project with the printer, nozzle and filaments already set and **one gradient mixed filament per channel**
+  (Color Mixing, Gradient mode, low colour → high colour, mixed-colour sublayers on) assigned to the scan and
+  its 3D colour bar only. The gradient follows the height, so the colour bar matches the relief. Each channel
+  can have its own gradient. Untick *Bambu Studio project…* for the plain 3MF.
+- **Printer and nozzle** choice (all current Bambu Lab printers, 0.2 / 0.4 / 0.6 / 0.8 mm): the project uses
+  Bambu's own presets for them, the plate size is checked against the bed and the thinnest lines follow the
+  nozzle.
+- **Text colour** (black by default) for titles, ticks, scale bar and every text, and **background colour**
+  (white by default) for the plate; the live preview now shows these colours and the gradients.
+
 ## 0.0.15 — 2026-11-22
 
 ### 3D print (Tools › 3D print)
