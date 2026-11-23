@@ -7,6 +7,16 @@ so write it for users. Add new versions **at the top**.
 The internal builds that preceded the GitHub project (0.7.0 – 0.8.3) are documented in
 [`docs/DEVELOPMENT_HISTORY.md`](docs/DEVELOPMENT_HISTORY.md).
 
+## 0.0.17 — 2026-11-23
+
+### 3D print (Tools › 3D print)
+
+- **Sharper live 3D preview**: the plate is shown on a much finer grid (about 260 points along the long side,
+  no extra halving), the reliefs are sampled exactly from their own height grid, the text edges are smooth
+  and the lighting follows the real scale.
+- After saving a Bambu Studio 3MF, the message now reminds that Bambu Studio shows a mixed filament in one
+  blended colour in the Prepare view; the gradient is computed when slicing and appears in the Preview tab.
+
 ## 0.0.16 — 2026-11-23
 
 ### 3D print (Tools › 3D print)

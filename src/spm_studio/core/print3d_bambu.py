@@ -365,6 +365,8 @@ def write_bambu_3mf(path, plate, printer=DEFAULT_PRINTER, nozzle=0.4, gradient=T
         notes.append(f'Bambu Studio project for {names["printer"]}: {len(physical)} filaments + {len(mixed)} '
                      'gradient mixed filament(s), already assigned to the scan and colour-bar parts '
                      '(open it as a project in Bambu Studio ≥ 2.5.3, then match the filaments to your AMS)')
+        notes.append('Bambu Studio draws a mixed filament in one blended colour in the Prepare view: the gradient '
+                     'is computed when slicing and shows in the Preview tab (keep Process › Mixed color sublayer on)')
     else:
         notes.append(f'Bambu Studio project for {names["printer"]}: {len(physical)} filaments assigned to the parts')
     return path, notes

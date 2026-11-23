@@ -19,6 +19,8 @@ from ..core import print3d as P
 from ..core import print3d_plate as Q
 from ..core import print3d_bambu as B
 
+PREVIEW_MAX_CELLS = 80_000       # 3D preview grid (≈ 280 × 280)
+
 GRADIENTS = (('#1D3F8F', '#F5C342'), ('#5B1A72', '#F28C28'), ('#0B6E4F', '#E8F1A0'), ('#7A1020', '#F7D9C4'),
              ('#202020', '#E0E0E0'), ('#0E4D64', '#F2A65A'))
 
@@ -691,9 +693,9 @@ class Print3DDialog(QDialog):
         p = self.params(panels[0].factor, panels[0].unit)
         p['title'] = ''                       # the title is the plate's main title
         if preview:
-            # coarser grids keep the live preview fast; the files use the chosen quality
-            p['resolution_mm'] = max(p['resolution_mm'], p['width_mm'] / 110)
-            p['text_resolution_mm'] = .2
+            # the preview samples the relief at its own grid (≈ 1/320 of the plate); the files use the quality
+            p['resolution_mm'] = max(p['resolution_mm'], p['width_mm'] / 260)
+            p['text_resolution_mm'] = .1
         return Q.build_plate(panels, p), p
 
     def update_preview(self):
@@ -711,7 +713,7 @@ class Print3DDialog(QDialog):
             b.setEnabled(True)
         z, cell = plate.preview
         rgb = plate.preview_rgb
-        z2, cell2 = P.decimate(z, cell, 30000)
+        z2, cell2 = P.decimate(z, cell, PREVIEW_MAX_CELLS)
         if rgb is not None and z2.shape != z.shape:
             k = max(1, int(round(cell2 / cell)))
             rgb = rgb[::k, ::k][:z2.shape[0], :z2.shape[1]]
@@ -727,10 +729,10 @@ class Print3DDialog(QDialog):
         from matplotlib.colors import LightSource
         light = LightSource(azdeg=315, altdeg=45)
         if rgb is not None and rgb.shape[:2] == z.shape:
-            shade = light.shade_rgb(rgb, z, vert_exag=1, blend_mode='soft')    # print colours, lit
+            shade = light.shade_rgb(rgb, z, vert_exag=1, blend_mode='soft', dx=cell, dy=cell)  # print colours, lit
         else:
             shade = light.shade(z, cmap=__import__('matplotlib').colormaps['Greys_r'], vert_exag=1, blend_mode='soft',
-                                vmin=0, vmax=float(z.max()))
+                                vmin=0, vmax=float(z.max()), dx=cell, dy=cell)
         ax.plot_surface(X, Y, z, facecolors=shade, rstride=1, cstride=1, linewidth=0, antialiased=False, shade=False)
         W, H = plate.size_mm
         top = float(z.max())
