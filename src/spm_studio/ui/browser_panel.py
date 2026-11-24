@@ -29,7 +29,9 @@ class BrowserPanel(QWidget):
             button.setCheckable(True)
             button.setProperty('segment',True)
             # v0.0.18: equal widths but never narrower than the label (no clipped "Metadata")
-            button.setMinimumWidth(button.fontMetrics().horizontalAdvance(label)+18)
+            bold=button.font();bold.setBold(True)
+            from PySide6.QtGui import QFontMetrics
+            button.setMinimumWidth(QFontMetrics(bold).horizontalAdvance(label)+30)   # v0.0.19: room for bold/pill
             button.setSizePolicy(QSizePolicy.Policy.Preferred,QSizePolicy.Policy.Fixed)
             button.clicked.connect(lambda _checked=False,i=index:self.tabs.setCurrentIndex(i))
             self.tab_buttons.append(button)

@@ -956,6 +956,11 @@ class MainWindow(QMainWindow):
             return max(low,min(want,round(available*share)))
         target=max(target,need(self.right_tabs,312,.34))
         browser_target=need(self.browser,215,.24)
+        try:                                    # file names fully visible ("…_008 [SXM]")
+            files=self.browser.files
+            browser_target=max(browser_target,min(round(available*.24),files.sizeHintForColumn(0)+44))
+        except Exception:
+            pass
         # Allow the central scan view to remain useful even on smaller screens.
         if sizes[2]<target or sizes[0]<browser_target:
             browser=max(browser_target,min(sizes[0],max(285,browser_target)))
@@ -1410,6 +1415,9 @@ class MainWindow(QMainWindow):
         if path in self._source_paths or path in self._removed_paths:return
         self._source_paths.append(path)
         item=QListWidgetItem(f'{Path(path).stem}   [{Path(path).suffix[1:].upper()}]')
+        if not getattr(self,'_browser_fitted',False):     # v0.0.19: once per session, show whole file names
+            self._browser_fitted=True
+            QTimer.singleShot(0,self._enforce_panel_widths)
         item.setToolTip(path)
         item.setData(Qt.ItemDataRole.UserRole,path)
         self.browser.files.addItem(item)

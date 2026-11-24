@@ -182,7 +182,8 @@ def main(argv=None) -> int:
                 pump(1)
                 target = doc if doc is not None and hasattr(doc, 'grab') else app.activeWindow() or win
                 try:
-                    target.resize(1280, 800)
+                    if name != 'todo':                 # the to-do keeps its compact post-it size
+                        target.resize(1280, 800)
                 except Exception:
                     pass
                 shot(f'08_{name}_{theme}', target)

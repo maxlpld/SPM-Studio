@@ -176,6 +176,13 @@ class _DialogStyle(QObject):
             if not isinstance(watched, QFileDialog):
                 size_to_content(watched)
                 fit_to_screen(watched)
+        elif (kind == QEvent.Type.Polish and isinstance(watched, ROUNDED_POPUPS)
+              and watched.property('spmRounded') is None and not watched.isVisible()):
+            try:
+                if rounded_popups_enabled():
+                    make_rounded(watched)
+            except Exception:
+                pass
         elif kind == QEvent.Type.Paint and isinstance(watched, QDialog) and watched.property('spmRounded'):
             _paint_rounded(watched)
         elif (kind == QEvent.Type.MouseButtonPress and isinstance(watched, QDialog)
