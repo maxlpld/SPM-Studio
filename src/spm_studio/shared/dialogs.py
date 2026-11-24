@@ -92,10 +92,11 @@ def size_to_content(widget) -> None:
         inner = area.widget()
         if inner is None or not area.isVisibleTo(widget) or not area.widgetResizable():
             continue
-        need = inner.sizeHint()
-        view = area.viewport().size()
-        extra_w = max(extra_w, need.width() - view.width())
-        extra_h = max(extra_h, need.height() - view.height())
+        need = inner.sizeHint().expandedTo(inner.minimumSize())
+        own = area.sizeHint()                 # what the dialog's size hint already gives the scroll area
+        frame = 2 * area.frameWidth() + 4
+        extra_w = max(extra_w, need.width() + frame - own.width())
+        extra_h = max(extra_h, need.height() + frame - own.height())
     w += max(0, min(extra_w, 900))
     h += max(0, min(extra_h, 900))
     if (w, h) != (widget.width(), widget.height()):
