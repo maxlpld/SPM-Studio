@@ -6,6 +6,7 @@ scientific data stay verbatim. Combo boxes retain their original keys as data.
 from __future__ import annotations
 
 LABELS = {
+    'light_studio': 'Studio Light', 'dark_studio': 'Studio Dark',
     'Results_logs': 'Logs', 'results_logs': 'Logs',
     'auto': 'Automatic', 'file_search': 'File search',
     'tools_only': 'Local tools', 'custom_cloud': 'Custom cloud',

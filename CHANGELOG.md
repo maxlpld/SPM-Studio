@@ -7,6 +7,25 @@ so write it for users. Add new versions **at the top**.
 The internal builds that preceded the GitHub project (0.7.0 – 0.8.3) are documented in
 [`docs/DEVELOPMENT_HISTORY.md`](docs/DEVELOPMENT_HISTORY.md).
 
+## 0.0.19 — 2026-11-24
+
+- New built-in themes **Studio Light** and **Studio Dark** (menu View › Theme, or Settings › Appearance): borderless
+  rounded cards with tinted neighbours, pill buttons, round step badges, one orange accent. Studio Dark has a new,
+  warmer and more readable palette.
+- Selected (checked) buttons never turn into a black block any more: soft accent fill with an accent outline, the
+  icon and text stay visible.
+- Pop-ups: no more green tick / red cross icons on their buttons; message pop-ups have all four corners rounded
+  and can be moved by dragging them (Settings › General › Message pop-ups to go back to the system frame).
+- Windows and dialogs open large enough for their content (no cut buttons, e.g. the unit buttons of Export
+  figure); the side panels and the top bar start wide enough to show everything, and can still be shrunk.
+- The README / guide viewer opens at a comfortable size with a wide, centred text column.
+- Scan preview: every channel tile has the same size and a centred title (the first channel too); the selected
+  channel keeps its place and gets an outline (Settings › General › Selected channel outline: on/off, colour,
+  thickness, corner radius). The arrows move the selection from tile to tile.
+- To-do & notes: complete redesign — a compact window (like a digital post-it) to keep in a corner or on another
+  screen, large title with the open count, Tasks | Notes switch, round check marks, a pin to keep it on top; its
+  size and place are remembered.
+
 ## 0.0.18 — 2026-11-23
 
 ### Ergonomics

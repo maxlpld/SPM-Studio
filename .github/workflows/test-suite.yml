@@ -21,7 +21,7 @@ jobs:
   test:
     name: ${{ inputs.os }} · Python ${{ inputs.python-version }}
     runs-on: ${{ inputs.os }}
-    timeout-minutes: ${{ startsWith(inputs.os, 'windows') && 90 || 60 }}   # slow Windows runners need up to ~60 min
+    timeout-minutes: 90   # slow shared runners: Windows needs up to ~60 min, Linux up to ~60 min
     env:
       QT_QPA_PLATFORM: offscreen
       SPM_STUDIO_USE_GH_CLI: '0'       # tests never use a GitHub sign-in

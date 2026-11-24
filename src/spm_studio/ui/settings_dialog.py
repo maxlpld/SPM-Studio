@@ -235,6 +235,80 @@ class SettingsDialog(QDialog):
             layout.addWidget(_hint(subtitle))
         return widget, layout
 
+    def _outline_rows(self, v, w):
+        """v0.0.19: the outline around the selected channel of the scan preview."""
+        from PySide6.QtWidgets import QColorDialog, QSpinBox
+        from PySide6.QtGui import QColor
+        get = getattr(w, 'tile_outline_settings', None)
+        cfg = get() if get else {'enabled': True, 'color': '', 'width': 2, 'radius': 10}
+
+        def refresh():
+            if hasattr(w, '_apply_tile_outline'):
+                try:
+                    w._apply_tile_outline()
+                except Exception:
+                    pass
+
+        def store(key, value):
+            w.settings.setValue(f'view/outline_{key}', value)
+            refresh()
+
+        self.outline_enabled = QCheckBox('Shown')
+        self.outline_enabled.setObjectName('SettingsOutlineEnabledV0019')
+        self.outline_enabled.setChecked(bool(cfg['enabled']))
+        self.outline_enabled.toggled.connect(lambda on: store('enabled', bool(on)))
+        self._action_row(v, 'Selected channel outline',
+                         'A contour around the channel selected with the mouse or the arrows.', self.outline_enabled)
+
+        self.outline_color = QPushButton('Theme accent' if not cfg['color'] else cfg['color'])
+        self.outline_color.setObjectName('SettingsOutlineColorV0019')
+
+        def pick():
+            start = QColor(cfg['color'] or '#FF6B2C')
+            color = QColorDialog.getColor(start, self, 'Outline colour')
+            if color.isValid():
+                cfg['color'] = color.name()
+                self.outline_color.setText(color.name())
+                store('color', color.name())
+
+        def reset():
+            cfg['color'] = ''
+            self.outline_color.setText('Theme accent')
+            store('color', '')
+        self.outline_color.clicked.connect(pick)
+        reset_button = QPushButton('Accent')
+        reset_button.setToolTip('Use the colour of the theme')
+        reset_button.clicked.connect(reset)
+        row = QWidget()
+        h = QHBoxLayout(row)
+        h.setContentsMargins(0, 0, 0, 0)
+        h.addWidget(self.outline_color)
+        h.addWidget(reset_button)
+        self._action_row(v, 'Outline colour', '', row)
+
+        self.outline_width = QSpinBox()
+        self.outline_width.setObjectName('SettingsOutlineWidthV0019')
+        self.outline_width.setRange(1, 8)
+        self.outline_width.setSuffix(' px')
+        self.outline_width.setValue(int(cfg['width']))
+        self.outline_width.valueChanged.connect(lambda n: store('width', int(n)))
+        self._action_row(v, 'Outline thickness', '', self.outline_width)
+
+        self.outline_radius = QSpinBox()
+        self.outline_radius.setObjectName('SettingsOutlineRadiusV0019')
+        self.outline_radius.setRange(0, 24)
+        self.outline_radius.setSuffix(' px')
+        self.outline_radius.setValue(int(cfg['radius']))
+        self.outline_radius.valueChanged.connect(lambda n: store('radius', int(n)))
+        self._action_row(v, 'Outline corner radius', '', self.outline_radius)
+
+        self.rounded_popups = QCheckBox('Rounded')
+        self.rounded_popups.setObjectName('SettingsRoundedPopupsV0019')
+        from spm_studio.shared.dialogs import rounded_popups_enabled
+        self.rounded_popups.setChecked(rounded_popups_enabled())
+        self.rounded_popups.toggled.connect(lambda on: w.settings.setValue('ui/rounded_popups', bool(on)))
+        self._action_row(v, 'Message pop-ups', 'All corners rounded, moved by dragging them.', self.rounded_popups)
+
     @staticmethod
     def _action_row(form_layout, title: str, hint: str, widget):
         """One setting: name and explanation on the left, its control on the right."""
@@ -338,6 +412,7 @@ class SettingsDialog(QDialog):
         self._action_row(v, 'Auto-crop incomplete scans',
                          'When a profile that asks for it is applied, crop the unmeasured part of an aborted scan.',
                          self.autocrop)
+        self._outline_rows(v, w)
         layout.addWidget(box)
 
         box = QGroupBox('Keyboard and assistant')

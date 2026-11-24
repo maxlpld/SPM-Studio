@@ -42,6 +42,14 @@ def validate_theme(d):
             if type(val) not in (int, float) or not 7 <= val <= 20:
                 raise ValueError('font_size must be 7–20 (points)')
             tokens[key] = float(val)
+        elif key in ('tint_a', 'tint_b', 'tint_text'):          # v0.0.19 Studio design card tints
+            if not isinstance(val, str) or len(val) != 7 or val[0] != '#' or any(c not in HEX for c in val[1:]):
+                raise ValueError(f'Invalid hexadecimal color for {key}')
+            tokens[key] = val
+        elif key == 'design':
+            if val not in ('standard', 'studio'):
+                raise ValueError('design must be "standard" or "studio"')
+            tokens[key] = val
         elif key == 'radius':
             if type(val) not in (int, float) or not 0 <= val <= 16:
                 raise ValueError('radius must be 0–16 (pixels)')
