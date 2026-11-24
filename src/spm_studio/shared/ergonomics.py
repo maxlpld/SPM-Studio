@@ -11,7 +11,7 @@ from __future__ import annotations
 import re
 
 from PySide6.QtCore import QEvent, QObject, Qt
-from PySide6.QtWidgets import (QAbstractScrollArea, QAbstractSpinBox, QApplication, QComboBox, QLabel,
+from PySide6.QtWidgets import (QAbstractButton, QAbstractScrollArea, QAbstractSpinBox, QApplication, QComboBox, QLabel,
                                QSlider, QWidget)
 
 HINT_LIMIT = 120          # characters kept in a compact hint
@@ -82,6 +82,20 @@ _WHEEL, _POLISH, _SHOW = QEvent.Type.Wheel, QEvent.Type.Polish, QEvent.Type.Show
 _KINDS = frozenset((_WHEEL, _POLISH, _SHOW))
 
 
+def fit_button_text(button) -> None:
+    """A button whose width was fixed in code is widened when its label would be cut (v0.0.19)."""
+    text = button.text().replace('&&', '\0').replace('&', '').replace('\0', '&')
+    if not text or button.maximumWidth() >= 16777215:
+        return
+    need = button.fontMetrics().horizontalAdvance(text) + 30 + (button.iconSize().width() + 4
+                                                                   if not button.icon().isNull() else 0)
+    if button.maximumWidth() < need:
+        fixed = button.minimumWidth() == button.maximumWidth()
+        button.setMaximumWidth(need)
+        if fixed:
+            button.setMinimumWidth(need)
+
+
 class _Ergonomics(QObject):
     def eventFilter(self, obj, event):
         if event.type() not in _KINDS:          # cheap exit: this filter sees every event of the application
@@ -107,6 +121,8 @@ class _Ergonomics(QObject):
         elif kind == QEvent.Type.Show and isinstance(obj, QLabel):
             if obj.objectName() == 'hint' or obj.property('role') == 'hint':
                 compact_hint(obj)
+        elif kind == QEvent.Type.Show and isinstance(obj, QAbstractButton):
+            fit_button_text(obj)
         return False
 
 

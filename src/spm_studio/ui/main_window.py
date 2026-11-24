@@ -8,7 +8,7 @@ import numpy as np
 from PySide6.QtCore import (Qt, QEvent, QTimer, QThreadPool, QThread, QProcess, QProcessEnvironment,
                            Signal, QSettings, QUrl, Slot, QFileSystemWatcher)
 from PySide6.QtGui import QAction, QKeySequence, QDesktopServices, QImage, QPixmap
-from PySide6.QtWidgets import (QMainWindow,QCheckBox,QWidget,QVBoxLayout,QHBoxLayout,QSplitter,QTabWidget,
+from PySide6.QtWidgets import (QMainWindow,QFrame,QCheckBox,QWidget,QVBoxLayout,QHBoxLayout,QSplitter,QTabWidget,
     QScrollArea,QDockWidget,QFileDialog,QMessageBox,QInputDialog,QPushButton,QListWidgetItem,QToolBar,QComboBox,QLabel,QApplication,QSizePolicy,QLineEdit,QTextEdit,QPlainTextEdit,QAbstractSpinBox)
 from spm_studio.shared.dialogs import MessageDialog as QMessageBox, TextInputDialog as QInputDialog
 from ..core.io import read_scan, discover
@@ -230,6 +230,7 @@ class MainWindow(QMainWindow):
         self._initializing_appearance=False
         geometry=self.settings.value('geometry')
         if geometry:self.restoreGeometry(geometry)
+        QTimer.singleShot(0,self._fit_window_to_header)
         state=self.settings.value('window_state')
         if state:self.restoreState(state)
         # v0.0.18: the Logs panel starts closed; it opens with its button or on an error.
@@ -543,9 +544,21 @@ class MainWindow(QMainWindow):
         self.channel_layout=QHBoxLayout(self.channel_content)
         self.channel_layout.setContentsMargins(0,0,0,0)
         self.channel_layout.setSpacing(6)
-        self.viewer.setMinimumWidth(460)
+        self.viewer.setMinimumSize(420,260)
         self.viewer.setSizePolicy(QSizePolicy.Policy.Expanding,QSizePolicy.Policy.Expanding)
-        self.channel_layout.addWidget(self.viewer,1)
+        # v0.0.19: the selected channel is a tile like the others (same title row, same size); it keeps its
+        # place in the channel order and is marked by an outline instead of jumping to the first position.
+        self.viewer_holder=QFrame()
+        self.viewer_holder.setObjectName('channelTile')
+        self.viewer_holder.setMinimumWidth(460)
+        holder_layout=QVBoxLayout(self.viewer_holder);holder_layout.setContentsMargins(4,4,4,4);holder_layout.setSpacing(2)
+        self.viewer_title=QLabel('')
+        self.viewer_title.setObjectName('sectionTitle')
+        self.viewer_title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.viewer_title.setContentsMargins(4,2,4,2)
+        holder_layout.addWidget(self.viewer_title)
+        holder_layout.addWidget(self.viewer,1)
+        self.channel_layout.addWidget(self.viewer_holder,1)
         self.channel_scroll.setWidget(self.channel_content)
         self.channel_scroll.horizontalScrollBar().rangeChanged.connect(
             lambda *_:(self._update_channel_navigation(),QTimer.singleShot(0,self._load_visible_channels)))
@@ -908,15 +921,45 @@ class MainWindow(QMainWindow):
             self._crop_all_action.setEnabled(active)
             self._reset_crop_action.setEnabled(active)
 
+    def _fit_window_to_header(self):
+        """v0.0.19: open wide enough for the whole top bar (capped to the screen); the user may shrink it."""
+        try:
+            if self.isMaximized() or self.isFullScreen():
+                return
+            screen=self.screen() or QApplication.primaryScreen()
+            if screen is None:
+                return
+            room=screen.availableGeometry()
+            want=self.topbar.sizeHint().width()+24
+            if self.width()<want and want<=room.width():
+                self.resize(want,self.height())
+                if self.frameGeometry().right()>room.right():
+                    self.move(max(room.left(),room.right()-self.frameGeometry().width()),self.y())
+        except Exception:
+            pass
+
     def _enforce_panel_widths(self):
         splitter=self.workspace_splitter
         sizes=splitter.sizes()
         if len(sizes)!=3:return
         available=sum(sizes)
         target=min(370,max(312,round(available*.28)))
+        # v0.0.19: at start the side panels are as wide as their content needs (nothing hidden); the user can
+        # shrink them afterwards with the splitter.
+        def need(widget,low,share):
+            try:
+                inner=widget.currentWidget() if hasattr(widget,'currentWidget') else widget
+                inner=inner.widget() if hasattr(inner,'widget') and callable(inner.widget) and inner.widget() else inner
+                want=inner.sizeHint().width()+18
+            except Exception:
+                want=low
+            return max(low,min(want,round(available*share)))
+        target=max(target,need(self.right_tabs,312,.34))
+        browser_target=need(self.browser,215,.24)
         # Allow the central scan view to remain useful even on smaller screens.
-        if sizes[2]<target:
-            browser=max(215,min(sizes[0],285))
+        if sizes[2]<target or sizes[0]<browser_target:
+            browser=max(browser_target,min(sizes[0],max(285,browser_target)))
+            target=max(sizes[2],target)
             center=max(260,available-browser-target)
             splitter.setSizes([browser,center,target])
 
@@ -1142,8 +1185,8 @@ class MainWindow(QMainWindow):
             action.setToolTip(ACTION_BY_ID[id_].label+': '+(self._shortcut_bindings[id_] or 'unbound'))
         self.module_panel.run_button.setText('Run analysis')
         self.module_panel.run_button.setToolTip('Run the selected analysis ('+(self._shortcut_bindings['tool.run'] or 'no shortcut')+')')
-        self.prev_channel_button.setToolTip('Scroll left: '+self._shortcut_bindings['nav.channel_left'])
-        self.next_channel_button.setToolTip('Scroll right: '+self._shortcut_bindings['nav.channel_right'])
+        self.prev_channel_button.setToolTip('Previous channel: '+self._shortcut_bindings['nav.channel_left'])
+        self.next_channel_button.setToolTip('Next channel: '+self._shortcut_bindings['nav.channel_right'])
         self.statusBar().showMessage(f'Keyboard shortcut profile: {ui_label(name)}',5000)
         self._watch_shortcut_files()
 
@@ -1251,6 +1294,10 @@ class MainWindow(QMainWindow):
         self._populate_theme_menu()
         self.viewer.update()
         self.interactive_palette.update()
+        try:
+            self._apply_tile_outline()          # v0.0.19: the outline follows the theme accent
+        except Exception:
+            pass
 
     def _load_profiles(self):
         presets={'STM':dict(DEFAULT_PROFILE),
@@ -1807,10 +1854,12 @@ class MainWindow(QMainWindow):
             # This includes previews newly opened by Apply profile.
             self._ensure_session_crop(channel)
             if channel not in self._secondary_views:
-                holder=QWidget()
-                block=QVBoxLayout(holder);block.setContentsMargins(1,1,1,1)
-                head=QLabel(channel)
+                holder=QFrame()
+                holder.setObjectName('channelTile')
+                block=QVBoxLayout(holder);block.setContentsMargins(4,4,4,4);block.setSpacing(2)
+                head=QLabel(self.channel_title(channel) if hasattr(self,'channel_title') else channel)
                 head.setObjectName('sectionTitle')
+                head.setAlignment(Qt.AlignmentFlag.AlignCenter)
                 head.setContentsMargins(4,2,4,2)
                 view=ImageView(holder)
                 holder.setMinimumWidth(460)
@@ -1824,6 +1873,7 @@ class MainWindow(QMainWindow):
                 block.addWidget(head);block.addWidget(view,1)
                 self._secondary_views[channel]=(holder,view)
                 self.channel_layout.addWidget(holder,1)
+        self._order_channel_tiles(active)
         # Keep script/live results LAST, after every ordinary scan channel.
         if self._result_view is not None:
             self.channel_layout.removeWidget(self._result_view)
@@ -1911,12 +1961,78 @@ class MainWindow(QMainWindow):
                       style,bounds,self.channel_title(channel),self.scan.channels[channel].unit,
                       preserve_view=True,display_zero=display_zero_enabled(self.pipelines.get(key,[])))
 
+    def _tile_order(self,active=None):
+        """Displayed channels in the scan's own channel order (the selected one keeps its place)."""
+        if self.scan is None:return []
+        active=active or self.inspector.channel.currentText()
+        names=[c for c in self.scan.channels if c==active or c in self._secondary_views]
+        if active not in self.scan.channels:
+            names=[active]+names
+        return names
+
+    def _order_channel_tiles(self,active):
+        self.viewer_title.setText(self.channel_title(active) if active else '')
+        for index,name in enumerate(self._tile_order(active)):
+            widget=self.viewer_holder if name==active else self._secondary_views[name][0]
+            if self.channel_layout.indexOf(widget)!=index:
+                self.channel_layout.removeWidget(widget)
+                self.channel_layout.insertWidget(index,widget,1)
+        self._apply_tile_outline(active)
+
+    def tile_outline_settings(self):
+        """Outline of the selected channel (Settings › General › Selected channel)."""
+        value=lambda key,default:self.settings.value('view/outline_'+key,default)
+        return {'enabled':str(value('enabled',True)).lower() in ('true','1'),
+                'color':str(value('color','') or ''),
+                'width':max(1,min(8,int(float(value('width',2))))),
+                'radius':max(0,min(24,int(float(value('radius',10)))))}
+
+    def _apply_tile_outline(self,active=None):
+        active=active or self.inspector.channel.currentText()
+        o=self.tile_outline_settings()
+        from ..shared.appearance import colors
+        color=o['color'] or colors().get('accent','#3d7bfd')
+        tiles=[self.viewer_holder]+[holder for holder,_view in self._secondary_views.values()]
+        on=o['enabled'] and len(tiles)>1
+        sheet=(f'QFrame#channelTile {{ border: {o["width"]}px solid transparent; border-radius: {o["radius"]}px; }}'
+               f'QFrame#channelTile[activeTile="true"] {{ border: {o["width"]}px solid {color}; }}') if on else ''
+        if self.channel_content.styleSheet()!=sheet:
+            self.channel_content.setStyleSheet(sheet)
+        for tile in tiles:
+            selected=on and tile is self.viewer_holder
+            if bool(tile.property('activeTile'))!=selected:
+                tile.setProperty('activeTile',selected)
+                tile.style().unpolish(tile);tile.style().polish(tile)
+
     def _update_channel_navigation(self):
         bar=self.channel_scroll.horizontalScrollBar()
+        names=self._tile_order() if getattr(self,'scan',None) is not None else []
+        active=self.inspector.channel.currentText()
+        if len(names)>1 and active in names:      # buttons follow the selection along the strip
+            index=names.index(active)
+            self.prev_channel_button.setEnabled(index>0)
+            self.next_channel_button.setEnabled(index<len(names)-1)
+            return
         self.prev_channel_button.setEnabled(bar.value()>bar.minimum())
         self.next_channel_button.setEnabled(bar.value()<bar.maximum())
 
     def _scroll_channels(self,direction):
+        """←/→ (and the arrow buttons): select the previous / next displayed channel (v0.0.19).
+
+        With a single channel shown, they scroll the strip as before.
+        """
+        names=self._tile_order() if self.scan is not None else []
+        active=self.inspector.channel.currentText()
+        if len(names)>1 and active in names:
+            index=names.index(active)+int(direction)
+            if 0<=index<len(names):
+                self.inspector.channel.setCurrentText(names[index])
+                QTimer.singleShot(0,lambda:self.channel_scroll.ensureWidgetVisible(self.viewer_holder,40,0))
+            self._update_channel_navigation()
+            return
+        self._scroll_channel_strip(direction)
+
+    def _scroll_channel_strip(self,direction):
         bar=self.channel_scroll.horizontalScrollBar()
         step=max(280,int(self.channel_scroll.viewport().width()*0.75))
         bar.setValue(bar.value()+int(direction)*step)

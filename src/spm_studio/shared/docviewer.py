@@ -63,7 +63,8 @@ class DocViewer(QDialog):
         self.setObjectName('DocViewerV0018')
         self.path = Path(path) if path else None
         self.setWindowTitle(title or (self.path.name if self.path else 'Document'))
-        self.resize(900, 720)
+        self.resize(980, 760)
+        self.setMinimumSize(560, 420)
         if text is None:
             try:
                 text = self.path.read_text(encoding='utf-8', errors='replace')
@@ -154,14 +155,26 @@ class DocViewer(QDialog):
             self.view.setHtml(body)
         else:
             self.view.setHtml('<pre>' + html.escape(self.text) + '</pre>')
-        width = 760                         # readable line length, centred
-        self.view.setLineWrapMode(QTextBrowser.LineWrapMode.FixedPixelWidth)
-        self.view.setLineWrapColumnOrWidth(width)
+        # v0.0.19: the text follows the window width (no fixed narrow column); very wide windows keep a
+        # readable line length by centring the column with side margins.
+        self.view.setLineWrapMode(QTextBrowser.LineWrapMode.WidgetWidth)
+        self._fit_column()
+
+    READABLE = 820                          # px: longest comfortable line
+
+    def _fit_column(self):
+        width = self.view.width()
+        side = max(0, (width - self.READABLE) // 2)
+        self.view.setViewportMargins(side, 0, side, 0)
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
-        available = self.view.viewport().width() - 60
-        self.view.setLineWrapColumnOrWidth(max(320, min(760, available)))
+        self._fit_column()
+
+    def showEvent(self, event):
+        super().showEvent(event)
+        from PySide6.QtCore import QTimer
+        QTimer.singleShot(0, self._fit_column)
 
     def find_text(self, needle: str) -> bool:
         if not needle:

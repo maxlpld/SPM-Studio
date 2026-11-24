@@ -29,7 +29,7 @@ BUILTIN_THEMES = {
 COLOR_TOKENS = ('background', 'surface', 'raised', 'sidebar', 'input', 'foreground', 'muted', 'subtle',
                 'border', 'border_strong', 'hover', 'pressed', 'accent', 'accent_hover', 'accent_fg',
                 'accent_soft', 'selection', 'danger', 'success', 'warning')
-EXTRA_TOKENS = ('font_family', 'font_size', 'radius')
+EXTRA_TOKENS = ('font_family', 'font_size', 'radius', 'design', 'tint_a', 'tint_b', 'tint_text')
 
 # Back-compat for modules that imported the old palette table.
 PALETTES = {'light': BUILTIN_THEMES['porcelain'], 'dark': BUILTIN_THEMES['graphite']}
@@ -600,7 +600,14 @@ QListWidget#docOutline {{ background: @sidebar; border: 0; border-right: 1px sol
 QListWidget#docOutline::item {{ min-height: 22px; color: @muted; }}
 QListWidget#docOutline::item:selected {{ color: @fg; }}
 QLabel#emptyState, QLabel#TodoEmptyHintV0014 {{ color: @muted; font-size: {px + 1}px; }}
+QDialog[spmRounded="true"], QMessageBox[spmRounded="true"] {{ background: transparent; }}
+QLabel#popupTitle {{ color: @muted; font-weight: 600; font-size: {small}px; }}
+/* v0.0.19: no coloured check / cross icons on pop-up buttons */
+QDialogButtonBox {{ dialogbuttonbox-buttons-have-icons: 0; }}
 '''
+    from .studio_design import is_studio, overlay as studio_overlay
+    if is_studio(t):
+        qss += studio_overlay(t)
     for key in sorted(COLOR_TOKENS, key=len, reverse=True):
         alias = {'background': 'bg', 'foreground': 'fg'}.get(key, key)
         qss = qss.replace('@' + alias, str(t[key]))
@@ -619,6 +626,8 @@ def apply_theme(theme, app=None):
     app = app or QApplication.instance()
     if app is None:
         return None
+    from .studio_design import TONES, is_studio
+    TONES.install(app)
     from .dialogs import install_dialog_style
     install_dialog_style()
     from .ergonomics import install as install_ergonomics
@@ -655,6 +664,7 @@ def apply_theme(theme, app=None):
     app.setProperty('researchAppearance', 'dark' if is_dark(t) else 'light')
     assets = _write_assets(t)
     app.setStyleSheet(stylesheet(t, assets))
+    TONES.set_enabled(is_studio(t), app)
     _refresh_icons()
     # Custom painted canvases re-read colours; scientific/export colours never depend on the UI theme.
     for widget in app.allWidgets():
