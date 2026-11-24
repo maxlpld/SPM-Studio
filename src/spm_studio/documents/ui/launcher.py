@@ -41,6 +41,11 @@ class Launcher(QDialog):
         self.templates = QListWidget()
         self.templates.setObjectName('LauncherTemplatesV008')
         self.templates.setIconSize(QSize(20, 20))
+        # v0.0.18: long descriptions wrap instead of running out of the list (no horizontal scroll bar)
+        self.templates.setWordWrap(True)
+        self.templates.setTextElideMode(Qt.TextElideMode.ElideRight)
+        self.templates.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.templates.setResizeMode(QListWidget.ResizeMode.Adjust)
         default = self.conf.get('latex_default_template' if latex else 'slides_default_template', '')
         if latex:
             blank = QListWidgetItem('Blank article\n    Minimal document, nothing else')

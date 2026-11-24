@@ -17,6 +17,7 @@ from pathlib import Path
 
 from PySide6.QtCore import Qt, QUrl, QSize, QThread, Signal
 from PySide6.QtGui import QDesktopServices, QFontDatabase, QPixmap
+from spm_studio.shared.docviewer import DocViewer
 from PySide6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QListWidget,
                                QListWidgetItem, QStackedWidget, QWidget, QComboBox, QCheckBox, QGroupBox,
                                QFormLayout, QLineEdit, QPlainTextEdit, QTextBrowser, QFileDialog,
@@ -61,38 +62,15 @@ def _icon_button(text: str, icon_name: str | None, tooltip: str = '') -> QPushBu
 
 
 # ------------------------------------------------------------------------- viewers
-class GuideDialog(QDialog):
-    """Read a Markdown file (a tool's README, a folder guide) inside the app."""
+class GuideDialog(DocViewer):
+    """Read a Markdown file (a tool's README, a folder guide) inside the app.
+
+    v0.0.18: the shared document viewer (``shared.docviewer``): themed headings, code and tables, an outline of
+    long documents, find-in-page, a readable text column.
+    """
 
     def __init__(self, path, title: str = '', parent=None):
-        super().__init__(parent)
-        self.path = Path(path)
-        self.setWindowTitle(title or self.path.name)
-        self.resize(760, 680)
-        layout = QVBoxLayout(self)
-        self.view = QTextBrowser()
-        self.view.setOpenExternalLinks(True)
-        try:
-            text = self.path.read_text(encoding='utf-8', errors='replace')
-        except OSError as exc:
-            text = f'Could not read {self.path}: {exc}'
-        if self.path.suffix.lower() in ('.md', '.markdown'):
-            self.view.setMarkdown(text)
-        else:
-            self.view.setPlainText(text)
-        layout.addWidget(self.view, 1)
-        row = QHBoxLayout()
-        location = _hint(str(self.path))
-        location.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
-        row.addWidget(location, 1)
-        folder = _icon_button('Open folder', 'folder')
-        folder.clicked.connect(lambda: open_folder(self.path.parent))
-        close = QPushButton('Close')
-        close.setProperty('primary', True)
-        close.clicked.connect(self.accept)
-        row.addWidget(folder)
-        row.addWidget(close)
-        layout.addLayout(row)
+        super().__init__(path, title, parent)
 
 
 class TextEditDialog(QDialog):
@@ -334,6 +312,19 @@ class SettingsDialog(QDialog):
         self.theme_combo.activated.connect(lambda _=0: w._apply_theme(str(self.theme_combo.currentData())))
         self._action_row(v, 'Theme', 'Colours and font of the interface. Add your own in Library › Themes.',
                          self.theme_combo)
+        # v0.0.18: help texts are short by default; the full versions stay one tick away
+        from spm_studio.shared import ergonomics
+        self.full_help = QCheckBox('Show')
+        self.full_help.setObjectName('SettingsFullHelpV0018')
+        self.full_help.setChecked(ergonomics.full_help_texts())
+        self.full_help.toggled.connect(ergonomics.set_full_help_texts)
+        self._action_row(v, 'Full help texts', 'Long explanations under the options (otherwise in their tooltip).',
+                         self.full_help)
+        self.logs_on_run = QCheckBox('Open')
+        self.logs_on_run.setObjectName('SettingsLogsOnRunV0018')
+        self.logs_on_run.setChecked(w._logs_open_on_run() if hasattr(w, '_logs_open_on_run') else False)
+        self.logs_on_run.toggled.connect(lambda on: w.settings.setValue('logs/open_on_run', bool(on)))
+        self._action_row(v, 'Logs when a script runs', 'Errors always open the Logs panel.', self.logs_on_run)
         layout.addWidget(box)
 
         box = QGroupBox('Figures and scans')

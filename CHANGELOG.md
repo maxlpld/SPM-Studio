@@ -7,6 +7,35 @@ so write it for users. Add new versions **at the top**.
 The internal builds that preceded the GitHub project (0.7.0 – 0.8.3) are documented in
 [`docs/DEVELOPMENT_HISTORY.md`](docs/DEVELOPMENT_HISTORY.md).
 
+## 0.0.18 — 2026-11-23
+
+### Ergonomics
+
+- **Scrolling scrolls the panel**: the mouse wheel over a drop-down list, number box or slider no longer changes
+  its value while you scroll through a panel; a control reacts to the wheel only after you clicked into it.
+- **The Logs panel starts closed.** It opens with its button, or by itself when something fails (a script
+  error, a crash). Other important messages put a mark on the Logs button instead. *Settings › General ›
+  Logs when a script runs* opens it at every run, as before.
+- **Less text**: long grey help texts show only their first sentence; the full text is in the tooltip
+  (*Settings › General › Full help texts* shows the long versions again). Shorter beta and to-do texts.
+- Windows and pop-ups always fit on the screen; the profile and figure-size lists in the top bar, the sidebar
+  tabs and the LaTeX / presentation template lists are never cut off.
+
+### One design everywhere
+
+- **New README viewer** for every README and guide: title and file name, an outline of long documents,
+  headings, code blocks and tables in the app's colours, a readable text column, find-in-page (Ctrl+F).
+- **Pop-ups look like the rest of the app**: the confirming button of every message box and dialog is the
+  primary (accent) button.
+- **Numbered steps** in round outlined badges (01, 02, 03 …), first used in Settings › Beta Tester.
+- The BETA mark follows the theme instead of its own purple, and the 3D-print preview uses the theme colours
+  instead of a white Matplotlib background.
+
+### For developers
+
+- `tools/ui_screenshots.py` and the *UI screenshots* workflow render the main windows and dialogs offscreen
+  for design review.
+
 ## 0.0.17 — 2026-11-23
 
 ### 3D print (Tools › 3D print)

@@ -585,6 +585,21 @@ QLabel#launcherTitle {{ font-size: {px + 1}px; font-weight: 600; }}
 QLabel#errorBadge {{ background: @danger; color: @accent_fg; border-radius: 8px; padding: 0 6px; font-size: {small}px; font-weight: 700; }}
 QLabel#warnBadge {{ background: @warning; color: @bg; border-radius: 8px; padding: 0 6px; font-size: {small}px; font-weight: 700; }}
 QFrame#findBar {{ background: @surface; border: 0; border-top: 1px solid @border; }}
+/* v0.0.18: normalised pieces shared by every window */
+QLabel#stepBadge {{ border: 1.5px solid @fg; border-radius: 13px; padding: 2px 9px; min-height: 18px;
+    font-weight: 600; font-size: {small + 1}px; background: transparent; }}
+QLabel#stepTitle {{ font-weight: 600; font-size: {px + 1}px; }}
+QToolButton[attention="true"] {{ color: @accent; }}
+QToolButton[attention="true"]:!checked {{ border: 1px solid @accent; }}
+QLabel#BetaBadgeV0014 {{ background: @accent_soft; color: @fg; border: 1px solid @accent; border-radius: 8px;
+    padding: 0 7px; font-size: {small}px; font-weight: 700; }}
+QDialog#DocViewerV0018 {{ background: @bg; }}
+QTextBrowser#docBody {{ background: @bg; border: 0; border-radius: 0; padding: 0; }}
+QListWidget#docOutline {{ background: @sidebar; border: 0; border-right: 1px solid @border; border-radius: 0;
+    padding: 8px 4px; }}
+QListWidget#docOutline::item {{ min-height: 22px; color: @muted; }}
+QListWidget#docOutline::item:selected {{ color: @fg; }}
+QLabel#emptyState, QLabel#TodoEmptyHintV0014 {{ color: @muted; font-size: {px + 1}px; }}
 '''
     for key in sorted(COLOR_TOKENS, key=len, reverse=True):
         alias = {'background': 'bg', 'foreground': 'fg'}.get(key, key)
@@ -606,6 +621,8 @@ def apply_theme(theme, app=None):
         return None
     from .dialogs import install_dialog_style
     install_dialog_style()
+    from .ergonomics import install as install_ergonomics
+    install_ergonomics(app)
     t = complete_tokens(theme)
     _CURRENT.clear()
     _CURRENT.update(t)
@@ -652,6 +669,26 @@ def apply_appearance(mode=None):
     theme = BUILTIN_THEMES['porcelain' if mode == 'light' else 'graphite']
     settings.setValue('mode', 'light' if mode == 'light' else 'dark')
     return apply_theme(theme)
+
+
+def step_row(number, text, parent=None):
+    """A numbered step: the number in a round outlined badge ("01"), then a short title (v0.0.18)."""
+    from PySide6.QtWidgets import QWidget, QHBoxLayout, QLabel
+    row = QWidget(parent)
+    row.setObjectName('stepRow')
+    lay = QHBoxLayout(row)
+    lay.setContentsMargins(0, 6, 0, 2)
+    lay.setSpacing(10)
+    badge = QLabel(f'{int(number):02d}', row)
+    badge.setObjectName('stepBadge')
+    badge.setAccessibleName(f'Step {int(number)}')
+    title = QLabel(text, row)
+    title.setObjectName('stepTitle')
+    title.setWordWrap(True)
+    lay.addWidget(badge)
+    lay.addWidget(title, 1)
+    row.badge, row.title = badge, title
+    return row
 
 
 def separator(parent=None):

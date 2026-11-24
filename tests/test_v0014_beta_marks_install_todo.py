@@ -170,8 +170,10 @@ def test_beta_activation_checks_and_installs_like_an_update(window, service, mon
     monkeypatch.setattr(update_dialog, 'restart_app', lambda w=None: restarted.append(w))
     dialog = SettingsDialog(window, 'beta')
     page = dialog.findChild(BetaPage)
-    texts = ' '.join(label.text() for label in page.join.findChildren(type(page.service_label)))
-    assert 'Step 1' in texts and 'Step 2' in texts and 'Step 3' in texts
+    # v0.0.18: numbered steps with round badges (01, 02, 03), accessible as "Step n"
+    badges = [label for label in page.join.findChildren(type(page.service_label)) if label.objectName() == 'stepBadge']
+    assert [b.text() for b in badges] == ['01', '02', '03']
+    assert [b.accessibleName() for b in badges] == ['Step 1', 'Step 2', 'Step 3']
     assert page.service_label.text().startswith('Beta service: http://127.0.0.1:')
     page.key.setText('SPM-BETA-ABCDE-FGHJK-LMNPQ-RSTUV-WXYZ2-34567')
     page.activate.click()

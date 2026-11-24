@@ -726,6 +726,7 @@ class Print3DDialog(QDialog):
         view = (old.elev, old.azim) if old is not None and hasattr(old, 'elev') else (48, -62)
         self.figure.clear()
         ax = self.figure.add_subplot(projection='3d')
+        self._theme_axes(ax)
         from matplotlib.colors import LightSource
         light = LightSource(azdeg=315, altdeg=45)
         if rgb is not None and rgb.shape[:2] == z.shape:
@@ -759,6 +760,25 @@ class Print3DDialog(QDialog):
         if plate.notes:
             text += '\n' + ' · '.join(plate.notes)
         self.info.setText(text)
+
+    def _theme_axes(self, ax):
+        """v0.0.18: the 3D preview follows the app theme (background, quiet axes) instead of white Matplotlib."""
+        try:
+            from spm_studio.shared.appearance import colors
+            t = colors()
+        except Exception:
+            return
+        self.figure.set_facecolor(t['background'])
+        ax.set_facecolor(t['background'])
+        for axis in (ax.xaxis, ax.yaxis, ax.zaxis):
+            try:
+                axis.set_pane_color((0, 0, 0, 0))
+                axis.line.set_color(t['border_strong'])
+                axis._axinfo['grid']['color'] = t['border']
+            except Exception:
+                pass
+            axis.label.set_color(t['muted'])
+        ax.tick_params(colors=t['muted'], labelsize=8)
 
     def export(self, fmt):
         suffix = {'stl': 'stl', '3mf': '3mf'}.get(fmt, 'step')
