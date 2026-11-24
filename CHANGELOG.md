@@ -35,6 +35,8 @@ The internal builds that preceded the GitHub project (0.7.0 – 0.8.3) are docum
 
 - `tools/ui_screenshots.py` and the *UI screenshots* workflow render the main windows and dialogs offscreen
   for design review.
+- The application-wide ergonomics filter returns at once for unrelated events; the Windows test runners get
+  90 minutes.
 
 ## 0.0.17 — 2026-11-23
 

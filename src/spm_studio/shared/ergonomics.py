@@ -78,8 +78,14 @@ def compact_hint(label: QLabel, force_full: bool | None = None):
     label.blockSignals(False)
 
 
+_WHEEL, _POLISH, _SHOW = QEvent.Type.Wheel, QEvent.Type.Polish, QEvent.Type.Show
+_KINDS = frozenset((_WHEEL, _POLISH, _SHOW))
+
+
 class _Ergonomics(QObject):
     def eventFilter(self, obj, event):
+        if event.type() not in _KINDS:          # cheap exit: this filter sees every event of the application
+            return False
         try:
             return self._filter(obj, event)
         except Exception:                       # an ergonomic helper must never break the application
