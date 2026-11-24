@@ -92,7 +92,7 @@ def main(argv=None) -> int:
         pump(1.0)
         return win.scan is not None
 
-    themes = ['graphite', 'porcelain'] + [t for t in os.environ.get('SPM_SHOT_THEMES', '').split(',') if t]
+    themes = ['light_studio', 'dark_studio', 'graphite', 'porcelain'] + [t for t in os.environ.get('SPM_SHOT_THEMES', '').split(',') if t]
 
     def empty():
         for theme in themes:
