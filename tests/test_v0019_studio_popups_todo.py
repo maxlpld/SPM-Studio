@@ -89,7 +89,7 @@ def window(app):
     app.processEvents()
 
 
-def test_studio_theme_applies_overlay_and_tones(window, app):
+def _studio_theme_applies_overlay_and_tones(window, app):
     from PySide6.QtWidgets import QGroupBox, QVBoxLayout, QWidget
     from spm_studio.shared.studio_design import TONES
     window._apply_theme('light_studio')
@@ -175,7 +175,7 @@ def test_readme_viewer_uses_a_wide_readable_column(app, tmp_path):
     viewer.close()
 
 
-def test_outline_settings_and_order_of_channel_tiles(window, app):
+def _outline_settings_and_order_of_channel_tiles(window, app):
     settings = window.tile_outline_settings()
     assert settings == {'enabled': True, 'color': '', 'width': 2, 'radius': 10}
     window.settings.setValue('view/outline_width', 30)
@@ -194,7 +194,7 @@ def test_outline_settings_and_order_of_channel_tiles(window, app):
     dialog.close()
 
 
-def test_todo_is_a_compact_post_it_window(window, app):
+def _todo_is_a_compact_post_it_window(window, app):
     from PySide6.QtCore import Qt
     win = window.documents.open_todo()
     app.processEvents()
@@ -210,3 +210,10 @@ def test_todo_is_a_compact_post_it_window(window, app):
     win.pin.setChecked(False)
     assert not win.windowFlags() & Qt.WindowType.WindowStaysOnTopHint
     win.close()
+
+
+def test_main_window_studio_outline_and_todo(window, app):
+    """One main window for the three checks (window creation is slow on CI runners)."""
+    _studio_theme_applies_overlay_and_tones(window, app)
+    _outline_settings_and_order_of_channel_tiles(window, app)
+    _todo_is_a_compact_post_it_window(window, app)
