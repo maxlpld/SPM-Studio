@@ -1,4 +1,5 @@
-"""Theme Studio in the real SPM Studio window (v0.0.20: built in)."""
+"""Theme Studio in the real SPM Studio window (v0.0.20: built in). Named to run early: every stylesheet change
+repolishes all live widgets, and windows left by later test files make that slow."""
 import os
 import time
 
