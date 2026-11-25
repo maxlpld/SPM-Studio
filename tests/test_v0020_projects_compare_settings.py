@@ -202,10 +202,15 @@ def test_files_panel_buttons_and_shift_multi_selection(window, app, home):
     QTest.keyClick(window.viewer, Qt.Key.Key_Return, Qt.KeyboardModifier.ShiftModifier)
     assert panel.files.currentRow() == 2
     assert sorted(panel.selected_paths()) == sorted([str(scans[0]), str(scans[2])])
-    assert panel._marking and panel.mark_hint.isVisibleTo(window)
+    # (QTest releases Shift after every click; a user keeps holding it — the selection is the same)
     QTest.keyRelease(window.viewer, Qt.Key.Key_Shift)
     app.processEvents()
     assert not panel._marking and len(panel.selected_paths()) == 2       # the picked scans stay selected
+    assert panel.mark_hint.isVisibleTo(window) and '2 scans selected' in panel.mark_hint.text()
+    # while Shift is held the hint says so
+    panel.begin_marking()
+    assert panel._marking and 'Selecting: 2' in panel.mark_hint.text()
+    panel.end_marking()
     assert '2 selected' in panel.file_count.text()
     window.remove_scans(panel.selected_paths(), confirm=False)
     assert [panel.files.item(i).data(Qt.ItemDataRole.UserRole) for i in range(panel.files.count())] == [str(scans[1])]
