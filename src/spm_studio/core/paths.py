@@ -14,6 +14,16 @@ def bundled_studio_root() -> Path:
     return Path(__file__).resolve().parents[3]
 
 
+def automated_run() -> bool:
+    """v0.0.20: tests, the smoke test and screenshot runs (Linux CI uses a real X display, not "offscreen").
+
+    Such runs never reopen the last session and never start the freeze recorder."""
+    if os.environ.get('SPM_STUDIO_AUTOMATED') == '1' or os.environ.get('QT_QPA_PLATFORM') == 'offscreen':
+        return True
+    import sys
+    return 'pytest' in sys.modules or bool(os.environ.get('PYTEST_CURRENT_TEST'))
+
+
 def config_dir() -> Path:
     return Path(os.environ.get('XDG_CONFIG_HOME', Path.home() / '.config')) / 'spm-studio-ai'
 

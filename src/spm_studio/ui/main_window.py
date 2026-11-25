@@ -335,7 +335,7 @@ class MainWindow(QMainWindow):
         # v0.0.20: the projects of the last run are reopened where you were (Settings › General › Projects and
         # recovery); otherwise the session starts empty. Headless test runs never restore anything.
         QApplication.instance().installEventFilter(self)
-        if os.environ.get('QT_QPA_PLATFORM')!='offscreen' or os.environ.get('SPM_STUDIO_RESTORE')=='1':
+        if not paths.automated_run() or os.environ.get('SPM_STUDIO_RESTORE')=='1':
             QTimer.singleShot(0,self._restore_projects)
         else:
             self.projects.ensure_session()

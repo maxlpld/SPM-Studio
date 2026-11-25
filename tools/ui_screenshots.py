@@ -30,6 +30,7 @@ def main(argv=None) -> int:
     os.environ['XDG_DATA_HOME'] = str(tmp / 'data')
     os.environ['XDG_CACHE_HOME'] = str(tmp / 'cache')
     os.environ['SPM_STUDIO_NO_UPDATE_CHECK'] = '1'
+    os.environ['SPM_STUDIO_AUTOMATED'] = '1'
     os.environ['SPM_STUDIO_NO_ONBOARDING'] = '1'
     os.environ['SPM_STUDIO_BETA_API'] = 'http://127.0.0.1:9'
     os.environ['SPM_STUDIO_USE_GH_CLI'] = '0'

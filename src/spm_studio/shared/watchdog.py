@@ -128,7 +128,8 @@ def install(log=None) -> Watchdog | None:
     global _WATCHDOG
     if _WATCHDOG is not None:
         return _WATCHDOG
-    if os.environ.get('QT_QPA_PLATFORM') == 'offscreen' and os.environ.get('SPM_STUDIO_WATCHDOG') != '1':
+    from spm_studio.core.paths import automated_run
+    if automated_run() and os.environ.get('SPM_STUDIO_WATCHDOG') != '1':
         return None
     try:
         _WATCHDOG = Watchdog(log)

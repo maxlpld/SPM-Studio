@@ -25,6 +25,7 @@ def main():
         # Tested headless by the clean installer; no real hardware involved.
         import os
         os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+        os.environ["SPM_STUDIO_AUTOMATED"] = "1"      # v0.0.20: no session restore, no freeze recorder
         sys.argv = [a for a in sys.argv if a != "--smoke-test"]
     from .core.paths import cache_dir
     crash_dir = cache_dir()
