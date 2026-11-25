@@ -1,5 +1,8 @@
-"""Theme Studio in the real SPM Studio window (v0.0.20: built in). Named to run early: every stylesheet change
-repolishes all live widgets, and windows left by later test files make that slow."""
+"""Theme Studio in the real SPM Studio window (v0.0.20: built in).
+
+Named to run last: it changes the application style sheet many times, and every change repolishes all live
+widgets. Earlier test files leave closed windows alive; they are deleted first so these tests stay fast, and
+nothing these tests change can reach another test file."""
 import os
 import time
 
@@ -23,6 +26,16 @@ def app_window(tmp_path, monkeypatch):
     monkeypatch.setattr(QMessageBox, 'information', lambda *a, **k: QMessageBox.StandardButton.Ok)
     monkeypatch.setattr(QMessageBox, 'warning', lambda *a, **k: QMessageBox.StandardButton.Ok)
     app = QApplication.instance() or QApplication([])
+    from PySide6.QtCore import QCoreApplication, QEvent
+    for widget in list(app.topLevelWidgets()):       # windows left by earlier test files (all finished)
+        try:
+            widget.hide()
+            widget.deleteLater()                       # no closeEvent: nothing may ask a question here
+        except RuntimeError:
+            pass
+    app.processEvents()
+    QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+    app.processEvents()
     QSettings.setDefaultFormat(QSettings.Format.IniFormat)
     QSettings.setPath(QSettings.Format.IniFormat, QSettings.Scope.UserScope, str(tmp_path / 'qt'))
     from spm_studio.ui.main_window import MainWindow
