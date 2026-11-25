@@ -70,7 +70,7 @@ The internal builds that preceded the GitHub project (0.7.0 – 0.8.3) are docum
 - The visual theme editor from the private beta is part of SPM Studio: Settings › Appearance › **Open Theme
   Studio**. Click a control in the window to restyle it (colours with transparency, fonts, borders, corners,
   padding, for each state) with a live preview, undo / redo, save your theme, share it as a package, or import an
-  SVG skin. Profiles made with the beta are imported automatically. (The Nano companion stays in the private beta.)
+  SVG skin. Profiles made with the beta are imported automatically.
 
 ### Windows: no more short freezes
 

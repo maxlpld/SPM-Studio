@@ -25,9 +25,15 @@ def root() -> Path:
 def _migrate_beta_profiles(target: Path):
     """Copy the profiles / skins of the beta extension (once, never overwriting)."""
     from spm_studio.core import paths
-    old = paths.data_dir() / 'extension_data' / 'spm-studio-nano' / 'theme_studio'
     marker = target / '.migrated_from_beta'
-    if marker.exists() or not old.is_dir():
+    if marker.exists():
+        return
+    try:                                     # the folder of whichever beta extension carried Theme Studio
+        old = next((p for p in sorted((paths.data_dir() / 'extension_data').glob('*/theme_studio'))
+                    if (p / 'profiles').is_dir()), None)
+    except OSError:
+        old = None
+    if old is None:
         return
     for sub in ('profiles', 'skins'):
         src = old / sub
