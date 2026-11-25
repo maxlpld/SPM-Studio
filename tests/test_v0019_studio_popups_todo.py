@@ -185,7 +185,7 @@ def _outline_settings_and_order_of_channel_tiles(window, app):
     from PySide6.QtCore import Qt
     assert window.viewer_title.alignment() & Qt.AlignmentFlag.AlignHCenter
     from spm_studio.ui.settings_dialog import SettingsDialog
-    dialog = SettingsDialog(window, 'general')
+    dialog = SettingsDialog(window, 'appearance')            # v0.0.20: Appearance page
     assert dialog.outline_enabled.isChecked() and dialog.outline_width.value() == 3
     dialog.outline_radius.setValue(6)
     assert window.tile_outline_settings()['radius'] == 6

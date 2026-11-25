@@ -18,15 +18,22 @@ HINT_LIMIT = 120          # characters kept in a compact hint
 _SETTINGS_KEY = 'ui/full_help_texts'
 
 
+_FULL_CACHE: list = []      # v0.0.20: read once (this ran for every hint shown: a registry read on Windows)
+
+
 def full_help_texts() -> bool:
+    if _FULL_CACHE:
+        return _FULL_CACHE[0]
     from PySide6.QtCore import QSettings
     value = QSettings('SPM Studio', 'SPM Studio AI 0.7').value(_SETTINGS_KEY, False)
-    return str(value).lower() in ('true', '1')
+    _FULL_CACHE[:] = [str(value).lower() in ('true', '1')]
+    return _FULL_CACHE[0]
 
 
 def set_full_help_texts(on: bool):
     from PySide6.QtCore import QSettings
     QSettings('SPM Studio', 'SPM Studio AI 0.7').setValue(_SETTINGS_KEY, bool(on))
+    _FULL_CACHE[:] = [bool(on)]
     app = QApplication.instance()
     if app is not None:
         for label in app.allWidgets():

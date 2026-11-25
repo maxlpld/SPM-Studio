@@ -7,6 +7,81 @@ so write it for users. Add new versions **at the top**.
 The internal builds that preceded the GitHub project (0.7.0 – 0.8.3) are documented in
 [`docs/DEVELOPMENT_HISTORY.md`](docs/DEVELOPMENT_HISTORY.md).
 
+## 0.0.20 — 2026-11-25
+
+### Projects and crash recovery
+
+- **A project is a folder.** *Open project* (Ctrl+Shift+O) opens a folder: its scans are listed and everything you
+  do with them is saved in one readable file in that folder, `spm-studio-project.json` — display and colour maps,
+  processing steps, crops, visible channels and titles, profiles, masks, drawn lines and regions, the analysis tool
+  and its settings. Scan files are never changed. A folder of scans without that file simply becomes a project.
+- **New project** chooses (or creates) the folder of a new project; the scans you have open can move into it.
+  *Add scans* (Ctrl+O) adds single files to the current project. (*Open* and *Dataset* did the same thing; they
+  are replaced by these three buttons.)
+- **Several projects at once**: each open project is a tab above the scan list. Switching tabs saves the project
+  you leave and brings the other back exactly as it was — nothing is shared between them.
+- **Never lose your work**: the project state is saved automatically every 15 s when something changed (in the
+  background, so a slow disk never freezes the window). Scans opened without a project are kept as an *unsaved
+  session*. When SPM Studio starts again — after closing it, an accidental close or a crash — the projects that were
+  open are reopened at the same scan, channel and step. Settings › General › *Projects and recovery* sets the
+  interval or turns the reopening off.
+
+### Scan list
+
+- The commands are visible pictogram buttons under the list (no more “…” menu): **copy the scans to a folder**,
+  **remove the selected scans**, **clear the list**. Files on disk are never deleted.
+- **Select several scans**: hold **Shift**, browse with **↑ / ↓** (each scan is shown as you go, **← / →** still
+  move between its channels) and press **Enter** on every scan you want — a check mark appears. Release Shift,
+  then **Delete** (or the bin button) removes them all from the list; Esc clears the selection. Ctrl+click and
+  Shift+click work too. The scan shown is in bold.
+- *Copy scans to a folder* copies only the selected scans when several are selected, and opens the copy as a new
+  project tab.
+
+### Smooth channel switching
+
+- Clicking another channel (or ← / →) no longer flashes the previous channel for a moment: the new channel appears
+  at once (from its tile, or from memory when you come back to it), the channel you leave keeps its picture in its
+  tile, and the strip is redrawn in one go. Switching scans shows an empty frame while reading instead of the old
+  scan, and scans you visited before come back instantly.
+
+### Compare results (redesigned)
+
+- **Compare** now answers one question: *what value did the analysis tools measure on each scan?* Pick a quantity
+  on the left (grouped by tool, with the number of scans); its value on every scan is listed and **drawn**, with
+  the **mean ± standard deviation** band and a summary (n, mean, std, range). Untick a row to leave it out.
+- Only the latest (or preferred) run of each scan by default; *This project* or *All scans ever analysed*; index
+  columns are no longer mixed in. Values with different units are never put in one chart.
+- **Export table** (CSV), **Save chart** (SVG, PDF or 300 dpi PNG), **Open run folder**, **Show scan** (double-click
+  a row). It stays open next to the main window. When there is nothing to compare yet, it explains how to get
+  results.
+
+### Settings
+
+- The Settings window **opens at once**: a page is built only when you open it.
+- The page list on the left is always wide enough for its entries (also with extension pages), with comfortable
+  rows.
+- **Every option is in exactly one place**: a new *Appearance* page holds the theme, Theme Studio, help texts,
+  pop-ups and the outline of the selected channel; *General* keeps projects, scans, logs, keyboard, assistant and
+  performance; tools and folders are in *Library* (with *Restore built-in tools* for scripts); updates only in
+  *Updates*; the project page and licence in *About*.
+
+### Theme Studio (now for everyone)
+
+- The visual theme editor from the private beta is part of SPM Studio: Settings › Appearance › **Open Theme
+  Studio**. Click a control in the window to restyle it (colours with transparency, fonts, borders, corners,
+  padding, for each state) with a live preview, undo / redo, save your theme, share it as a package, or import an
+  SVG skin. Profiles made with the beta are imported automatically. (The Nano companion stays in the private beta.)
+
+### Windows: no more short freezes
+
+- Several things that could block the window for a moment, mostly on Windows (virus scanner, OneDrive or network
+  folders), now run in the background or only once: the check of the scripts folder for new tools (it read the
+  folder every 2 s), the comparison with the saved run on every change of a tool setting (it re-hashed the tool's
+  files each time), indexing large folders (thousands of messages to the window), a settings read for every help
+  text shown, and the database set-up on every query.
+- If the window still stops responding for more than a second, SPM Studio notes what it was doing in
+  `ui_freezes.log` (Settings › General › *Slow moments* › Open report) — please attach it to a bug report.
+
 ## 0.0.19 — 2026-11-24
 
 - New built-in themes **Studio Light** and **Studio Dark** (menu View › Theme, or Settings › Appearance): borderless

@@ -61,6 +61,7 @@ class ImageView(QWidget):
 
     def set_scan(self,image:QImage,data,geometry:Geometry,style:ImageStyle,bounds,channel,unit,
                  *,preserve_view=False,display_zero=False):
+        self._loading = False
         self.image = image
         self.data = data
         self.geometry = geometry
@@ -81,8 +82,16 @@ class ImageView(QWidget):
             self.tool_preview_roi=None
         self.update()
 
+    def show_loading(self):
+        """v0.0.20: an empty frame while the next scan / channel is prepared (never the previous image)."""
+        self.image=None
+        self.data=None
+        self._loading=True
+        self.update()
+
     def clear_scan(self):
         """Discard current displayed data, overlays, and selection after removal."""
+        self._loading=False
         self.image=None
         self.data=None
         self.geometry=None
@@ -397,7 +406,8 @@ class ImageView(QWidget):
         painter.fillRect(self.rect(),QColor(ui['background']))
         if self.image is None:
             painter.setPen(QColor(ui['muted']))
-            painter.drawText(self.rect(),Qt.AlignmentFlag.AlignCenter,'Open an SXM or GWY scan\nCtrl+O',)
+            text='Loading…' if getattr(self,'_loading',False) else 'Open a project or add scans\nCtrl+Shift+O · Ctrl+O'
+            painter.drawText(self.rect(),Qt.AlignmentFlag.AlignCenter,text)
             painter.end()
             return
         r=self._display_rect()

@@ -219,6 +219,7 @@ def test_numbered_steps_and_beta_badge_follow_the_theme(app):
 def test_settings_offer_full_help_and_logs_on_run(window, app):
     from spm_studio.ui.settings_dialog import SettingsDialog
     dialog = SettingsDialog(window, 'general')
+    dialog.show_page('appearance')                           # v0.0.20: help texts are on the Appearance page
     assert not dialog.full_help.isChecked() and not dialog.logs_on_run.isChecked()
     dialog.logs_on_run.setChecked(True)
     assert window._logs_open_on_run()

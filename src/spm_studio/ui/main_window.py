@@ -44,18 +44,31 @@ from spm_studio.shared import ResearchStore
 from spm_studio.shared.ui_strings import ui_label, add_key_items, combo_key, set_combo_key
 
 class FileCrawler(QThread):
+    """Index a folder in the background.
+
+    v0.0.20: scans are sent in batches (``foundMany``) instead of one signal per file: a large dataset no longer
+    floods the GUI thread with thousands of events (one of the causes of short freezes on Windows)."""
     found=Signal(str)
+    foundMany=Signal(list)
     failed=Signal(str)
-    def __init__(self,folder):
+    def __init__(self,folder,generation=0):
         super().__init__()
         self.folder=Path(folder)
+        self.generation=generation
     def run(self):
+        batch=[];last=time.monotonic()
         try:
             for item in discover(self.folder):
                 if self.isInterruptionRequested():break
-                self.found.emit(str(item))
+                try:batch.append(str(Path(item).resolve()))    # resolved here, off the GUI thread
+                except OSError:batch.append(str(item))
+                if len(batch)>=200 or time.monotonic()-last>0.15:
+                    self.foundMany.emit(batch);batch=[];last=time.monotonic()
         except Exception as exc:
             self.failed.emit(str(exc))
+        finally:
+            if batch and not self.isInterruptionRequested():
+                self.foundMany.emit(batch)
 
 
 def make_snapshot(run_dir, scan, channel, direction, selected_data, parameters, source_paths, roi, steps, rois=None, plot_config=None, plot_formats=None, snapshot_channels='selected', extra_channels=()):
@@ -169,6 +182,17 @@ class MainWindow(QMainWindow):
         self._active_result_module_id=None
         self._secondary_prepared=set()
         self._secondary_pending=set()
+        # v0.0.20: rendered previews / thumbnails are kept for instant channel and scan switching (no flash of
+        # the previous channel), module hashes and run records are cached (no file hashing per slider tick).
+        from collections import OrderedDict
+        self._preview_cache=OrderedDict()
+        self._thumb_cache=OrderedDict()
+        self._module_hash_cache={}
+        self._record_cache={}
+        self._pending_tool_restore=None
+        self._pending_roi_restore=None
+        self._viewer_shows=None
+        self._active_scan_key=None
         self.modules={}
         self.last_export_dir=Path(str(self.settings.value('export_folder', str(Path.home()))))
         # Factory modules are real editable folders, never executed at startup.
@@ -215,7 +239,11 @@ class MainWindow(QMainWindow):
         self.documents=_document_hub()
         self.documents.set_main_window(self)
         self.refresh_document_buttons()
+        # v0.0.20: Theme Studio is part of SPM Studio (the copy of the beta extension is not activated).
+        from spm_studio import theme_studio
+        theme_studio.shadow_beta_extension()
         self._setup_v0013()
+        theme_studio.install(self)
         self._load_shortcuts()
         self._setup_shortcut_watch()
         self.refresh_modules()
@@ -235,6 +263,12 @@ class MainWindow(QMainWindow):
         if state:self.restoreState(state)
         # v0.0.18: the Logs panel starts closed; it opens with its button or on an error.
         self.log_dock.hide()
+        # v0.0.20: projects (tabs above the scan list), autosave and crash recovery.
+        from .projects import ProjectManager
+        self.projects=ProjectManager(self)
+        self.browser.set_project_tabs(self.projects.tabs)
+        from spm_studio.shared import watchdog
+        watchdog.install(lambda text:self._log(text))
         self._update_channel_navigation()
         self.viewer.cursorChanged.connect(self.statusBar().showMessage)
         self.viewer.roiChanged.connect(self._on_roi)
@@ -253,7 +287,12 @@ class MainWindow(QMainWindow):
         self.module_panel.selectionChosen.connect(self._select_roi)
         self.inspector.visibleChannelsChanged.connect(self._sync_multiview)
         self.module_panel.changed.connect(self._queue_live_preview)
-        self.module_panel.changed.connect(self._indicate_staleness)
+        # v0.0.20: compared at most every 0.35 s (it reads the run record and hashes the tool's files)
+        self._staleness_timer=QTimer(self)
+        self._staleness_timer.setSingleShot(True)
+        self._staleness_timer.setInterval(350)
+        self._staleness_timer.timeout.connect(self._indicate_staleness)
+        self.module_panel.changed.connect(self._staleness_timer.start)
         self.module_panel.masksChanged.connect(self._on_masks_changed)
         self.module_panel.gifExportRequested.connect(self._export_overlay_gif)
         self.module_panel.channelTitleEdited.connect(self._tool_title_edited)
@@ -267,6 +306,8 @@ class MainWindow(QMainWindow):
         self.inspector.applyAll.connect(self._apply_all)
         self.browser.fileSelected.connect(self._load_file)
         self.browser.removeRequested.connect(self.remove_scan)
+        self.browser.removeManyRequested.connect(self.remove_scans)
+        self.browser.clearRequested.connect(self.clear_scan_list)
         self.browser.exportSelectionRequested.connect(self.export_scan_selection)
         self.browser.files.installEventFilter(self)
         self.browser.moduleSelected.connect(self._show_module)
@@ -291,9 +332,13 @@ class MainWindow(QMainWindow):
         self._interactive_timer.setSingleShot(True)
         self._interactive_timer.setInterval(75)
         self._interactive_timer.timeout.connect(self._interactive_update)
-        # Start with an empty session. No scan, tool selection, ROI or mask is
-        # automatically restored; only application-wide preferences persist.
+        # v0.0.20: the projects of the last run are reopened where you were (Settings › General › Projects and
+        # recovery); otherwise the session starts empty. Headless test runs never restore anything.
         QApplication.instance().installEventFilter(self)
+        if os.environ.get('QT_QPA_PLATFORM')!='offscreen' or os.environ.get('SPM_STUDIO_RESTORE')=='1':
+            QTimer.singleShot(0,self._restore_projects)
+        else:
+            self.projects.ensure_session()
 
     def _setup_ui(self):
         from spm_studio.shared.appearance import tool_button, separator, set_icon
@@ -326,15 +371,26 @@ class MainWindow(QMainWindow):
         self.topbar.addWidget(self.brand_mark)
         self.topbar.addWidget(self.brand_copy)
         self.topbar.addSpacing(10)
-        self.open_button=QPushButton('Open')
-        self.open_button.setProperty('primary',True)
-        self.open_button.setToolTip('Open scan files (Ctrl+O)')
-        set_icon(self.open_button,'open',color_token='accent_fg')
-        self.open_button.clicked.connect(self.open_file)
-        self.folder_button=QPushButton('Dataset')
-        self.folder_button.setToolTip('Open every scan of a folder')
-        set_icon(self.folder_button,'dataset')
+        # v0.0.20: a project is a folder (its scans + the saved state of the work). "Open" and "Dataset" did
+        # the same thing; they become Open project / New project, and Add scans adds single files.
+        self.folder_button=QPushButton('Open project')
+        self.folder_button.setObjectName('OpenProjectV0020')
+        self.folder_button.setProperty('primary',True)
+        self.folder_button.setToolTip('Open a project folder (Ctrl+Shift+O). A folder of scans without a project '
+                                      'becomes one; several projects can be open at once (tabs above the scan list).')
+        set_icon(self.folder_button,'project_open',color_token='accent_fg')
         self.folder_button.clicked.connect(self.open_folder)
+        self.new_project_button=QPushButton('New project')
+        self.new_project_button.setObjectName('NewProjectV0020')
+        self.new_project_button.setToolTip('Start a project in a folder: its state (display, processing, crops, '
+                                           'selections, tool settings) is saved there automatically')
+        set_icon(self.new_project_button,'project_new')
+        self.new_project_button.clicked.connect(self.new_project)
+        self.open_button=QPushButton('Add scans')
+        self.open_button.setObjectName('AddScansV0020')
+        self.open_button.setToolTip('Add scan files to the current project (Ctrl+O)')
+        set_icon(self.open_button,'add_scans')
+        self.open_button.clicked.connect(self.open_file)
         self.profile_combo=QComboBox()
         self.profile_combo.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToContents)   # v0.0.18: never clipped
         self.profile_combo.setSizePolicy(QSizePolicy.Policy.Fixed,QSizePolicy.Policy.Fixed)
@@ -391,7 +447,9 @@ class MainWindow(QMainWindow):
         self.export_tool=tool_button('Export','export','Publication export (same layout as analysis figures)',flat=False)
         self.export_tool.setObjectName('ExportSplitV08')
         self.export_tool.clicked.connect(self.export_button.click)
-        self.compare_tool=tool_button('Compare','compare','Compare saved analysis runs')
+        self.compare_tool=tool_button('Compare','compare','Compare results: the values measured by the analysis tools '
+                                      'on different scans, side by side, as a table and a chart')
+        self.compare_tool.setObjectName('CompareResultsV0020')
         self.compare_tool.clicked.connect(self.compare_button.click)
         self.ai_toolbar_button=QPushButton('Assistant')
         self.ai_toolbar_button.setObjectName('AiAssistantToggleV08')
@@ -413,7 +471,7 @@ class MainWindow(QMainWindow):
         from PySide6.QtCore import QSize as _QSize
         self.settings_button.setIconSize(_QSize(20,20))
         self.settings_button.clicked.connect(lambda:self.open_settings())
-        for w in (self.open_button,self.folder_button):self.topbar.addWidget(w)
+        for w in (self.folder_button,self.new_project_button,self.open_button):self.topbar.addWidget(w)
         self.topbar.addStretch(1)
         self.topbar.addWidget(self.scan_profile_label)
         self.topbar.addWidget(self.profile_combo)
@@ -619,7 +677,8 @@ class MainWindow(QMainWindow):
         # v0.0.8: a result (graph, figure) can be sent to the LaTeX editor, a presentation or Overleaf.
         self.logs.outputs.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.logs.outputs.customContextMenuRequested.connect(self._result_menu)
-        self.statusBar().showMessage('Ready  ·  Ctrl+O open  ·  ↑↓ scans  ·  ←→ channels')
+        self.statusBar().showMessage('Ready  ·  Ctrl+Shift+O open project  ·  Ctrl+O add scans  ·  ↑↓ scans  ·  '
+                                     '←→ channels  ·  Shift+↑↓ + Enter select several scans')
 
     # ---- v0.0.8: LaTeX editor, presentation editor, Overleaf (spm_studio/documents)
     def refresh_document_buttons(self):
@@ -844,6 +903,8 @@ class MainWindow(QMainWindow):
         """Re-read one kind of user files after Settings › Library changed it (no restart needed)."""
         if kind=='scripts':
             self._scripts_sig=self._scripts_signature()
+            if getattr(self,'_scripts_poller',None) is not None:self._scripts_poller.reference=self._scripts_sig
+            self._module_hash_cache.clear()
             self._live_refresh_modules()
         elif kind=='profiles':
             key=combo_key(self.profile_combo)
@@ -992,12 +1053,16 @@ class MainWindow(QMainWindow):
         bar.setVisible(False)
         # ---- File
         menu_file=bar.addMenu('&File')
-        self._action(menu_file,'Open scans…','file.open',self.open_file)
-        self._action(menu_file,'Open dataset folder…','file.dataset',self.open_folder)
-        self._action(menu_file,'Remove scan from list','file.remove',self.remove_scan)
+        self._action(menu_file,'Add scans…','file.open',self.open_file)
+        self._action(menu_file,'Open project…','file.dataset',self.open_folder)
+        self._action(menu_file,'New project…',None,self.new_project)
+        self._action(menu_file,'Save project now',None,lambda:self.projects.save_now())
+        self._action(menu_file,'Remove selected scans from list','file.remove',
+                     lambda:self.browser.request_remove_selected())
+        menu_file.addAction('Clear the scan list',self.clear_scan_list)
         menu_file.addSeparator()
         self._action(menu_file,'Export figure…','file.export',self.export_current)
-        menu_file.addAction('Copy listed scans to a recap folder…',self.export_scan_selection)
+        menu_file.addAction('Copy scans to a folder…',self.export_scan_selection)
         menu_file.addSeparator()
         imports=menu_file.addMenu('Import')
         self._action(imports,'Profile…','file.import_profile',self.import_profile)
@@ -1046,7 +1111,7 @@ class MainWindow(QMainWindow):
         tools.addAction('Place molecules by hand…',self.open_manual_molecules)
         self._action(tools,'Spectroscopy figure composer…',None,self.open_bias_figure_composer)
         self._action(tools,'3D print (STL / STEP)…',None,self.open_print3d)
-        self._action(tools,'Compare saved runs…',None,self.open_research_comparison)
+        self._action(tools,'Compare results…',None,self.open_research_comparison)
         tools.addSeparator()
         self._action(tools,'Refresh modules','tool.refresh',self.refresh_modules)
         tools.addAction('Restore built-in tools…',self.restore_builtin_tools)
@@ -1410,10 +1475,13 @@ class MainWindow(QMainWindow):
         return str(self.settings.value('logs/open_on_run',False)).lower() in ('true','1')
 
     @Slot(str)
-    def _add_file(self,path):
-        path=str(Path(path).resolve())
-        if path in self._source_paths or path in self._removed_paths:return
+    def _add_file(self,path,select=True,_resolved=False,_update=True):
+        path=str(Path(path) if _resolved else Path(path).resolve())
+        seen=self._source_paths_set
+        if path in seen or path in self._removed_paths:return
         self._source_paths.append(path)
+        seen.add(path)
+        self._paths_set_cache=(self._source_paths,len(self._source_paths),seen)
         item=QListWidgetItem(f'{Path(path).stem}   [{Path(path).suffix[1:].upper()}]')
         if not getattr(self,'_browser_fitted',False):     # v0.0.19: once per session, show whole file names
             self._browser_fitted=True
@@ -1421,8 +1489,85 @@ class MainWindow(QMainWindow):
         item.setToolTip(path)
         item.setData(Qt.ItemDataRole.UserRole,path)
         self.browser.files.addItem(item)
+        if _update:
+            self.browser.update_selection_actions()
+        if select and self.browser.files.count()==1:self.browser.files.setCurrentItem(item)
+
+    @property
+    def _source_paths_set(self):
+        """Set view of the listed scans (kept in sync with ``_source_paths``; O(1) membership)."""
+        cached=getattr(self,'_paths_set_cache',None)
+        if cached is None or cached[0] is not self._source_paths or cached[1]!=len(self._source_paths):
+            cached=(self._source_paths,len(self._source_paths),set(self._source_paths))
+            self._paths_set_cache=cached
+        return cached[2]
+
+    @Slot(list)
+    def _add_files(self,paths):
+        """A batch of scans from the folder crawler (v0.0.20: one GUI update per batch)."""
+        crawler=self.sender()
+        if crawler is not None and getattr(crawler,'generation',None) not in (None,self._crawl_generation()):
+            return                      # a crawl of a project that is no longer shown
+        files=self.browser.files
+        first=files.count()==0
+        for path in paths:
+            self._add_file(path,select=False,_resolved=True,_update=False)
+        if self.browser.file_search.text():
+            self.browser._filter(files,self.browser.file_search.text())
         self.browser.update_selection_actions()
-        if self.browser.files.count()==1:self.browser.files.setCurrentItem(item)
+        if first and files.count() and files.currentItem() is None:
+            files.setCurrentItem(files.item(0))
+
+    def _crawl_generation(self):
+        return getattr(getattr(self,'projects',None),'generation',0)
+
+    def _reset_session(self):
+        """Empty the window: no scan listed, no per-scan state (a project switch, a project closed)."""
+        for crawler in list(self._crawlers):
+            crawler.requestInterruption()
+        self._remember_scan_view()
+        self._clear_active_scan()
+        files=self.browser.files
+        blocked=files.blockSignals(True)
+        try:
+            files.clear()
+        finally:
+            files.blockSignals(blocked)
+        self.browser._iconed={};self.browser._bold_item=None
+        self.browser._marking=False;self.browser._explicit_marks=False
+        self._source_paths=[];self._paths_set_cache=None
+        self._removed_paths=set()
+        self._scan_view_states={}
+        self._scan_profile_keys={}
+        self._pending_bulk_profiles=set()
+        self.styles={};self.pipelines={}
+        self._session_masks={};self._interactive_masks={}
+        self._channel_titles={}
+        self._session_folder=None
+        self._followup_view=None;self._pending_view_request=None
+        self._pending_tool_restore=None;self._pending_roi_restore=None
+        self._preview_cache.clear();self._thumb_cache.clear()
+        self.browser.file_search.clear()
+        self.browser.update_selection_actions()
+        try:
+            self.logs.outputs.clear()
+        except Exception:
+            pass
+
+    def _restore_projects(self):
+        try:
+            self.projects.restore_at_start()
+        except Exception:
+            import traceback
+            self._log('The last session could not be reopened:\n'+traceback.format_exc(),important=True)
+            self.projects.ensure_session()
+
+    def new_project(self):
+        self.projects.new_project()
+
+    def update_project_title(self):
+        slot=self.projects.current() if hasattr(self,'projects') else None
+        self.setWindowTitle(f'{slot.name} — SPM Studio' if slot is not None and slot.folder else 'SPM Studio')
 
     def _clear_active_scan(self):
         """Release displayed data and invalidate any pending asynchronous results."""
@@ -1447,6 +1592,7 @@ class MainWindow(QMainWindow):
         self._preserve_view=False
         self._clear_secondary_views()
         self.viewer.clear_scan()
+        self._viewer_shows=None
         self._interactive_preview_roi=None
         self._interactive_cursor=None
         self._interactive_points=[]
@@ -1521,8 +1667,64 @@ class MainWindow(QMainWindow):
         if file_list.count()==0:
             self._followup_view=None
             self._clear_active_scan()
-        self.browser.remove_file_button.setEnabled(file_list.currentItem() is not None)
+        self._paths_set_cache=None
+        self.browser.update_selection_actions()
         self._log(f'Removed {Path(path).name} from the session (source file untouched)')
+
+    def remove_scans(self,paths,confirm=True):
+        """v0.0.20: remove several scans from the list at once (never from the disk)."""
+        paths=[p for p in dict.fromkeys(paths or []) if p]
+        if not paths:return
+        if len(paths)==1:
+            self.remove_scan(paths[0]);return
+        if confirm and QMessageBox.question(self,'Remove scans',
+                f'Remove the {len(paths)} selected scans from the list?\n\nThe files on disk are kept; you can '
+                'add them again with Add scans or by reopening the project folder.')!=QMessageBox.StandardButton.Yes:
+            return
+        files=self.browser.files
+        files.setUpdatesEnabled(False)
+        try:
+            current=files.currentItem()
+            current_path=current.data(Qt.ItemDataRole.UserRole) if current is not None else None
+            # remove the shown scan last, so that only one other scan gets loaded afterwards
+            ordered=[p for p in paths if p!=current_path]+([current_path] if current_path in paths else [])
+            for path in ordered:
+                self.remove_scan(path)
+        finally:
+            files.setUpdatesEnabled(True)
+        self.browser.clear_marks()
+        self._log(f'Removed {len(paths)} scans from the list (files untouched)',important=True)
+
+    def clear_scan_list(self,confirm=True):
+        """v0.0.20: remove every listed scan (files untouched)."""
+        count=self.browser.files.count()
+        if not count:return
+        if confirm and QMessageBox.question(self,'Clear the list',
+                f'Remove all {count} scans from the list?\n\nThe files on disk are kept. Scans of the project '
+                'folder do not come back by themselves; reopen the project or use Add scans.')!=QMessageBox.StandardButton.Yes:
+            return
+        for crawler in list(self._crawlers):
+            crawler.requestInterruption()
+        removed=set(self._source_paths)
+        self._clear_active_scan()
+        files=self.browser.files
+        blocked=files.blockSignals(True)
+        try:
+            files.clear()
+        finally:
+            files.blockSignals(blocked)
+        self.browser._iconed={};self.browser._bold_item=None
+        for path in removed:
+            self.cache.evict_scan(path)
+        self._removed_paths|=removed
+        self._source_paths=[];self._paths_set_cache=None
+        self.styles={k:v for k,v in self.styles.items() if k[0] not in removed}
+        self.pipelines={k:v for k,v in self.pipelines.items() if k[0] not in removed}
+        for path in removed:
+            self._scan_view_states.pop(path,None);self._scan_profile_keys.pop(path,None)
+        self._preview_cache.clear();self._thumb_cache.clear()
+        self.browser.clear_marks()
+        self._log(f'Cleared the list ({count} scans; files untouched)',important=True)
 
     @Slot(str)
     def _crawler_failed(self,message):
@@ -1533,11 +1735,15 @@ class MainWindow(QMainWindow):
         crawler=self.sender()
         if crawler in self._crawlers:
             self._crawlers.remove(crawler)
+        if getattr(crawler,'generation',None) not in (None,self._crawl_generation()):
+            return
         self._log(f'Indexed dataset ({self.browser.files.count()} scans)')
 
     def open_file(self):
-        selection,_=QFileDialog.getOpenFileNames(self,'Open SPM scans',str(self._dialog_folder),
+        selection,_=QFileDialog.getOpenFileNames(self,'Add scans to the project',str(self._dialog_folder),
                                                  'SPM files (*.sxm *.gwy)')
+        if selection and hasattr(self,'projects'):
+            self.projects.ensure_session()
         for path in selection:
             self._removed_paths.discard(str(Path(path).resolve()))
             self._add_file(path)
@@ -1547,17 +1753,17 @@ class MainWindow(QMainWindow):
         self.browser.update_selection_actions()
 
     def open_folder(self):
-        folder=QFileDialog.getExistingDirectory(self,'Open SPM dataset',str(self._dialog_folder))
-        if not folder:return
-        self._open_dataset_folder(folder)
+        """v0.0.20: Open project… (a folder of scans without a project file becomes a project)."""
+        self.projects.open_project()
 
-    def _open_dataset_folder(self,folder):
+    def _open_dataset_folder(self,folder,keep_removed=False):
         """Index every scan below ``folder`` (no image data loaded yet)."""
         self._dialog_folder=Path(folder)
         self._session_folder=Path(folder)
-        self._removed_paths.clear()
-        crawler=FileCrawler(folder)
-        crawler.found.connect(self._add_file,Qt.ConnectionType.QueuedConnection)
+        if not keep_removed:
+            self._removed_paths.clear()
+        crawler=FileCrawler(folder,self._crawl_generation())
+        crawler.foundMany.connect(self._add_files,Qt.ConnectionType.QueuedConnection)
         crawler.failed.connect(self._crawler_failed,Qt.ConnectionType.QueuedConnection)
         self._crawlers.append(crawler)
         crawler.finished.connect(self._crawler_finished,Qt.ConnectionType.QueuedConnection)
@@ -1572,7 +1778,11 @@ class MainWindow(QMainWindow):
         v0.0.5: the folder is chosen by the user (any location, any name, new or existing). The
         proposal is still the sibling ``<dataset>_scan_recap``. ``destination`` skips the dialog."""
         import shutil
-        files=[Path(p) for p in dict.fromkeys(self._source_paths) if Path(p).is_file()]
+        chosen=self.browser.selected_paths() if hasattr(self.browser,'selected_paths') else []
+        if len(chosen)>1:                      # v0.0.20: the selected scans only
+            files=[Path(p) for p in dict.fromkeys(chosen) if Path(p).is_file()]
+        else:
+            files=[Path(p) for p in dict.fromkeys(self._source_paths) if Path(p).is_file()]
         if not files:
             self._log('Open a dataset and keep the scans you want before exporting the selection',important=True)
             return
@@ -1616,9 +1826,13 @@ class MainWindow(QMainWindow):
             return
         self._log(f'Exported {len(copied)} selected scan(s) to {recap}; the session now works in that folder',important=True)
         self._remember_scan_view()
-        self._clear_active_scan()
-        self.browser.files.clear()
-        self._source_paths=[]
+        if hasattr(self,'projects'):
+            # v0.0.20: the copy is a project of its own (a new tab); the original project stays open.
+            self.projects.open_folder(recap,index=False)
+        else:
+            self._clear_active_scan()
+            self.browser.files.clear()
+            self._source_paths=[]
         self._open_dataset_folder(recap)
 
     def _remember_scan_view(self):
@@ -1660,11 +1874,20 @@ class MainWindow(QMainWindow):
             self._log(str(exc),important=True)
             return
         self.browser.metadata_panel.set_loading(path)
+        self._loading_key=key
         cached=self.cache.get(('scan',key))
         if cached is not None:
             self._last_loaded_at=0.0
             self._loaded(token,cached)
         else:
+            # v0.0.20: never leave the previous scan on screen while the next one is read.
+            if active!=path:
+                self.viewer.show_loading()
+                self._viewer_shows=None
+                for _holder,view in self._secondary_views.values():
+                    view.show_loading()
+                if self._result_view is not None:
+                    self._result_view.hide()
             self.statusBar().showMessage(f'Loading {Path(path).name}…')
             self._last_loaded_at=time.perf_counter()
             self._start_task(Task(token,read_scan,path),
@@ -1731,6 +1954,16 @@ class MainWindow(QMainWindow):
 
     def _loaded(self,token,scan):
         if token!=self._load_token:return
+        # v0.0.20: rebuild the channel strip in one repaint (no intermediate layouts on screen)
+        was=self.channel_content.updatesEnabled()
+        self.channel_content.setUpdatesEnabled(False)
+        try:
+            self._loaded_inner(token,scan)
+        finally:
+            self.channel_content.setUpdatesEnabled(was)
+
+    def _loaded_inner(self,token,scan):
+        self._active_scan_key=getattr(self,'_loading_key',None) or (str(scan.path),0,0)
         # A cached scan is immutable input. Session cropping must never mutate
         # that object or leak into another visit to the same file.
         self.scan=Scan(scan.path,dict(scan.channels),dict(scan.metadata),list(scan.warnings))
@@ -1935,6 +2168,13 @@ class MainWindow(QMainWindow):
                 self._secondary_prepared.add(channel)
                 self._log(f'Preview {channel}: {exc}')
                 continue
+            hit=self._thumb_cache.get(self._preview_key(channel,trace,self.pipelines.get(key,[]),style))
+            if hit is not None:                  # v0.0.20: a scan visited before shows its tiles at once
+                self._secondary_prepared.add(channel)
+                view.set_scan(hit[0],None,self.scan.channels[channel].geometry,style,hit[1],
+                              self.channel_title(channel),self.scan.channels[channel].unit,preserve_view=True,
+                              display_zero=display_zero_enabled(self.pipelines.get(key,[])))
+                continue
             self._secondary_pending.add(channel)
             self._start_task(Task(generation,self._prepare_secondary,raw,self.pipelines.get(key,[]),style),
                 lambda token,result,c=channel,tr=trace,st=style:self._secondary_ready(token,c,tr,st,result),
@@ -1965,7 +2205,10 @@ class MainWindow(QMainWindow):
         view=self._secondary_views[channel][1]
         # The display is a thumbnail; no full data materialization is retained.
         key=(str(self.scan.path),channel,trace)
-        view.set_scan(qimage_rgb(rgb),None,self.scan.channels[channel].geometry,
+        image=qimage_rgb(rgb)
+        self._cache_put(self._thumb_cache,self._preview_key(channel,trace,self.pipelines.get(key,[]),style),
+                        (image,bounds),64)
+        view.set_scan(image,None,self.scan.channels[channel].geometry,
                       style,bounds,self.channel_title(channel),self.scan.channels[channel].unit,
                       preserve_view=True,display_zero=display_zero_enabled(self.pipelines.get(key,[])))
 
@@ -2056,11 +2299,15 @@ class MainWindow(QMainWindow):
         if (event.type()==QEvent.Type.Resize and hasattr(self,'channel_scroll')
                 and obj is self.channel_scroll.viewport()):
             QTimer.singleShot(0,self._load_visible_channels)
+        if (event.type()==QEvent.Type.KeyRelease and event.key()==Qt.Key.Key_Shift
+                and not event.isAutoRepeat() and getattr(self.browser,'_marking',False)):
+            self.browser.end_marking()          # v0.0.20: the picked scans stay selected
+            return super().eventFilter(obj,event)
         if event.type()!=QEvent.Type.KeyPress:
             return super().eventFilter(obj,event)
         if (obj is self.browser.files and event.key()==Qt.Key.Key_Delete
                 and event.modifiers()==Qt.KeyboardModifier.NoModifier):
-            self.remove_scan()
+            self.browser.request_remove_selected()
             return True
         app=QApplication.instance()
         if app.activeModalWidget() is not None or app.activePopupWidget() is not None:
@@ -2084,6 +2331,30 @@ class MainWindow(QMainWindow):
             self._shortcut_bindings['nav.channel_right']:'nav.channel_right',
         }
         action=dispatch.get(combo) if combo else None
+        if action is None:
+            # v0.0.20: hold Shift to pick several scans: ↑/↓ browse (the selection stays), Enter adds / removes the
+            # scan shown, ←/→ still move between channels; release Shift, then Delete removes the picked scans.
+            key=event.key();mods=event.modifiers()&~Qt.KeyboardModifier.KeypadModifier
+            browser=self.browser
+            if mods==Qt.KeyboardModifier.ShiftModifier:
+                if key in (Qt.Key.Key_Up,Qt.Key.Key_Down):
+                    browser.begin_marking()
+                    browser.select_relative_file(-1 if key==Qt.Key.Key_Up else 1,keep_marks=True)
+                    return True
+                if key in (Qt.Key.Key_Return,Qt.Key.Key_Enter):
+                    browser.toggle_mark_current()
+                    return True
+                if key in (Qt.Key.Key_Left,Qt.Key.Key_Right):
+                    self._scroll_channels(-1 if key==Qt.Key.Key_Left else 1)
+                    return True
+            many=browser._explicit_marks or len(browser.files.selectedItems())>1
+            if mods==Qt.KeyboardModifier.NoModifier and many:
+                if key==Qt.Key.Key_Delete:
+                    browser.request_remove_selected()
+                    return True
+                if key==Qt.Key.Key_Escape:
+                    browser.clear_marks()
+                    return True
         if action=='nav.scan_previous':
             self.browser.select_relative_file(-1);return True
         if action=='nav.scan_next':
@@ -2111,6 +2382,9 @@ class MainWindow(QMainWindow):
         if channel not in self.scan.channels:return
         # A channel newly selected after cropping inherits the exact same ROI.
         newly_cropped=self._ensure_session_crop(channel)
+        switched=channel!=self._current_channel
+        left=(self._viewer_shows,self.viewer.image,self.viewer.style,self.viewer.bounds,
+              self.viewer.display_zero) if switched and getattr(self,'_viewer_shows',None) else None
         if channel!=self._current_channel:
             old=self.scan.channels.get(self._current_channel)
             new=self.scan.channels[channel]
@@ -2135,8 +2409,26 @@ class MainWindow(QMainWindow):
         self.inspector.set_steps(self.pipelines.get(key,[]))
         self._syncing=False
         self._preserve_view=not newly_cropped
-        self._schedule_process()
-        self._sync_multiview()
+        # v0.0.20: the selected channel is shown at once (its cached render, or the thumbnail its tile already
+        # had) and rendered without the 90 ms wait; the channel you leave keeps its image in its new tile. The
+        # strip is rebuilt in one repaint: the previous channel never flashes in the main view.
+        content=self.channel_content
+        was=content.updatesEnabled()
+        content.setUpdatesEnabled(False)
+        try:
+            self._show_instant_preview(key)
+            if switched:
+                self.processed=None             # measurements never use the previous channel's data
+                self._process_token+=1
+                self._process_timer.stop()
+                self._process_selection()
+            else:
+                self._schedule_process()
+            self._sync_multiview()
+            if left is not None:
+                self._prefill_tile(left)
+        finally:
+            content.setUpdatesEnabled(was)
         self._interactive_preview_roi=None
         self._interactive_cursor=None
         self._interactive_timer.start()
@@ -2145,6 +2437,64 @@ class MainWindow(QMainWindow):
                 saved=self._session_masks.get(self._mask_settings_key(),[])
                 self.module_panel.set_masks(saved)
             except (TypeError,ValueError):pass
+
+    # ---- v0.0.20: instant previews (no flash of the previous channel / scan)
+    def _preview_key(self,channel,trace,steps,style):
+        crop=''
+        if self._crop_region is not None and channel in self._crop_applied:
+            crop=json.dumps(self._crop_region.to_dict(),sort_keys=True,default=str)
+        return (getattr(self,'_active_scan_key',None),channel,trace,
+                json.dumps([asdict(x) for x in steps or []],sort_keys=True,default=str),repr(style),crop)
+
+    @staticmethod
+    def _cache_put(cache,key,value,limit):
+        cache[key]=value
+        cache.move_to_end(key)
+        while len(cache)>limit:
+            cache.popitem(last=False)
+
+    def _show_instant_preview(self,key):
+        if key is None or self.scan is None or getattr(self,'_viewer_shows',None)==key:
+            return
+        _path,channel,trace=key
+        if channel not in self.scan.channels:
+            return
+        style=self.styles.get(key,ImageStyle())
+        steps=self.pipelines.get(key,[])
+        ck=self._preview_key(channel,trace,steps,style)
+        hit=self._preview_cache.get(ck) or self._thumb_cache.get(ck)
+        image=bnd=None
+        if hit is not None:
+            image,bnd=hit
+        else:
+            tile=self._secondary_views.get(channel)
+            view=tile[1] if tile else None
+            if view is not None and view.image is not None and channel in self._secondary_prepared:
+                image,bnd,style=view.image,view.bounds,view.style
+        ch=self.scan.channels[channel]
+        if image is not None:
+            self.viewer.set_scan(image,None,ch.geometry,style,bnd,self.channel_title(channel),ch.unit,
+                                 preserve_view=self._preserve_view,display_zero=display_zero_enabled(steps))
+            self._viewer_shows=key
+        else:
+            self.viewer.show_loading()
+            self._viewer_shows=None
+
+    def _prefill_tile(self,left):
+        """The channel you leave gets, in its tile, the image it had in the main view."""
+        shown,image,style,bnd,zero=left
+        if image is None or not shown or self.scan is None:
+            return
+        _path,channel,trace=shown
+        tile=self._secondary_views.get(channel)
+        if tile is None or channel not in self.scan.channels or channel in self._secondary_prepared:
+            return
+        ch=self.scan.channels[channel]
+        tile[1].set_scan(image,None,ch.geometry,style,bnd,self.channel_title(channel),ch.unit,
+                         preserve_view=True,display_zero=zero)
+        wanted=self.inspector.selected_trace()
+        if trace==wanted or wanted not in ch.traces:
+            self._secondary_prepared.add(channel)
 
     def _update_style(self):
         if self._syncing or self.scan is None:return
@@ -2240,8 +2590,11 @@ class MainWindow(QMainWindow):
         _,channel,trace=key
         if channel not in self.scan.channels:return
         style=self.styles.get(key,ImageStyle())
+        image=qimage_rgb(rgb)
+        self._cache_put(self._preview_cache,self._preview_key(channel,trace,self.pipelines.get(key,[]),style),
+                        (image,bnd),24)
         try:
-            self.viewer.set_scan(qimage_rgb(rgb),processed,
+            self.viewer.set_scan(image,processed,
                                  self.scan.channels[channel].geometry,style,bnd,self.channel_title(channel),
                                  self.scan.channels[channel].unit,
                                  preserve_view=self._preserve_view,
@@ -2249,13 +2602,31 @@ class MainWindow(QMainWindow):
         except Exception as exc:
             self._log(f'Could not display preview: {exc}',important=True)
             return
+        self._viewer_shows=key
         self._preserve_view=True
+        self._restore_pending_rois()
         self._queue_live_preview()
         self._interactive_refresh_mask_overlay()
         self._interactive_timer.start()
         self.statusBar().showMessage(
             f'{self.scan.path.name} · {channel} · {trace.upper()} · '
             f'{processed.shape[1]} × {processed.shape[0]} · preview {time.perf_counter()-started:.2f}s')
+
+    def _restore_pending_rois(self):
+        """v0.0.20: the selections drawn on the scan come back with the project."""
+        pending=self._pending_roi_restore
+        if not pending or self.scan is None or pending[0]!=str(self.scan.path):
+            return
+        self._pending_roi_restore=None
+        from ..core.project import roi_from_dict
+        rois=pending[1] or {}
+        try:
+            self.viewer.roi=roi_from_dict(rois.get('roi'))
+            self.viewer.extra_rois[:]=[r for r in (roi_from_dict(x) for x in rois.get('extra') or []) if r]
+            self.viewer.update()
+            self._sync_selection_list()
+        except Exception as exc:
+            self._log(f'Selections of the project not restored: {exc}')
 
     def _render_current(self):
         # Styles also use worker-thread previews. Do not do full-image NumPy
@@ -3706,21 +4077,29 @@ class MainWindow(QMainWindow):
         return tuple(sig)
 
     def _start_scripts_watch(self):
-        """v0.8.1: new or edited tools (e.g. written by the Assistant) appear without restart."""
-        self._scripts_sig=self._scripts_signature()
-        self._scripts_timer=QTimer(self)
-        self._scripts_timer.setInterval(2000)
-        self._scripts_timer.timeout.connect(self._check_scripts_folder)
-        self._scripts_timer.start()
+        """v0.8.1: new or edited tools (e.g. written by the Assistant) appear without restart.
 
-    def _check_scripts_folder(self):
-        sig=self._scripts_signature()
+        v0.0.20: the folder is read in a background thread (every 2.5 s) and only a changed signature reaches
+        the GUI thread. Listing and stat-ing it on the GUI thread froze the window on Windows when the folder
+        was slow to read (virus scanner, OneDrive / network folders)."""
+        self._scripts_sig=self._scripts_signature()
+        from .jobs import FolderPoller
+        self._scripts_poller=FolderPoller(self._scripts_signature,2.5,self)
+        self._scripts_poller.changed.connect(self._check_scripts_folder)
+        self._scripts_poller.start()
+
+    @Slot(object)
+    def _check_scripts_folder(self,sig=None):
+        if sig is None:sig=self._scripts_signature()
         if sig is None or sig==getattr(self,'_scripts_sig',None):return
         # Wait one more tick if a file is still being written (size/mtime changing).
         pending=getattr(self,'_scripts_pending',None)
         self._scripts_pending=sig
         if pending!=sig:return
         self._scripts_sig=sig;self._scripts_pending=None
+        poller=getattr(self,'_scripts_poller',None)
+        if poller is not None:poller.reference=sig
+        self._module_hash_cache.clear()
         self._live_refresh_modules()
 
     def _live_refresh_modules(self):
@@ -3846,6 +4225,13 @@ class MainWindow(QMainWindow):
         # bottom, hiding the molecule SVG file chooser at the top.
         self.module_tools_scroll.verticalScrollBar().setValue(0)
         self._refresh_saved_runs(restore_settings=True)
+        pending=self._pending_tool_restore           # v0.0.20: tool settings saved with the project
+        if pending and pending[0]==module_id and self.scan is not None:
+            self._pending_tool_restore=None
+            try:
+                if pending[1]:self.module_panel.restore_values(pending[1])
+            except Exception as exc:
+                self._log(f'Tool settings of the project not restored: {exc}')
         if module_id=='molecule_placement' and self.scan is not None:
             self._show_live_molecule_preview('Load SVG/PNG artwork to update this channel live.')
         self._queue_live_preview()
@@ -3958,16 +4344,35 @@ class MainWindow(QMainWindow):
             self.module_panel.restore_values(selected.get('parameters',{}))
         self._indicate_staleness()
 
+    def _module_hash(self,module):
+        """Hash of a tool's files, cached until the scripts folder changes (v0.0.20)."""
+        from ..core.research_records import module_code_hash
+        key=(str(module.path),module.version)
+        value=self._module_hash_cache.get(key)
+        if value is None:
+            try:value=module_code_hash(module)
+            except OSError:value=''
+            self._module_hash_cache[key]=value
+        return value
+
+    def _run_record(self,run_id):
+        record=self._record_cache.get(run_id)
+        if record is None:
+            record=self.research_store.run(run_id)
+            if record:
+                if len(self._record_cache)>64:self._record_cache.clear()
+                self._record_cache[run_id]=record
+        return record
+
     def _indicate_staleness(self):
         if self.scan is None or self.module_panel.module is None or not self._displayed_run_id:return
-        record=self.research_store.run(self._displayed_run_id)
+        record=self._run_record(self._displayed_run_id)
         if not record:return
         differences=[]
         try:
             params=validate_params(self.module_panel.module,self.module_panel.values())
             if params!=record.get('parameters'):differences.append('tool parameters')
-            from ..core.research_records import module_code_hash
-            if record.get('algorithm_sha256')!=module_code_hash(self.module_panel.module):
+            if record.get('algorithm_sha256')!=self._module_hash(self.module_panel.module):
                 differences.append('algorithm source')
             if record.get('module_version')!=self.module_panel.module.version:
                 differences.append('module version')
@@ -4025,9 +4430,20 @@ class MainWindow(QMainWindow):
         self._refresh_saved_runs()
 
     def open_research_comparison(self):
+        """v0.0.20: Compare results — non-modal, so that "Show scan" can be used while it stays open."""
         from .research_compare import CompareDialog
+        old=getattr(self,'_compare_dialog',None)
+        if old is not None:
+            try:
+                old.close()
+            except RuntimeError:
+                pass
         dialog=CompareDialog(self)
-        dialog.exec()
+        dialog.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose,True)
+        self._compare_dialog=dialog
+        dialog.destroyed.connect(lambda *_:setattr(self,'_compare_dialog',None))
+        dialog.show()
+        return dialog
 
     def run_module(self):
         if self.scan is None or self.processed is None:
@@ -4288,8 +4704,8 @@ class MainWindow(QMainWindow):
         for url in event.mimeData().urls():
             p=Path(url.toLocalFile())
             if p.is_dir():
-                crawler=FileCrawler(p)
-                crawler.found.connect(self._add_file,Qt.ConnectionType.QueuedConnection)
+                crawler=FileCrawler(p,self._crawl_generation())
+                crawler.foundMany.connect(self._add_files,Qt.ConnectionType.QueuedConnection)
                 self._crawlers.append(crawler)
                 crawler.finished.connect(self._crawler_finished,Qt.ConnectionType.QueuedConnection)
                 crawler.failed.connect(self._crawler_failed,Qt.ConnectionType.QueuedConnection)
@@ -4304,6 +4720,19 @@ class MainWindow(QMainWindow):
             if hasattr(self,'documents') and not self.documents.close_all():
                 event.ignore();return
         except RuntimeError:
+            pass
+        # v0.0.20: the state of every open project is saved; the next start reopens them where you were.
+        try:
+            self.projects.shutdown()
+        except Exception as exc:
+            print(f'SPM Studio: project state not saved at exit: {exc}',file=sys.stderr)
+        try:
+            from spm_studio import theme_studio
+            from spm_studio.shared import watchdog
+            theme_studio.shutdown()
+            watchdog.shutdown()
+            if getattr(self,'_scripts_poller',None) is not None:self._scripts_poller.stop()
+        except Exception:
             pass
         try:
             if self.tutorial is not None:self.tutorial.stop('exited')

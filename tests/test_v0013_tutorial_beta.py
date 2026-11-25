@@ -491,6 +491,7 @@ def test_welcome_panel_and_settings_pages(window, monkeypatch):
     assert window._welcome is None                                                   # no nagging
     from spm_studio.ui.settings_dialog import SettingsDialog
     dialog = SettingsDialog(window, 'beta')
+    dialog.build_all()                       # v0.0.20: pages are built when first shown
     page = dialog.findChild(type(dialog), None) or dialog
     beta = dialog.findChild(QPushButton, 'BetaActivateV0013')
     assert beta is not None and dialog.findChild(QPushButton, 'TutorialSettingsStartV0013') is not None

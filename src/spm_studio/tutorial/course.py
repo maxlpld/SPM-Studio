@@ -137,7 +137,7 @@ def basics() -> list[Step]:
              target='browser'),
         Step('dataset', 'Open the KBr tutorial scans',
              'The three scans are bundled with SPM Studio. The button below copies them to your tutorial folder '
-             '(the originals stay untouched) and lists them, like Dataset… does for your own folders.',
+             '(the originals stay untouched) and lists them, like Open project does for your own folders.',
              target='folder_button', action='Open the tutorial folder',
              check=lambda c: len(listed_tutorial_files(c.window)) == 3,
              button=('Open the KBr tutorial folder', 'open_tutorial_scans')),

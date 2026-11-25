@@ -587,18 +587,19 @@ def test_settings_window_pages_and_library_actions(window, tmp_path, monkeypatch
     dialog = SettingsDialog(window, 'about')
     dialog.show()
     QApplication.processEvents()
-    assert [p[0] for p in PAGES] == ['general', 'library', 'literature', 'documents', 'updates', 'tutorials',
-                                     'beta', 'about']   # v0.0.8 + v0.0.13 (updates, tutorials, beta tester)
-    assert dialog.stack.currentIndex() == 7
+    assert [p[0] for p in PAGES] == ['general', 'appearance', 'library', 'literature', 'documents', 'updates',
+                                     'tutorials', 'beta', 'about']   # v0.0.20: + appearance
+    assert dialog.stack.currentIndex() == 8
     author = dialog.findChild(type(dialog.about_version), 'AboutAuthorV005')
     assert 'maxlpld' in author.text() and 'https://github.com/maxlpld' in author.text()
     current = re.search(r'^version = "(\d+\.\d+\.\d+)"',
                         (ROOT / 'pyproject.toml').read_text(encoding='utf8'), re.M).group(1)
     assert f'Version {current}' in dialog.about_version.text()
     assert dialog.findChild(QPushButton, 'AboutGitHubButtonV005') is not None
-    assert dialog.findChild(QPushButton, 'SettingsGitHubButtonV005') is not None
+    # v0.0.20: the project page link lives in About only (no duplicate in General)
+    assert dialog.findChild(QPushButton, 'SettingsGitHubButtonV005') is None
     # theme list follows the theme files
-    dialog.show_page('general')
+    dialog.show_page('appearance')
     assert dialog.theme_combo.findData('porcelain') >= 0
     # library: every kind lists something, and the profile list of the window follows a removal
     dialog.show_page('library')

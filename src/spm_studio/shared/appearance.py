@@ -159,6 +159,14 @@ ICONS = {
     'run': '<path d="M8 5.5v13l10-6.5z"/>',
     'stop': '<rect x="6.5" y="6.5" width="11" height="11" rx="1.5"/>',
     'plus': '<path d="M12 5v14M5 12h14"/>',
+    # v0.0.20: projects, Files panel and Appearance
+    'theme': '<path d="M12 3.5a8.5 8.5 0 1 0 0 17c1.1 0 1.7-.8 1.7-1.6 0-1.2-1.1-1.5-1.1-2.6 0-.9.7-1.5 1.6-1.5h2.1A4.2 4.2 0 0 0 20.5 11 7.9 7.9 0 0 0 12 3.5z"/><circle cx="7.6" cy="11" r=".9"/><circle cx="10" cy="7.4" r=".9"/><circle cx="14.5" cy="7.6" r=".9"/>',
+    'project_new': '<path d="M3.5 7.5A1.5 1.5 0 0 1 5 6h4l2 2h8a1.5 1.5 0 0 1 1.5 1.5v8A1.5 1.5 0 0 1 19 19H5a1.5 1.5 0 0 1-1.5-1.5z"/><path d="M12 11v5M9.5 13.5h5"/>',
+    'project_open': '<path d="M3.5 17.5V7.5A1.5 1.5 0 0 1 5 6h4l2 2h6.5A1.5 1.5 0 0 1 19 9.5V11"/><path d="M3.5 17.5 6 12h15l-2.5 5.5a1.5 1.5 0 0 1-1.4.9H4.6a1.1 1.1 0 0 1-1.1-.9z"/>',
+    'add_scans': '<path d="M14 3.5H7A1.5 1.5 0 0 0 5.5 5v14A1.5 1.5 0 0 0 7 20.5h10a1.5 1.5 0 0 0 1.5-1.5V8z"/><path d="M14 3.5V8h4.5"/><path d="M12 11v6M9 14h6"/>',
+    'clear_list': '<path d="M4 7h10M4 12h10M4 17h6"/><path d="M15 15l5 5M20 15l-5 5"/>',
+    'select_mode': '<rect x="4" y="4" width="7" height="7" rx="1.5"/><path d="M5.8 7.6l1.3 1.3 2.3-2.6"/><rect x="13" y="4" width="7" height="7" rx="1.5"/><rect x="4" y="13" width="7" height="7" rx="1.5"/><path d="M5.8 16.6l1.3 1.3 2.3-2.6"/><rect x="13" y="13" width="7" height="7" rx="1.5"/>',
+    'copy_to': '<rect x="8.5" y="8.5" width="11" height="11" rx="1.5"/><path d="M15.5 8.5V6A1.5 1.5 0 0 0 14 4.5H6A1.5 1.5 0 0 0 4.5 6v8A1.5 1.5 0 0 0 6 15.5h2.5"/><path d="M12 14h5M15 12l2 2-2 2"/>',
     'close': '<path d="M6 6l12 12M18 6 6 18"/>',
     'trash': '<path d="M4.5 7h15"/><path d="M9 7V5h6v2"/><path d="M6.5 7l1 12.5h9l1-12.5"/>',
     'copy': '<rect x="8" y="8" width="11.5" height="11.5" rx="1.5"/><path d="M5 15.5V5.5A1 1 0 0 1 6 4.5h9.5"/>',
@@ -575,6 +583,13 @@ QLabel#panelTitle {{ color: @muted; font-size: {small}px; font-weight: 600; lett
 QPlainTextEdit#latexCode {{ background: @input; border: 0; border-radius: 0; padding: 0; font-size: {px + 1}px; }}
 QWidget#lineGutter {{ background: @surface; }}
 QFrame#pdfPane {{ background: @bg; border: 0; }}
+/* v0.0.20: the page list of the Settings windows (never cut, comfortable rows) */
+QListWidget#SettingsNavigationV005 {{ background: @sidebar; border: 0; border-radius: {r + 2}px; padding: 6px 4px;
+    outline: 0; }}
+QListWidget#SettingsNavigationV005::item {{ min-height: 30px; padding: 4px 10px; margin: 1px 2px; border: 0;
+    border-radius: {rs + 2}px; color: @fg; }}
+QListWidget#SettingsNavigationV005::item:hover:!selected {{ background: @hover; }}
+QListWidget#SettingsNavigationV005::item:selected {{ background: @accent_soft; color: @fg; font-weight: 600; }}
 QListWidget#slideThumbs {{ background: @sidebar; border: 0; border-right: 1px solid @border; border-radius: 0; padding: 6px; }}
 QListWidget#slideThumbs::item {{ border: 2px solid transparent; border-radius: {r}px; padding: 4px; margin: 2px; }}
 QListWidget#slideThumbs::item:selected {{ border-color: @accent; background: @accent_soft; }}

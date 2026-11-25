@@ -1,15 +1,16 @@
 """Settings (v0.0.5): one window behind the gear button of the top bar.
 
-Pages
------
-* **General** — theme, figures, shortcuts, assistant, updates, maintenance.
+Pages (v0.0.20: every option is in exactly one place)
+-----------------------------------------------------
+* **General** — projects and crash recovery, scans, logs, keyboard, assistant, maintenance.
+* **Appearance** — theme, Theme Studio, help texts, pop-ups, outline of the selected channel.
 * **Library** — import / export / edit / remove scripts, profiles, export profiles,
-  themes, colormaps, plot styles and shortcut files (``core.library``).
+  themes, colormaps, plot styles and shortcut files (``core.library``); built-in tools.
 * **Literature** — Consensus and Zotero for the assistant (``ai.literature``).
 * **Documents** — v0.0.8: LaTeX editor, presentation editor, Overleaf (``documents``).
-* **About** — version, author, project page.
+* **Updates**, **Tutorials**, **Beta Tester**, **About** — version, author, project page.
 
-Everything that used to live in the menu bar and had no other place is here.
+v0.0.20: a page is built the first time it is shown, so the window opens at once.
 """
 from __future__ import annotations
 
@@ -27,7 +28,7 @@ from spm_studio.core import library, paths
 from spm_studio.shared.dialogs import MessageDialog, TextInputDialog
 from spm_studio.shared.ui_strings import ui_label
 
-PAGES = (('general', 'General', 'gear'), ('library', 'Library', 'folder'),
+PAGES = (('general', 'General', 'gear'), ('appearance', 'Appearance', 'theme'), ('library', 'Library', 'folder'),
          ('literature', 'Literature', 'book'), ('documents', 'Documents', 'latex'),
          ('updates', 'Updates', 'refresh'), ('tutorials', 'Tutorials', 'run'), ('beta', 'Beta Tester', 'ai'),
          ('about', 'About', 'info'))
@@ -173,53 +174,106 @@ class _ConsensusSignIn(QThread):
 
 
 # ---------------------------------------------------------------------------- dialog
+def fit_navigation(nav: QListWidget, minimum: int = 176):
+    """v0.0.20: the page list of a settings window is as wide as its longest entry (never cut, never wrapped)."""
+    from PySide6.QtGui import QFont, QFontMetrics
+    nav.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+    nav.setTextElideMode(Qt.TextElideMode.ElideNone)
+    nav.setWordWrap(False)
+    nav.setSpacing(1)
+    nav.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
+    bold = QFont(nav.font())
+    bold.setBold(True)                      # the selected entry may be bold in some themes
+    metrics = QFontMetrics(bold)
+    longest = max((metrics.horizontalAdvance(nav.item(i).text()) for i in range(nav.count())), default=80)
+    icon = nav.iconSize().width() + 10
+    nav.setFixedWidth(max(minimum, longest + icon + 44))
+    for i in range(nav.count()):
+        nav.item(i).setSizeHint(QSize(0, max(32, metrics.height() + 14)))
+
+
 class SettingsDialog(QDialog):
     def __init__(self, window, page: str = 'general'):
         super().__init__(window)
         self.window_ = window
         self.setWindowTitle('Settings')
         self.setObjectName('SettingsDialogV005')
-        self.resize(940, 680)
+        self.resize(960, 680)
         root = QHBoxLayout(self)
         root.setSpacing(14)
         self.nav = QListWidget()
         self.nav.setObjectName('SettingsNavigationV005')
-        self.nav.setFixedWidth(170)
         self.nav.setIconSize(QSize(18, 18))
         self.stack = QStackedWidget()
         root.addWidget(self.nav)
         root.addWidget(self.stack, 1)
-        builders = {'general': self._general_page, 'library': self._library_page,
-                    'literature': self._literature_page, 'documents': self._documents_page,
-                    'updates': self._updates_page, 'tutorials': self._tutorials_page, 'beta': self._beta_page,
-                    'about': self._about_page}
+        self._builders = {'general': self._general_page, 'appearance': self._appearance_page,
+                          'library': self._library_page, 'literature': self._literature_page,
+                          'documents': self._documents_page, 'updates': self._updates_page,
+                          'tutorials': self._tutorials_page, 'beta': self._beta_page, 'about': self._about_page}
         self._page_keys = []
+        self._built = set()
         pages = list(PAGES)
         # v0.0.13: pages added by installed extensions (none without an extension)
         api = getattr(window, 'extension_api', None)
         from spm_studio.beta.badge import beta_label
         for key, (_ext, label, factory) in (getattr(api, 'settings_pages', {}) or {}).items():
+            if str(key).endswith(':theme-studio'):
+                continue                    # v0.0.20: Theme Studio is built in (Settings › Appearance)
             pages.insert(len(pages) - 1, (key, beta_label(label), 'ai'))
-            builders[key] = lambda factory=factory, label=label: self._extension_page(factory, label)
+            self._builders[key] = lambda factory=factory, label=label: self._extension_page(factory, label)
+        from spm_studio.shared.appearance import icon
         for key, label, icon_name in pages:
             item = QListWidgetItem(label)
             try:
-                from spm_studio.shared.appearance import icon
                 item.setIcon(icon(icon_name))
             except Exception:
                 pass
+            item.setToolTip(label)
             self.nav.addItem(item)
             scroll = QScrollArea()
             scroll.setWidgetResizable(True)
             scroll.setFrameShape(QFrame.Shape.NoFrame)
-            scroll.setWidget(builders[key]())
             self.stack.addWidget(scroll)
             self._page_keys.append(key)
-        self.nav.currentRowChanged.connect(self.stack.setCurrentIndex)
+        fit_navigation(self.nav)
+        self.nav.currentRowChanged.connect(self._show_row)
         self.show_page(page)
 
+    def _show_row(self, row: int):
+        if row < 0:
+            return
+        self._build(row)
+        self.stack.setCurrentIndex(row)
+
+    def _build(self, row: int):
+        """Build a page the first time it is shown (v0.0.20: opening Settings no longer builds all of them)."""
+        key = self._page_keys[row]
+        if key in self._built:
+            return
+        self._built.add(key)
+        from PySide6.QtWidgets import QApplication
+        QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
+        try:
+            widget = self._builders[key]()
+        except Exception as exc:              # a broken page must never break Settings
+            widget = QWidget()
+            QVBoxLayout(widget).addWidget(_hint(f'This page could not be built: {exc}'))
+        finally:
+            QApplication.restoreOverrideCursor()
+        self.stack.widget(row).setWidget(widget)
+
+    def build_all(self):
+        """Build every page (tests, screenshots)."""
+        for row in range(len(self._page_keys)):
+            self._build(row)
+
     def show_page(self, page: str):
-        self.nav.setCurrentRow(self._page_keys.index(page) if page in self._page_keys else 0)
+        row = self._page_keys.index(page) if page in self._page_keys else 0
+        if self.nav.currentRow() == row:
+            self._show_row(row)
+        else:
+            self.nav.setCurrentRow(row)
 
     # ------------------------------------------------------------------ helpers
     @staticmethod
@@ -302,6 +356,8 @@ class SettingsDialog(QDialog):
         self.outline_radius.valueChanged.connect(lambda n: store('radius', int(n)))
         self._action_row(v, 'Outline corner radius', '', self.outline_radius)
 
+
+    def _popup_rows(self, v, w):
         self.rounded_popups = QCheckBox('Rounded')
         self.rounded_popups.setObjectName('SettingsRoundedPopupsV0019')
         from spm_studio.shared.dialogs import rounded_popups_enabled
@@ -375,44 +431,56 @@ class SettingsDialog(QDialog):
 
     # ------------------------------------------------------------------ General
     def _general_page(self):
+        """v0.0.20: behaviour only; everything about the look is on the Appearance page, tools and folders in
+        Library, updates on the Updates page, the project page and licence in About (no option twice)."""
+        from PySide6.QtWidgets import QSpinBox
         w = self.window_
         page, layout = self._page('General')
 
-        box = QGroupBox('Appearance')
+        box = QGroupBox('Projects and recovery')
         v = QVBoxLayout(box)
-        self.theme_combo = QComboBox()
-        self.theme_combo.setObjectName('SettingsThemeComboV005')
-        self._fill_themes()
-        self.theme_combo.activated.connect(lambda _=0: w._apply_theme(str(self.theme_combo.currentData())))
-        self._action_row(v, 'Theme', 'Colours and font of the interface. Add your own in Library › Themes.',
-                         self.theme_combo)
-        # v0.0.18: help texts are short by default; the full versions stay one tick away
-        from spm_studio.shared import ergonomics
-        self.full_help = QCheckBox('Show')
-        self.full_help.setObjectName('SettingsFullHelpV0018')
-        self.full_help.setChecked(ergonomics.full_help_texts())
-        self.full_help.toggled.connect(ergonomics.set_full_help_texts)
-        self._action_row(v, 'Full help texts', 'Long explanations under the options (otherwise in their tooltip).',
-                         self.full_help)
-        self.logs_on_run = QCheckBox('Open')
-        self.logs_on_run.setObjectName('SettingsLogsOnRunV0018')
-        self.logs_on_run.setChecked(w._logs_open_on_run() if hasattr(w, '_logs_open_on_run') else False)
-        self.logs_on_run.toggled.connect(lambda on: w.settings.setValue('logs/open_on_run', bool(on)))
-        self._action_row(v, 'Logs when a script runs', 'Errors always open the Logs panel.', self.logs_on_run)
+        self.reopen_last = QCheckBox('Reopen')
+        self.reopen_last.setObjectName('SettingsReopenLastV0020')
+        self.reopen_last.setChecked(str(w.settings.value('project/reopen_last', True)).lower() in ('true', '1'))
+        self.reopen_last.toggled.connect(lambda on: w.settings.setValue('project/reopen_last', bool(on)))
+        self._action_row(v, 'At start', 'Reopen the projects and the scan you were working on (also after a crash).',
+                         self.reopen_last)
+        self.autosave = QSpinBox()
+        self.autosave.setObjectName('SettingsAutosaveV0020')
+        self.autosave.setRange(5, 300)
+        self.autosave.setSuffix(' s')
+        try:
+            self.autosave.setValue(int(float(w.settings.value('project/autosave_seconds', 15))))
+        except (TypeError, ValueError):
+            self.autosave.setValue(15)
+
+        def autosave_changed(n):
+            w.settings.setValue('project/autosave_seconds', int(n))
+            if hasattr(w, 'projects'):
+                w.projects.set_interval(int(n))
+        self.autosave.valueChanged.connect(autosave_changed)
+        self._action_row(v, 'Save the project state every',
+                         'Display, processing, crops, selections and tool settings are written to '
+                         '“spm-studio-project.json” in the project folder (scan files are never changed).',
+                         self.autosave)
         layout.addWidget(box)
 
-        box = QGroupBox('Figures and scans')
+        box = QGroupBox('Scans and results')
         v = QVBoxLayout(box)
-        b = QPushButton('Results && figures…')
-        b.clicked.connect(w.open_plot_options)
-        self._action_row(v, 'Results and figures', 'Plot style, output formats and what opens after a run.', b)
         self.autocrop = QCheckBox('Enabled')
         self.autocrop.setChecked(w.profile_autocrop.isChecked())
         self.autocrop.toggled.connect(w.profile_autocrop.setChecked)
         self._action_row(v, 'Auto-crop incomplete scans',
                          'When a profile that asks for it is applied, crop the unmeasured part of an aborted scan.',
                          self.autocrop)
-        self._outline_rows(v, w)
+        b = QPushButton('Results && figures…')
+        b.clicked.connect(w.open_plot_options)
+        self._action_row(v, 'Results and figures', 'Plot style, output formats and what opens after a run.', b)
+        self.logs_on_run = QCheckBox('Open')
+        self.logs_on_run.setObjectName('SettingsLogsOnRunV0018')
+        self.logs_on_run.setChecked(w._logs_open_on_run() if hasattr(w, '_logs_open_on_run') else False)
+        self.logs_on_run.toggled.connect(lambda on: w.settings.setValue('logs/open_on_run', bool(on)))
+        self._action_row(v, 'Logs when a script runs', 'Errors always open the Logs panel.', self.logs_on_run)
         layout.addWidget(box)
 
         box = QGroupBox('Keyboard and assistant')
@@ -425,42 +493,84 @@ class SettingsDialog(QDialog):
         self._action_row(v, 'AI assistant', 'Choose and sign in to the assistant (Pi, Claude Code, Codex or an API).', b)
         layout.addWidget(box)
 
-        box = QGroupBox('Updates and maintenance')
+        box = QGroupBox('Performance and diagnostics')
         v = QVBoxLayout(box)
-        b = QPushButton('Check for updates…')
-        b.clicked.connect(lambda: w.open_update_dialog())
-        self._action_row(v, 'Updates', 'Look for a newer version on GitHub and read what is new.', b)
-        b = QPushButton('Refresh tools')
-        b.clicked.connect(lambda: (w.refresh_modules(), self._library_refresh()))
-        self._action_row(v, 'Tools list', 'Read the scripts folder again (new tools are normally detected automatically).', b)
-        b = QPushButton('Restore built-in tools…')
-        b.clicked.connect(w.restore_builtin_tools)
-        self._action_row(v, 'Built-in tools', 'Put back the lattice and molecule tools shipped with this version (a backup is kept).', b)
         b = QPushButton('Clear preview cache')
         b.clicked.connect(w._clear_cache)
         self._action_row(v, 'Preview cache', 'Free the memory used by scan previews.', b)
+        self.record_freezes = QCheckBox('Record')
+        self.record_freezes.setObjectName('SettingsRecordFreezesV0020')
+        from spm_studio.shared import watchdog
+        self.record_freezes.setChecked(watchdog.enabled())
+        self.record_freezes.toggled.connect(watchdog.set_enabled)
+        row = QWidget()
+        h = QHBoxLayout(row)
+        h.setContentsMargins(0, 0, 0, 0)
+        h.addWidget(self.record_freezes)
+        report = QPushButton('Open report')
+        report.setToolTip(str(watchdog.report_path()))
+        report.clicked.connect(lambda: open_folder(watchdog.report_path().parent))
+        h.addWidget(report)
+        self._action_row(v, 'Slow moments', 'When the window stops responding for more than a second, note what it '
+                         'was doing in a small report (send it with a bug report).', row)
+        layout.addWidget(box)
+        layout.addStretch(1)
+        return page
+
+    # ------------------------------------------------------------------ Appearance
+    def _appearance_page(self):
+        w = self.window_
+        page, layout = self._page('Appearance')
+
+        box = QGroupBox('Theme')
+        v = QVBoxLayout(box)
+        self.theme_combo = QComboBox()
+        self.theme_combo.setObjectName('SettingsThemeComboV005')
+        self._fill_themes()
+        self.theme_combo.activated.connect(lambda _=0: w._apply_theme(str(self.theme_combo.currentData())))
+        self._action_row(v, 'Theme', 'Colours and font of the interface. Add your own with Theme Studio or '
+                         'Library › Themes.', self.theme_combo)
+        studio = _icon_button('Open Theme Studio', 'theme',
+                              'Restyle any control by clicking it, save your own theme, import an SVG skin')
+        studio.setObjectName('OpenThemeStudio')
+
+        def open_studio():
+            from spm_studio import theme_studio
+            ts = theme_studio.instance() or theme_studio.install(w)
+            if ts is None:
+                MessageDialog.warning(self, 'Theme Studio', 'Theme Studio could not be started (see Logs).')
+                return
+            self.accept()                    # Settings is modal: close it so that the window can be picked from
+            ts.open()
+        studio.clicked.connect(open_studio)
+        self.theme_studio_button = studio
+        self._action_row(v, 'Theme Studio', 'Visual theme editor: click a control to restyle it, profiles, '
+                         'SVG skins.', studio)
         layout.addWidget(box)
 
-        box = QGroupBox('Folders and help')
+        box = QGroupBox('Texts and pop-ups')
         v = QVBoxLayout(box)
-        b = QPushButton('Open scripts folder')
-        b.clicked.connect(lambda: open_folder(paths.scripts_dir()))
-        self._action_row(v, 'Scripts', str(paths.scripts_dir()), b)
-        b = QPushButton('Open customization folder')
-        b.clicked.connect(lambda: open_folder(paths.customization_dir()))
-        self._action_row(v, 'Customization', str(paths.customization_dir()), b)
-        b = QPushButton('Customization guide')
-        b.clicked.connect(self._open_customization_guide)
-        self._action_row(v, 'Guide', 'How profiles, export profiles, themes and colormaps are written.', b)
-        b = _icon_button('Open project page', 'link')
-        b.setObjectName('SettingsGitHubButtonV005')
-        b.clicked.connect(lambda: open_url(paths.GITHUB_URL))
-        self._action_row(v, 'SPM Studio on GitHub', paths.GITHUB_URL, b)
+        # v0.0.18: help texts are short by default; the full versions stay one tick away
+        from spm_studio.shared import ergonomics
+        self.full_help = QCheckBox('Show')
+        self.full_help.setObjectName('SettingsFullHelpV0018')
+        self.full_help.setChecked(ergonomics.full_help_texts())
+        self.full_help.toggled.connect(ergonomics.set_full_help_texts)
+        self._action_row(v, 'Full help texts', 'Long explanations under the options (otherwise in their tooltip).',
+                         self.full_help)
+        self._popup_rows(v, w)
+        layout.addWidget(box)
+
+        box = QGroupBox('Scan preview')
+        v = QVBoxLayout(box)
+        self._outline_rows(v, w)
         layout.addWidget(box)
         layout.addStretch(1)
         return page
 
     def _fill_themes(self):
+        if not hasattr(self, 'theme_combo'):
+            return                           # Appearance page not built yet
         w = self.window_
         current = str(w.settings.value('theme', 'graphite'))
         self.theme_combo.blockSignals(True)
@@ -531,7 +641,10 @@ class SettingsDialog(QDialog):
         self.lib_guide = add('How to build one', 'book', self._library_guide,
                              'The guide of this folder — also read by the assistant before it creates a file')
         add('Open folder', 'folder', lambda: open_folder(library.kind_dir(self._kind())))
-        add('Refresh', 'refresh', self._library_refresh)
+        add('Refresh', 'refresh', self._library_refresh_all)
+        # v0.0.20: was in General › Updates and maintenance
+        self.lib_restore = add('Restore built-in tools…', 'undo', self.window_.restore_builtin_tools,
+                               'Put back the lattice and molecule tools shipped with this version (a backup is kept)')
         body.addLayout(column)
         layout.addLayout(body, 1)
         self.library_status = _hint('')
@@ -563,10 +676,20 @@ class SettingsDialog(QDialog):
             self.items.addItem(item)
         self.lib_gwyddion.setVisible(kind == 'colormaps')
         self.lib_readme.setVisible(kind == 'scripts')
+        self.lib_restore.setVisible(kind == 'scripts')
         self.lib_new_template.setVisible(kind in library.TEMPLATE_KINDS)
         self.lib_import_folder.setText('Import tool folder…' if kind == 'scripts' else 'Import folder…')
         self.lib_guide.setEnabled(library.guide(kind) is not None)
         self._library_buttons()
+
+    def _library_refresh_all(self):
+        """Read the folder again; for scripts also the Tools list of the main window."""
+        if self._kind() == 'scripts':
+            try:
+                self.window_.refresh_modules()
+            except Exception as exc:
+                self._log(f'Tools not refreshed: {exc}', important=True)
+        self._library_refresh()
 
     def _library_buttons(self):
         chosen = self._selected()
@@ -1279,11 +1402,8 @@ class SettingsDialog(QDialog):
         github.clicked.connect(lambda: open_url(paths.GITHUB_URL))
         issue = QPushButton('Report a problem')
         issue.clicked.connect(lambda: open_url(paths.GITHUB_URL + '/issues/new'))
-        releases = QPushButton('Release notes')
-        releases.clicked.connect(lambda: open_url(paths.GITHUB_URL + '/releases'))
         row.addWidget(github)
         row.addWidget(issue)
-        row.addWidget(releases)
         row.addStretch(1)
         v.addLayout(row)
         layout.addWidget(box)
@@ -1292,17 +1412,14 @@ class SettingsDialog(QDialog):
         v = QVBoxLayout(box)
         v.addWidget(_hint('Free and open-source software, released under the MIT Licence. SPM Studio analyses saved '
                           'data only and never connects to a microscope. It uses the network for the update check '
-                          '(it can be switched off in “Check for updates…”) and, only if you set them up, for the '
+                          '(it can be switched off in Settings › Updates) and, only if you set them up, for the '
                           'AI assistant and the literature sources.'))
         row = QHBoxLayout()
         licence = QPushButton('Read the licence')
         licence_file = paths.bundled_studio_root() / 'LICENSE'
         licence.clicked.connect(lambda: GuideDialog(licence_file, 'Licence', self).exec() if licence_file.is_file()
                                 else open_url(paths.GITHUB_URL + '/blob/main/LICENSE'))
-        update = QPushButton('Check for updates…')
-        update.clicked.connect(lambda: self.window_.open_update_dialog())
         row.addWidget(licence)
-        row.addWidget(update)
         row.addStretch(1)
         v.addLayout(row)
         layout.addWidget(box)

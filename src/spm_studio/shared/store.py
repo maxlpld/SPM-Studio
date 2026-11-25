@@ -37,6 +37,9 @@ def input_fingerprint(source_hash, channel, direction, params, roi, processing, 
     return hashlib.sha256(canonical_json(data).encode('utf-8')).hexdigest()
 
 
+_WAL_READY: set = set()
+
+
 class ResearchStore:
     VERSION=1
     def __init__(self,root=None):
@@ -51,7 +54,9 @@ class ResearchStore:
         con.row_factory=sqlite3.Row
         con.execute('PRAGMA busy_timeout=30000')
         con.execute('PRAGMA foreign_keys=ON')
-        con.execute('PRAGMA journal_mode=WAL')
+        if str(self.db) not in _WAL_READY:      # v0.0.20: persistent setting, needed once per process
+            con.execute('PRAGMA journal_mode=WAL')
+            _WAL_READY.add(str(self.db))
         try:
             if write:con.execute('BEGIN IMMEDIATE')
             yield con

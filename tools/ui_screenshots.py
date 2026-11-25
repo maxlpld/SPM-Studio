@@ -209,6 +209,87 @@ def main(argv=None) -> int:
             shot('10_tutorial_welcome', panel)
             panel.close()
 
+    def projects_and_selection():
+        # v0.0.20: two project tabs, several scans picked with Shift + Enter
+        from spm_studio.tutorial import dataset
+        import shutil
+        source = dataset.prepare_workspace()
+        second = tmp / 'Second project'
+        second.mkdir(exist_ok=True)
+        for name in dataset.FILES[:2]:
+            shutil.copy2(source / name, second / name)
+        win.projects.open_folder(source)
+        pump(1.5)
+        win.projects.open_folder(second)
+        pump(1.5)
+        win.projects.activate(0)
+        assert wait_scan(), 'scan did not load'
+        from PySide6.QtCore import QItemSelectionModel
+        b = win.browser
+        b.begin_marking()
+        for row in (0, 2):
+            b.files.selectionModel().setCurrentIndex(b.files.model().index(row, 0),
+                                                     QItemSelectionModel.SelectionFlag.NoUpdate)
+            b.toggle_mark_current()
+        b.end_marking()
+        pump(1.0)
+        for theme in themes[:2]:
+            win._apply_theme(theme)
+            shot(f'12_projects_multiselect_{theme}')
+        win.browser.clear_marks()
+        win._apply_theme('graphite')
+
+    def channel_switch():
+        # v0.0.20: right after a click on another channel (must show that channel or an empty frame)
+        if win.scan is None:
+            return
+        names = list(win.scan.channels)[:3]
+        win.inspector.set_visible_channels(names)
+        pump(1.5)
+        win.inspector.channel.setCurrentText(names[1])
+        shot('13_channel_switch_immediate')
+        pump(1.0)
+        shot('13_channel_switch_done')
+
+    def compare():
+        from spm_studio.ui.research_compare import CompareDialog
+
+        class Store:
+            def runs(self):
+                out = []
+                for i, (name, a) in enumerate((('KBr001_008', .401), ('KBr001_009', .396), ('KBr001_015', .409),
+                                               ('KBr001_021', .404), ('KBr001_030', .398))):
+                    out.append({'result_id': f'r{i}', 'scan_id': name, 'source_path': f'/data/{name}.sxm',
+                                'module_id': 'lattice_measurements', 'status': 'completed',
+                                'created_at': f'2026-11-2{i}T10:00', 'run_folder': '/tmp',
+                                'measurements': [{'key': 'a (nm)', 'table': 'Lattice', 'value': a,
+                                                  'row': {'type': 'KBr'}},
+                                                 {'key': 'angle (deg)', 'table': 'Lattice', 'value': 90 + i * .3,
+                                                  'row': {'type': 'KBr'}}]})
+                return out
+        for theme in themes[:2]:
+            win._apply_theme(theme)
+            dialog = CompareDialog(win, store=Store())
+            dialog.resize(1180, 720)
+            dialog.show()
+            shot(f'14_compare_{theme}', dialog)
+            dialog.close()
+        dialog = CompareDialog(win, store=type('S', (), {'runs': lambda self: []})())
+        dialog.show()
+        shot('14_compare_empty', dialog)
+        dialog.close()
+        win._apply_theme('graphite')
+
+    def theme_studio_window():
+        from spm_studio import theme_studio
+        studio = theme_studio.instance()
+        if studio is None:
+            return
+        w = studio.open()
+        w.resize(1180, 760)
+        shot('15_theme_studio', w)
+        w.close()
+
     def narrow():
         win.resize(1100, 720)
         shot('11_main_narrow_1100x720')
@@ -216,7 +297,9 @@ def main(argv=None) -> int:
 
     for name, fn in (('empty', empty), ('with scan', with_scan), ('tools panel', tools_panel), ('logs', logs),
                      ('settings', settings), ('messages', messages), ('readme', readme), ('documents', documents),
-                     ('3D print', print3d), ('tutorial', tutorial), ('narrow', narrow)):
+                     ('3D print', print3d), ('tutorial', tutorial), ('projects', projects_and_selection),
+                     ('channel switch', channel_switch), ('compare', compare), ('theme studio', theme_studio_window),
+                     ('narrow', narrow)):
         step(name, fn)
     print('FAILED SHOTS:', failures if failures else 'none', flush=True)
     if os.environ.get('SPM_SHOTS_TO_LOG') == '1':

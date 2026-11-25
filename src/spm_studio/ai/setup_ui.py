@@ -167,6 +167,11 @@ class SetupDialog(QDialog):
             scroll=QScrollArea();scroll.setWidgetResizable(True);scroll.setFrameShape(QFrame.Shape.NoFrame)
             scroll.setWidget(widget)
             self.sections.addWidget(scroll)
+        try:
+            from spm_studio.ui.settings_dialog import fit_navigation
+            fit_navigation(self.nav)
+        except Exception:
+            pass
         self.nav.currentRowChanged.connect(self.sections.setCurrentIndex)
         bottom=QHBoxLayout()
         self.next_step=QLabel('');self.next_step.setObjectName('hint');self.next_step.setWordWrap(True)

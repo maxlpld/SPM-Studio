@@ -385,7 +385,9 @@ def whats_new_steps(version: str) -> list[course_mod.Step]:
     except OSError:
         text = ''
     targets = {'tutorial': 'settings_button', 'update': 'settings_button', 'beta': 'settings_button',
-               'to-do': 'todo_button', 'assistant': 'ai_toolbar_button', 'export': 'export_tool'}
+               'to-do': 'todo_button', 'assistant': 'ai_toolbar_button', 'export': 'export_tool',
+               'project': 'folder_button', 'compare': 'compare_tool', 'settings': 'settings_button',
+               'theme': 'settings_button', 'scan list': 'browser.files'}
     steps = []
     for page in state.whats_new_pages(text, version):
         target = next((t for key, t in targets.items() if key in page['title'].lower()), '')
