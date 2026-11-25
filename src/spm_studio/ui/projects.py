@@ -122,8 +122,9 @@ class ProjectManager(QObject):
         self.tabs.setMovable(False)
         self.tabs.setExpanding(False)
         self.tabs.setUsesScrollButtons(True)
-        self.tabs.setElideMode(Qt.TextElideMode.ElideMiddle)
+        self.tabs.setElideMode(Qt.TextElideMode.ElideRight)
         self.tabs.setDocumentMode(True)
+        self.tabs.setDrawBase(False)
         self.tabs.currentChanged.connect(self._tab_changed)
         self.tabs.tabCloseRequested.connect(self.close_project)
 

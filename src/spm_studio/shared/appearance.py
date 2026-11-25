@@ -257,6 +257,8 @@ def _write_assets(tokens):
         'partial.svg': _I.format(c=tokens['accent_fg'], d=ICONS['minus']).replace('stroke-width="1.75"', 'stroke-width="2.6"'),
         'radio.svg': f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="5" fill="{tokens["accent_fg"]}"/></svg>',
         'menu-check.svg': _svg('check', tokens['foreground']),
+        'tab-close.svg': _svg('close', tokens['muted']),            # v0.0.20: project tabs
+        'tab-close-hover.svg': _svg('close', tokens['foreground']),
     }
     for name, text in files.items():
         path = folder / name
@@ -503,6 +505,11 @@ QTabBar::tab:hover {{ color: @fg; }}
 QTabBar::tab:selected {{ color: @fg; border-bottom-color: @accent; font-weight: 600; }}
 QTabBar::tab:disabled {{ color: @subtle; }}
 QTabBar::close-button {{ subcontrol-position: right; }}
+QTabBar#ProjectTabsV0020 {{ background: transparent; }}
+QTabBar#ProjectTabsV0020::tab {{ padding: 5px 10px 5px 12px; min-width: 90px; max-width: 260px; }}
+QTabBar#ProjectTabsV0020::close-button {{ image: {url('tab-close.svg')}; width: 14px; height: 14px; margin-left: 4px;
+    border-radius: 7px; }}
+QTabBar#ProjectTabsV0020::close-button:hover {{ image: {url('tab-close-hover.svg')}; background: @hover; }}
 QScrollArea {{ background: transparent; border: 0; }}
 QScrollArea > QWidget > QWidget {{ background: transparent; }}
 QStackedWidget {{ background: transparent; }}

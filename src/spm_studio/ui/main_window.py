@@ -266,7 +266,7 @@ class MainWindow(QMainWindow):
         # v0.0.20: projects (tabs above the scan list), autosave and crash recovery.
         from .projects import ProjectManager
         self.projects=ProjectManager(self)
-        self.browser.set_project_tabs(self.projects.tabs)
+        self._body_layout.insertWidget(0,self.projects.tabs)
         from spm_studio.shared import watchdog
         watchdog.install(lambda text:self._log(text))
         self._update_channel_navigation()
@@ -510,6 +510,7 @@ class MainWindow(QMainWindow):
         self.action_scroll=scroll_toolbar(self.topbar,header_layout,height=48)
         v.addWidget(header)
         body=QWidget();body_layout=QVBoxLayout(body);body_layout.setContentsMargins(8,8,8,6);body_layout.setSpacing(6)
+        self._body_layout=body_layout      # v0.0.20: the project tabs go on top of the workspace
         v.addWidget(body,1)
         splitter=QSplitter(Qt.Orientation.Horizontal)
         splitter.setObjectName('WorkspaceSplitter')

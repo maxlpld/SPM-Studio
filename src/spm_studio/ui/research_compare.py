@@ -361,7 +361,7 @@ class CompareDialog(QDialog):
         self.table.setSortingEnabled(False)
         header = self.table.horizontalHeader()
         header.setSectionResizeMode(QHeaderView.ResizeMode.ResizeToContents)
-        header.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
+        header.setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)     # detail; scan names and values stay whole
         header.setStretchLastSection(False)
         self.table.itemChanged.connect(self._row_toggled)
         self.table.itemDoubleClicked.connect(lambda _item: self.show_scan())
@@ -377,6 +377,7 @@ class CompareDialog(QDialog):
         self.summary = QLabel('')
         self.summary.setObjectName('CompareSummary')
         self.summary.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        self.summary.setWordWrap(True)
         cv.addWidget(self.summary)
         inner.addWidget(chart_box)
         inner.setSizes([300, 320])
@@ -523,7 +524,8 @@ class CompareDialog(QDialog):
         self.table.blockSignals(False)
         if group:
             module, table, key, unit = group
-            self.caption.setText(f'{ui_label(key)}' + (f' ({unit})' if unit else '') + f' · {ui_label(module)}'
+            self.caption.setText(f'{ui_label(key)}' + (f' ({unit})' if unit and unit not in key else '')
+                                 + f' · {ui_label(module)}'
                                  + (f' · {ui_label(table)}' if table else ''))
         else:
             self.caption.setText('')
