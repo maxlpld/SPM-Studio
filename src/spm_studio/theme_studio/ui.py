@@ -335,7 +335,8 @@ class ThemeStudioWindow(QMainWindow):
         for path in self.ext.window._theme_files():
             if path.stem.startswith('studio_'):
                 continue
-            item = QListWidgetItem(f"{path.stem}  —  {'shipped' if path.stem in SHIPPED else 'theme file'}")
+            from spm_studio.shared.ui_strings import ui_label
+            item = QListWidgetItem(f"{ui_label(path.stem)}  —  {'shipped' if path.stem in SHIPPED else 'theme file'}")
             item.setData(Qt.ItemDataRole.UserRole, ('theme', path.stem))
             if path.stem == current:
                 item.setText(item.text() + '  ✓ active')

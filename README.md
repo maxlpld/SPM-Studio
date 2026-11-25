@@ -84,8 +84,11 @@ its archive.
 - **macOS:** `~/Applications/SPM Studio.app` (Launchpad / Spotlight), or `~/.local/bin/spm-studio`.
 - **Windows:** Start menu or desktop › *SPM Studio*.
 
-Then click **Open** for a `.sxm` or `.gwy` file, or **Dataset** for a folder of scans. Everything else is one
-click away: the **gear button** at the right of the top bar opens *Settings*.
+Then click **Open project** and choose a folder of `.sxm` / `.gwy` scans (or **New project**, then **Add scans**).
+Your work on a project — display, processing, crops, selections, tool settings — is saved automatically in
+`spm-studio-project.json` inside its folder and comes back the next time you open SPM Studio, even after a crash.
+Several projects can be open at once (tabs above the scan list). Everything else is one click away: the
+**gear button** at the right of the top bar opens *Settings*.
 
 ## Guided tutorial
 

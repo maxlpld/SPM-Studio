@@ -216,7 +216,7 @@ def main(argv=None) -> int:
         source = dataset.prepare_workspace()
         second = tmp / 'Second project'
         second.mkdir(exist_ok=True)
-        for name in dataset.FILES[:2]:
+        for name in list(dataset.FILES)[:2]:
             shutil.copy2(source / name, second / name)
         win.projects.open_folder(source)
         pump(1.5)

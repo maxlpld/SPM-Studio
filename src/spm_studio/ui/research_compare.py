@@ -423,6 +423,8 @@ class CompareDialog(QDialog):
         self.table.itemSelectionChanged.connect(self._update_buttons)
         self._split = split
         self.refresh()
+        if not self.groups and self.scope.currentData() == 'project' and self.runs:
+            self.scope.setCurrentIndex(1)       # nothing for this project yet: show every analysed scan
 
     # ------------------------------------------------------------------ data
     def refresh(self, *_):
