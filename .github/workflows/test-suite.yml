@@ -21,7 +21,7 @@ jobs:
   test:
     name: ${{ inputs.os }} · Python ${{ inputs.python-version }}
     runs-on: ${{ inputs.os }}
-    timeout-minutes: 90   # slow shared runners: Windows needs up to ~60 min, Linux up to ~60 min
+    timeout-minutes: 120  # slow shared runners: the full suite has taken up to ~90 min (Linux, Xvfb)
     env:
       QT_QPA_PLATFORM: offscreen
       SPM_STUDIO_USE_GH_CLI: '0'       # tests never use a GitHub sign-in
