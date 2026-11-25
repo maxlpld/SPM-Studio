@@ -98,8 +98,18 @@ def window(app):
     win.show()
     app.processEvents()
     yield win
+    dispose(win)
+
+
+def dispose(win):
+    """Close and really delete a test window (closed windows left alive slow every later stylesheet change)."""
+    from PySide6.QtCore import QCoreApplication, QEvent
+    from PySide6.QtWidgets import QApplication
     win.close()
-    app.processEvents()
+    win.deleteLater()
+    QApplication.processEvents()
+    QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+    QApplication.processEvents()
 
 
 def wait_until(condition, timeout=20.0):
@@ -284,7 +294,7 @@ def test_projects_save_restore_and_switch_without_interference(window, app, home
         assert other.styles[key].colormap == 'afmhot'
     finally:
         other.projects.timer.stop()
-        other.close()
+        dispose(other)
 
 
 def test_unsaved_session_is_recovered_after_a_crash(window, app, home):
@@ -305,7 +315,7 @@ def test_unsaved_session_is_recovered_after_a_crash(window, app, home):
         assert other.projects.current().folder is None
     finally:
         other.projects.timer.stop()
-        other.close()
+        dispose(other)
 
 
 def test_compare_results_groups_quantities_and_draws_them(app, tmp_path):

@@ -33,7 +33,11 @@ def app_window(tmp_path, monkeypatch):
     assert studio is not None and studio.window is win
     app.processEvents()
     yield app, win, studio
+    from PySide6.QtCore import QCoreApplication, QEvent
     win.close()
+    win.deleteLater()
+    app.processEvents()
+    QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
     app.processEvents()
 
 

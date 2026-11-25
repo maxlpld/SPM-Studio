@@ -37,8 +37,6 @@ spm_studio = ["update_config.json", "builtin_modules/*/*.json", "builtin_modules
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-# a test running longer than this prints the stack of every thread (diagnoses a hang on CI)
-faulthandler_timeout = 300
 
 [tool.setuptools]
 include-package-data = true
