@@ -31,6 +31,12 @@ from dataclasses import dataclass, field
 import numpy as np
 
 # Surface lattices (room temperature, nm). γ = angle between a and b.
+# v1.4: ``step`` = monatomic step height (nm) for the Z calibration, from the bulk lattice constant
+# (fcc(111): a/√3; rock salt (001): a/2; layered crystals: interlayer distance c/2), and, for Au(111),
+# ``herringbone`` = period of the 22×√3 reconstruction (nm) for the X/Y calibration without atomic resolution.
+BARTH_1990 = ('J. V. Barth, H. Brune, G. Ertl and R. J. Behm, “Scanning tunneling microscopy observations on the '
+              'reconstructed Au(111) surface: Atomic structure, long-range superstructure, rotational domains, and '
+              'surface defects,” Phys. Rev. B 42, 9307 (1990), doi:10.1103/PhysRevB.42.9307')
 MATERIALS = {
     'Custom': None,
     'KBr(001) — a = 6.65 Å, γ = 90°, diagonal 4.7 Å (Hinaut 2012)': {
@@ -39,18 +45,34 @@ MATERIALS = {
                 'ions of the same species (the square cell seen in NC-AFM images, rotated by 45°)',
         'source': 'A. Hinaut, “Non-contact Atomic Force Microscopy and Kelvin Probe Force Microscopy Studies of '
                   'Triphenylene Derivatives on KBr(001) in Ultra High Vacuum,” Ph.D. thesis, Université '
-                  'Toulouse III – Paul Sabatier (2012).'},
+                  'Toulouse III – Paul Sabatier (2012).',
+        'step': 0.3325, 'step_note': 'monatomic step of rock salt (001) = a/2 = 3.325 Å (a = 6.65 Å, Hinaut 2012)'},
     'NaCl(001) — Cl–Cl square cell': {'a': 0.3988, 'b': 0.3988, 'gamma': 90.0, 'diagonal': 0.5640,
-                                      'note': 'rock salt a0 = 5.640 Å'},
+                                      'note': 'rock salt a0 = 5.640 Å',
+                                      'step': 0.2820, 'step_note': 'monatomic step = a0/2 = 2.820 Å'},
     'KCl(001) — Cl–Cl square cell': {'a': 0.4449, 'b': 0.4449, 'gamma': 90.0, 'diagonal': 0.6293,
-                                     'note': 'rock salt a0 = 6.293 Å'},
+                                     'note': 'rock salt a0 = 6.293 Å',
+                                     'step': 0.31465, 'step_note': 'monatomic step = a0/2 = 3.147 Å'},
     'HOPG / graphene (hexagonal)': {'a': 0.2461, 'b': 0.2461, 'gamma': 120.0, 'diagonal': None,
-                                    'note': 'in-plane a = 2.461 Å'},
-    'Au(111) (1×1)': {'a': 0.2884, 'b': 0.2884, 'gamma': 120.0, 'diagonal': None, 'note': 'a_fcc/√2, a = 4.078 Å'},
-    'Ag(111) (1×1)': {'a': 0.2889, 'b': 0.2889, 'gamma': 120.0, 'diagonal': None, 'note': 'a_fcc/√2, a = 4.086 Å'},
-    'Cu(111) (1×1)': {'a': 0.2556, 'b': 0.2556, 'gamma': 120.0, 'diagonal': None, 'note': 'a_fcc/√2, a = 3.615 Å'},
-    'Si(111)-(7×7)': {'a': 2.688, 'b': 2.688, 'gamma': 120.0, 'diagonal': None, 'note': '7 × 3.840 Å'},
-    'h-BN (hexagonal)': {'a': 0.2504, 'b': 0.2504, 'gamma': 120.0, 'diagonal': None, 'note': 'a = 2.504 Å'},
+                                    'note': 'in-plane a = 2.461 Å',
+                                    'step': 0.3354, 'step_note': 'single graphene-layer step = c/2 = 3.354 Å'},
+    'Au(111) (1×1)': {'a': 0.2884, 'b': 0.2884, 'gamma': 120.0, 'diagonal': None, 'note': 'a_fcc/√2, a = 4.078 Å',
+                      'step': 0.23545,
+                      'step_note': 'monatomic step = a_fcc/√3 = 2.355 Å (a_fcc = 4.078 Å); Barth et al. (1990) '
+                                   'observe monatomic steps of ≈ 2.4 Å',
+                      'herringbone': 22 * 0.2884,
+                      'herringbone_note': '22×√3 reconstruction: pairs of corrugation lines every 22 × 2.884 Å = '
+                                          '63.4 Å along [1-10] (measured 63 Å), bent by 120° in the herringbone '
+                                          '(zigzag) pattern (≈ 250 Å between bends)',
+                      'herringbone_source': BARTH_1990, 'step_source': BARTH_1990},
+    'Ag(111) (1×1)': {'a': 0.2889, 'b': 0.2889, 'gamma': 120.0, 'diagonal': None, 'note': 'a_fcc/√2, a = 4.086 Å',
+                      'step': 0.2359, 'step_note': 'monatomic step = a_fcc/√3 = 2.359 Å'},
+    'Cu(111) (1×1)': {'a': 0.2556, 'b': 0.2556, 'gamma': 120.0, 'diagonal': None, 'note': 'a_fcc/√2, a = 3.615 Å',
+                      'step': 0.2087, 'step_note': 'monatomic step = a_fcc/√3 = 2.087 Å'},
+    'Si(111)-(7×7)': {'a': 2.688, 'b': 2.688, 'gamma': 120.0, 'diagonal': None, 'note': '7 × 3.840 Å',
+                      'step': 0.3136, 'step_note': 'bilayer step = a/√3 = 3.136 Å (a = 5.431 Å)'},
+    'h-BN (hexagonal)': {'a': 0.2504, 'b': 0.2504, 'gamma': 120.0, 'diagonal': None, 'note': 'a = 2.504 Å',
+                         'step': 0.333, 'step_note': 'single-layer step = c/2 = 3.33 Å'},
 }
 
 
@@ -328,6 +350,44 @@ def acquisition_from_header(h: dict) -> dict:
         values = [float(x) for x in re.findall(r'[-+]?\d*\.?\d+(?:[eE][-+]?\d+)?', off)][:2]
         if len(values) == 2:
             out['offset_nm'] = (values[0] * 1e9, values[1] * 1e9)
+    return out
+
+
+def z_calibration_from_header(h: dict) -> dict:
+    """Previous Z piezo calibration (m/V) and Z drift compensation written in the header (v1.4).
+
+    Nanonis: ``Piezo Configuration>Calib. Z (m/V)``, ``Piezo Configuration>Drift Z (m/s)`` and
+    ``HV Gain Z``. Other spellings (``Z calibration (nm/V)``) are accepted. Missing → ``None``.
+    """
+    out = {'cz': None, 'source_key': None, 'drift_z_nm_per_s': None, 'hv_gain_z': None}
+    for key, value in h.items():
+        k = key.upper()
+        if (out['cz'] is None and re.search(r'CALIB\w*\.?\s*Z\b|\bZ\s+CALIB', k)
+                and 'CURRENT' not in k and 'BIAS' not in k):
+            n = _number(value)
+            if n is not None and n > 0:
+                if 'NM/V' in k:
+                    n *= 1e-9
+                elif 'M/V' not in k and n > 1e-3:
+                    n = None                          # not a length-per-volt constant
+                if n:
+                    out['cz'] = n
+                    out['source_key'] = key
+        if re.search(r'DRIFT\s*Z\b', k) and not ('STATUS' in k or 'ON/OFF' in k):
+            n = _number(value)
+            if n is None:
+                continue
+            if 'NM/S' in k:
+                factor = 1.0
+            elif 'M/MIN' in k:
+                factor = 1e9 / 60
+            elif 'M/S' in k or abs(n) <= 1e-3:
+                factor = 1e9
+            else:
+                continue
+            out['drift_z_nm_per_s'] = n * factor
+        if 'HV GAIN' in k and re.search(r'\bZ\b', k):
+            out['hv_gain_z'] = _number(value)
     return out
 
 

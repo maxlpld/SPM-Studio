@@ -3,6 +3,9 @@
 Uses every scan open in SPM Studio (same channel as the active one), detects the primitive
 lattice of each with the Lattice measurements tool's FFT engine, and fits the new X and Y
 piezo calibration constants (see calibration_core.py for the model).
+
+1.4: X/Y can also come from the Au(111) herringbone reconstruction (herringbone.py), and Z from
+monatomic steps on the topography channel (z_steps.py, z_report.py).
 """
 from __future__ import annotations
 
@@ -77,6 +80,26 @@ def _crop_rows_of_aborted_scan(data):
 
 
 # --------------------------------------------------------------------------- inputs
+def _all_rois(ctx):
+    """Every selection drawn on the active scan (v1.4 keeps several: lines, rectangles)."""
+    rois = list(getattr(ctx, 'rois', None) or [])
+    roi = getattr(ctx, 'roi', None)
+    if roi is not None and not any(r.kind == roi.kind and tuple(map(tuple, r.points_px)) ==
+                                   tuple(map(tuple, roi.points_px)) for r in rois):
+        rois.append(roi)
+    return rois
+
+
+def _lattice_rectangle(ctx):
+    """The rectangle that limits the lattice measurement: the current selection if it is a rectangle,
+    else the last rectangle drawn."""
+    roi = getattr(ctx, 'roi', None)
+    if roi is not None and roi.kind == 'rectangle' and len(roi.points_px) == 2:
+        return roi
+    rects = [r for r in _all_rois(ctx) if r.kind == 'rectangle' and len(r.points_px) == 2]
+    return rects[-1] if rects else None
+
+
 def _scan_entries(ctx):
     """[(path, is_current)] for every open file (the active scan first)."""
     paths = [Path(ctx.scan_path)]
@@ -156,8 +179,9 @@ def collect(ctx, ref, log):
                 active = current and trace == ctx.direction
                 source = np.asarray(ctx.data, float) if active else raw
                 region = ''
-                if active and ctx.roi is not None and ctx.roi.kind == 'rectangle':
-                    (c0, r0), (c1, r1) = ctx.roi.points_px
+                rect = _lattice_rectangle(ctx) if active else None
+                if rect is not None:
+                    (c0, r0), (c1, r1) = rect.points_px
                     x0, x1 = sorted((max(0, int(round(c0))), min(nx, int(round(c1)))))
                     y0, y1 = sorted((max(0, int(round(r0))), min(ny, int(round(r1)))))
                     if min(x1 - x0, y1 - y0) >= 32:
@@ -201,10 +225,11 @@ def collect(ctx, ref, log):
     return scans, skipped
 
 
-def select_reference(ctx, scans, skipped, ref, log):
+def select_reference(ctx, scans, skipped, ref, log, automatic=None):
     """Match the reference description to the detected cells, then drop the scans that are off."""
     tolerance = float(ctx.parameters.get('max_deviation_percent', 25.0)) / 100
-    automatic = bool(ctx.parameters.get('auto_match_cell', True))
+    if automatic is None:
+        automatic = bool(ctx.parameters.get('auto_match_cell', True))
     cells = [cc.cell_parameters(s.basis_image_nm) for s in scans]
     chosen, why, median_dev = cc.choose_reference(cells, ref, tolerance, automatic)
     if chosen is not ref:
@@ -247,8 +272,13 @@ def _mix(color, other, t):
     return '#%02x%02x%02x' % (int(r * 255), int(g * 255), int(b * 255))
 
 
-def make_decorator(old_basis, new_basis, new_size_nm, rows_lattice, rows_calibration, colors, corners):
-    """Painter callback: old (pale, dashed) and new (dark, solid) a/b arrows + two legends."""
+def make_decorator(old_basis, new_basis, new_size_nm, rows_lattice, rows_calibration, colors, corners,
+                   outlines=None, outline_shape=None, outline_color='#7ee081'):
+    """Painter callback: old (pale, dashed) and new (dark, solid) a/b arrows + two legends.
+
+    ``outlines`` (v1.4): polygons [(col, row), …] in the pixels of the drawn image (shape
+    ``outline_shape``), e.g. the region where the herringbones were measured.
+    """
 
     def decorate(painter, rect):
         from PySide6.QtCore import QPointF, QRectF, Qt
@@ -280,6 +310,16 @@ def make_decorator(old_basis, new_basis, new_size_nm, rows_lattice, rows_calibra
 
         painter.save()
         painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+        if outlines and outline_shape:
+            ny_o, nx_o = outline_shape
+            for poly in outlines:
+                pts = QPolygonF([QPointF(rect.left() + (c + .5) / nx_o * rect.width(),
+                                         rect.top() + (r + .5) / ny_o * rect.height()) for c, r in poly])
+                for pen in (QPen(QColor(0, 0, 0, 150), width * 1.9), QPen(QColor(outline_color), width * .9)):
+                    pen.setStyle(Qt.PenStyle.DashLine)
+                    painter.setPen(pen)
+                    painter.setBrush(Qt.BrushStyle.NoBrush)
+                    painter.drawPolygon(pts)
         # new (solid, full colour) first, old (pale, dashed) on top so both stay visible
         for i in range(2):
             arrow(np.asarray(new_basis)[:, i], colors['new'][i], False, width * 1.25)
@@ -332,7 +372,8 @@ def make_decorator(old_basis, new_basis, new_size_nm, rows_lattice, rows_calibra
 
 
 def matplotlib_overlay(base, data, size_nm, old_basis, new_basis, rows, cal_rows, colors, corners, formats,
-                       figure_title='', colorbar_label='', colormap='', unit=''):
+                       figure_title='', colorbar_label='', colormap='', unit='', outlines=None,
+                       outline_color='#7ee081'):
     """Same content as the Export-panel overlay, drawn with Matplotlib (always available)."""
     import matplotlib
     matplotlib.use('Agg', force=False)
@@ -359,6 +400,12 @@ def matplotlib_overlay(base, data, size_nm, old_basis, new_basis, rows, cal_rows
     ax.set_yticks([])
     cx, cy = w / 2, h / 2
     stroke = [patheffects.Stroke(linewidth=3, foreground='black', alpha=.6), patheffects.Normal()]
+    ny_d, nx_d = data.shape
+    for poly in outlines or ():
+        xs = [(c + .5) / nx_d * w for c, _r in poly] + [(poly[0][0] + .5) / nx_d * w]
+        ys = [h - (r + .5) / ny_d * h for _c, r in poly] + [h - (poly[0][1] + .5) / ny_d * h]
+        line, = ax.plot(xs, ys, color=outline_color, lw=1.2, ls='--')
+        line.set_path_effects(stroke)
     for basis, palette, dashed, lw in ((new_basis, colors['new'], False, 2.0), (old_basis, colors['old'], True, 1.1)):
         for i in range(2):
             vx, vy = np.asarray(basis)[:, i]
@@ -556,26 +603,321 @@ def drift_pairs(scans, fit, fb, log):
     return out
 
 
-# --------------------------------------------------------------------------- run
-def run(ctx):
+# --------------------------------------------------------------------------- v1.4: method choice
+XY_METHODS = ('Automatic (atomic lattice, else Au(111) herringbones)', 'Atomic lattice (FFT)',
+              'Au(111) herringbone reconstruction', 'Off (Z only)')
+Z_MODES = ('Automatic (when monatomic steps are found)', 'Off', 'Required (stop if no step is found)')
+
+
+class NoUsableScan(ValueError):
+    """No scan gave the reference lattice (the message lists what was detected)."""
+
+
+def _xy_method(p):
+    text = str(p.get('xy_method', XY_METHODS[0]) or XY_METHODS[0]).lower()
+    if text.startswith('off'):
+        return 'off'
+    if text.startswith('atomic'):
+        return 'lattice'
+    if 'herringbone' in text and not text.startswith('auto'):
+        return 'herringbone'
+    return 'auto'
+
+
+def _z_mode(p):
+    text = str(p.get('z_calibration', Z_MODES[0]) or Z_MODES[0]).lower()
+    if text.startswith('off'):
+        return 'off'
+    if text.startswith('required'):
+        return 'required'
+    return 'auto'
+
+
+class _Stage:
+    """``ctx`` with its progress mapped onto a part of the bar (X/Y first, then Z)."""
+
+    def __init__(self, ctx, lo, hi):
+        self._ctx, self._lo, self._hi = ctx, float(lo), float(hi)
+
+    def __getattr__(self, name):
+        return getattr(self._ctx, name)
+
+    def progress(self, value, message=''):
+        self._ctx.progress(self._lo + (self._hi - self._lo) * max(0., min(100., float(value))) / 100, message)
+
+
+# --------------------------------------------------------------------------- v1.4: Au(111) herringbones
+def herringbone_period_nm(p):
+    """Period of the herringbone line pairs (nm) and where it comes from."""
+    typed = float(p.get('herringbone_period_angstrom', 0) or 0)
+    if typed > 0:
+        return typed / 10, f'{typed:.2f} Å (entered in Tool settings)'
+    _name, preset = cc.find_material(p.get('material', 'Custom'))
+    if preset and preset.get('herringbone'):
+        return float(preset['herringbone']), (f'{preset["herringbone"] * 10:.1f} Å — {preset["herringbone_note"]}. '
+                                              f'Source: {preset["herringbone_source"]}')
+    return None, ''
+
+
+def herringbone_reference(p):
+    import herringbone as hb
+    period, why = herringbone_period_nm(p)
+    if not period:
+        raise NoUsableScan('The herringbone method needs Au(111): choose “Au(111) (1×1)” as reference crystal, '
+                           'or enter the herringbone period (Å) in Tool settings.')
+    a = hb.equivalent_cell_nm(period)
+    notes = (f'Herringbone period d = {why}',
+             f'The two line families (normals at 120°) are fitted as their dual cell: hexagonal a = 2d/√3 = '
+             f'{a * 10:.1f} Å, γ = 120° (it transforms exactly like a lattice under calibration and drift).')
+    return cc.Reference(a, a, 120.0, None, f'Au(111) herringbone, d = {period * 10:.1f} Å', notes), period
+
+
+def _region_rois(ctx):
+    """Rectangles and closed lines (≥ 3 points) drawn around the herringbones."""
+    return [r for r in _all_rois(ctx) if (r.kind == 'rectangle' and len(r.points_px) == 2)
+            or (r.kind == 'line' and len(r.points_px) >= 3)]
+
+
+def _step_height_m(p):
+    """Monatomic step height (m) of the crystal, or None."""
+    typed = float(p.get('step_height_angstrom', 0) or 0)
+    if typed > 0:
+        return typed * 1e-10, f'{typed:.3f} Å (entered in Tool settings)'
+    _name, preset = cc.find_material(p.get('material', 'Custom'))
+    if preset and preset.get('step'):
+        note = preset.get('step_note', '')
+        if preset.get('step_source'):
+            note += '. Source: ' + preset['step_source']
+        return float(preset['step']) * 1e-9, f'{preset["step"] * 10:.3f} Å — {note}'
+    return None, ''
+
+
+def collect_herringbone(ctx, period_nm, log):
+    """Herringbone line families on every usable scan / trace → equivalent dual cells (ScanLattice)."""
+    import herringbone as hb
+    p = ctx.parameters
+    tolerance = float(p.get('max_deviation_percent', 25.0)) / 100
+    override = bool(p.get('override_metadata', False))
+    fallback = _fallback(ctx)
+    step_h, _why = _step_height_m(p)
+    scans, skipped = [], []
+    entries = _scan_entries(ctx)
+    regions = _region_rois(ctx)
+    from spm_studio.core.io import read_scan
+    for n, path in enumerate(entries):
+        ctx.progress(5 + 55 * n / max(1, len(entries)), f'Herringbones of {path.name}')
+        current = n == 0
+        try:
+            if current:
+                metadata = ctx.metadata or {}
+                geometry = ctx.geometry
+                arrays = {t: ctx.image(ctx.channel, t) for t in ('forward', 'backward')
+                          if f'{ctx.channel}|{t}' in ctx.arrays}
+                arrays[ctx.direction] = ctx.data
+            else:
+                scan = read_scan(path)
+                if ctx.channel not in scan.channels:
+                    skipped.append((path.name, f'no channel {ctx.channel}'))
+                    continue
+                channel = scan.channels[ctx.channel]
+                metadata = scan.metadata or {}
+                geometry = channel.geometry
+                arrays = dict(channel.traces)
+        except Exception as exc:
+            skipped.append((path.name, f'could not be read: {exc}'))
+            continue
+        if not geometry.size_m:
+            skipped.append((path.name, 'no physical scan size in the file'))
+            continue
+        header = cc.header_dict(metadata)
+        found = cc.calibration_from_header(header)
+        acquisition = cc.acquisition_from_header(header)
+        cx, cy = found['cx'], found['cy']
+        if override or cx is None or cy is None:
+            cx = fallback[0] if (override or cx is None) and fallback[0] else cx
+            cy = fallback[1] if (override or cy is None) and fallback[1] else cy
+        relative = cx is None or cy is None
+        if relative:
+            cx, cy = 1.0, 1.0
+        slow = str(geometry.scan_direction or '').strip().lower()
+        angle = float(geometry.angle_deg or 0.0)
+        for trace in _traces(ctx, arrays):
+            label = f'{path.stem} · {trace}'
+            active = current and trace == ctx.direction
+            try:
+                raw = np.asarray(arrays[trace], float)
+                ny, nx = raw.shape
+                cropped, rows = _crop_rows_of_aborted_scan(raw if not active else np.asarray(ctx.data, float))
+                width_nm = geometry.size_m[0] * 1e9
+                height_nm = geometry.size_m[1] * 1e9 * cropped.shape[0] / ny
+                dx, dy = width_nm / cropped.shape[1], height_nm / cropped.shape[0]
+                mask, polygons = (None, [])
+                if active and regions:
+                    off = rows.start or 0
+                    shifted = [type(r)(r.kind, tuple((c, rr - off) for c, rr in r.points_px)) for r in regions]
+                    mask, polygons = hb.region_mask(cropped.shape, shifted)
+                    if not mask.any():
+                        mask, polygons = None, []
+                    else:
+                        log(f'{label}: herringbones measured inside the drawn region only')
+                unit = (getattr(ctx, 'channel_units', None) or {}).get(ctx.channel, ctx.unit)
+                det = hb.detect(cropped, dx, dy, period_nm, tolerance, region=mask,
+                                step_height_m=step_h if str(unit).strip() == 'm' else None)
+            except hb.HerringboneNotFound as exc:
+                hint = ('' if (active and regions) else
+                        ' — if you see herringbones on this scan, draw around them (rectangle, or a closed line '
+                        'with Shift+click) and run again')
+                skipped.append((label, f'herringbones not found automatically ({exc}){hint if current else ""}'))
+                continue
+            except Exception as exc:
+                skipped.append((label, f'herringbone analysis failed ({exc})'))
+                continue
+            basis = np.asarray(det['dual_basis_nm'], float)
+            gradient = cc.time_gradient(trace, slow, (width_nm, height_nm), cropped.shape, acquisition['line_time'])
+            scans.append(cc.ScanLattice(label, basis, angle, cx, cy, (width_nm, height_nm), cropped.shape,
+                                        slow, trace, active,
+                                        {'path': str(path), 'relative': relative,
+                                         'line_time': acquisition['line_time'],
+                                         'header_drift': acquisition['drift'],
+                                         'drift_status': acquisition['drift_status'],
+                                         'timestamp': acquisition['timestamp'],
+                                         'offset_nm': acquisition['offset_nm'],
+                                         'calibration_keys': found['source_keys'],
+                                         'drift_correction': found['drift_correction'],
+                                         'second_order': found['second_order'],
+                                         'herringbone': det, 'region_polygons': polygons,
+                                         # terraces flattened so that the herringbones are visible
+                                         'display': (hb.flatten_terraces(cropped, dx, dy, step_h)
+                                                     if step_h and str(unit).strip() == 'm'
+                                                     else np.asarray(cropped, float))},
+                                        time_gradient=gradient))
+            log(f'{label}: herringbone periods {det["periods_nm"][0] * 10:.2f} Å and {det["periods_nm"][1] * 10:.2f} Å '
+                f'(line families at {det["angles_deg"][0]:.1f}° and {det["angles_deg"][1]:.1f}°, '
+                f'{det["separation_deg"]:.1f}° apart; S/N {min(det["snr"]):.0f}; {det["method"]}), fast axis '
+                f'{scans[-1].fast_axis}, slow {slow or "?"}, previous calibration '
+                + ('unknown (relative factors)' if relative else f'X {cx * 1e9:.4g} nm/V, Y {cy * 1e9:.4g} nm/V'))
+    return scans, skipped
+
+
+def _calibration_rows(scan, fit, fallback, ccal):
+    relative = scan.extra.get('relative')
+    cx_old = scan.cx_old or fallback[0]
+    cy_old = scan.cy_old or fallback[1]
+    pale = _mix(ccal, '#ffffff', .55)
+    if relative:
+        rows = [('X', '×1', f'×{fit.cx / cx_old:.4f}', pale, ccal), ('Y', '×1', f'×{fit.cy / cy_old:.4f}', pale, ccal)]
+    else:
+        rows = [('X', f'{cx_old * 1e9:.4g}', f'{fit.cx * 1e9:.4g} nm/V', pale, ccal),
+                ('Y', f'{cy_old * 1e9:.4g}', f'{fit.cy * 1e9:.4g} nm/V', pale, ccal)]
+    v_total = np.asarray(scan.drift_known, float) + np.asarray(fit.drift, float)
+    if np.any(v_total):
+        rows.append(('drift', '', _fmt_drift(v_total), pale, '#f2f2f2'))
+    return rows
+
+
+def herringbone_figure(ctx, scan, fit, ref, fallback, log):
+    """The scan with the herringbones used: period vectors before (pale, dashed) → after, region outline."""
+    import herringbone as hb
+    from spm_studio.core import script_figures as figures
+    p = ctx.parameters
+    det = scan.extra['herringbone']
+    _basis, matrix = cc.corrected_basis_image(scan, fit, fallback)
+    w, h = scan.size_nm
+    new_size = (w * float(np.linalg.norm(matrix[:, 0])), h * float(np.linalg.norm(matrix[:, 1])))
+    k_before = [np.asarray(k, float) for k in det['k_nm_inv']]
+    k_after = hb.corrected_wavevectors(k_before, matrix)
+    old_vec, new_vec = hb.period_vectors(k_before), hb.period_vectors(k_after)
+    d0 = [1 / float(np.linalg.norm(k)) for k in k_before]
+    d1 = [1 / float(np.linalg.norm(k)) for k in k_after]
+
+    def line_angle(k1, k2):
+        c = abs(float(k1 @ k2)) / (np.linalg.norm(k1) * np.linalg.norm(k2))
+        return 180 - math.degrees(math.acos(max(-1., min(1., c))))       # angle between the lines (120°)
+    g0, g1 = line_angle(*k_before), line_angle(*k_after)
+    n_cells = max(1, int(round(.2 * min(new_size) / max(max(d1), 1e-9))))
+    ca = str(p.get('vector_a_color', '#16d8f5'))
+    cb = str(p.get('vector_b_color', '#fbb748'))
+    ccal = str(p.get('calibration_color', '#7ee081'))
+    old = (_mix(ca, '#ffffff', .55), _mix(cb, '#ffffff', .55))
+    new = (ca, cb)
+    rows = [('d₁', f'{d0[0] * 10:.2f} Å', f'{d1[0] * 10:.2f} Å', old[0], new[0]),
+            ('d₂', f'{d0[1] * 10:.2f} Å', f'{d1[1] * 10:.2f} Å', old[1], new[1]),
+            ('lines', f'{g0:.1f}°', f'{g1:.1f}°', '#d8d8d8', '#ffffff'),
+            ('theory', '', f'{ref.a_nm * math.sqrt(3) / 2 * 10:.1f} Å, 120°', '#d8d8d8', '#f2f2f2')]
+    if n_cells > 1:
+        rows.append(('arrows', '', f'{n_cells} × d₁,  {n_cells} × d₂', '#d8d8d8', '#f2f2f2'))
+    cal_rows = _calibration_rows(scan, fit, fallback, ccal)
+    corners = (str(p.get('lattice_legend_corner', 'top_left')), str(p.get('calibration_legend_corner', 'top_right')))
+    if corners[0] == corners[1]:
+        corners = (corners[0], 'top_right' if corners[0] != 'top_right' else 'top_left')
+    data = np.asarray(scan.extra.get('display', ctx.data), float)
+    outlines = scan.extra.get('region_polygons') or []
+    decorate = make_decorator(old_vec * n_cells, new_vec * n_cells, new_size, rows, cal_rows,
+                              {'old': old, 'new': new}, corners, outlines=outlines, outline_shape=data.shape,
+                              outline_color=ccal)
+    cfg = getattr(ctx, 'plot_config', None) or {'schema_version': 1}
+    style = figures.scan_display_style(cfg, ctx.channel, colormap_override=p.get('scan_colormap', ''))
+    title = figures.colorbar_title(cfg, ctx.channel, '')
+    formats = tuple(getattr(ctx, 'plot_formats', None) or ('svg',))
+    base = ctx.output_dir / 'calibration_herringbone_overlay'
+    try:
+        written = figures.export_scan_figure(base, scan_path=scan.extra.get('path') or ctx.scan_path,
+                                             data=data, size_nm=new_size, channel=ctx.channel, unit=ctx.unit,
+                                             plot_config=cfg, formats=formats, style=style, decorate=decorate,
+                                             title=title, figure_title=str(p.get('figure_title', '') or ''))
+        written = [Path(x) for x in written if x and Path(x).is_file()]
+        if not written:
+            raise RuntimeError('the Export-panel renderer wrote no file')
+    except Exception:
+        import traceback
+        log('Export-panel renderer failed, the herringbone figure is drawn with Matplotlib instead:\n'
+            + traceback.format_exc(limit=6), 'warning')
+        written = matplotlib_overlay(base, data, new_size, old_vec * n_cells, new_vec * n_cells, rows, cal_rows,
+                                     {'old': old, 'new': new}, corners, formats, str(p.get('figure_title', '') or ''),
+                                     title, p.get('scan_colormap', ''), ctx.unit, outlines=outlines,
+                                     outline_color=ccal)
+    for path in written:
+        ctx.result_file(path, 'Herringbones before → after calibration · ' + path.suffix[1:].upper())
+    return written, (d0[0], d0[1], g0), (d1[0], d1[1], g1), new_size
+
+
+# --------------------------------------------------------------------------- X/Y run
+def run_xy(ctx, method):
+    """X/Y calibration with the atomic lattice or the Au(111) herringbones; returns a dict for the Z part."""
     p = ctx.parameters
     log = ctx.log
-    ref = cc.reference_from_parameters(p)
-    short, long_ = ref.diagonals()
-    log(f'Reference {ref.name}: a = {ref.a_nm * 10:.4f} Å, b = {ref.b_nm * 10:.4f} Å'
-        + (f', γ = {ref.gamma_deg:g}°' if ref.gamma_deg else '')
-        + (f', diagonals {", ".join(f"{d * 10:.4f} Å" for d in (short, long_) if d)}' if (short or long_) else ''))
-    for note in ref.notes:
-        log(note)
     fallback = _fallback(ctx)
-    detected, skipped = collect(ctx, ref, log)
+    if method == 'herringbone':
+        ref, period = herringbone_reference(p)
+        log(f'X/Y reference: {ref.name} (equivalent cell a = b = {ref.a_nm * 10:.1f} Å, γ = 120°)')
+        for note in ref.notes:
+            log(note)
+        log('Accuracy: the herringbone period is a weaker standard than an atomic lattice (≈ 1–2 %: 22 or 23 '
+            'atoms per cell, strain near steps and elbows); use atomic resolution when you can.')
+        detected, skipped = collect_herringbone(ctx, period, log)
+        automatic = False
+    else:
+        ref = cc.reference_from_parameters(p)
+        short, long_ = ref.diagonals()
+        log(f'Reference {ref.name}: a = {ref.a_nm * 10:.4f} Å, b = {ref.b_nm * 10:.4f} Å'
+            + (f', γ = {ref.gamma_deg:g}°' if ref.gamma_deg else '')
+            + (f', diagonals {", ".join(f"{d * 10:.4f} Å" for d in (short, long_) if d)}' if (short or long_) else ''))
+        for note in ref.notes:
+            log(note)
+        detected, skipped = collect(ctx, ref, log)
+        automatic = None
     cells = [(s.name, cc.cell_parameters(s.basis_image_nm)) for s in detected]
     entered = ref
-    scans, ref, ref_why = select_reference(ctx, detected, skipped, ref, log)
+    scans, ref, ref_why = select_reference(ctx, detected, skipped, ref, log, automatic)
     for name, why in skipped:
         log(f'{name}: {why}', 'warning')
     if not scans:
-        raise ValueError(_no_scan_message(entered, cells, float(p.get('max_deviation_percent', 25.0)) / 100))
+        if method == 'herringbone':
+            raise NoUsableScan('No scan could be used for the herringbone calibration.\n'
+                               + '\n'.join(f'  {n}: {w}' for n, w in skipped[:8])
+                               + '\nIf you see the herringbones, draw around them on the active scan (rectangle, or '
+                                 'a closed line with Shift+click) and run again.')
+        raise NoUsableScan(_no_scan_message(entered, cells, float(p.get('max_deviation_percent', 25.0)) / 100))
     relative = any(s.extra.get('relative') for s in scans)
     if relative and not all(s.extra.get('relative') for s in scans):
         raise ValueError('Some scans have a previous calibration in their header and others not. Enter the previous '
@@ -601,7 +943,8 @@ def run(ctx):
     kx, ky = fit.cx / ref_cx, fit.cy / ref_cy
     unit = '×' if relative else 'nm/V'
     scale = 1 if relative else 1e9
-    rows = [['Previous calibration X', ref_cx * scale, unit], ['New calibration X', fit.cx * scale, unit],
+    rows = [['Method', 'Au(111) herringbones (22×√3)' if method == 'herringbone' else 'atomic lattice (FFT)', ''],
+            ['Previous calibration X', ref_cx * scale, unit], ['New calibration X', fit.cx * scale, unit],
             ['σ X (fit)', fit.sigma_cx * scale, unit]]
     if len(boot):
         lo, hi = np.percentile(boot[:, 0], [2.5, 97.5]) * scale
@@ -626,7 +969,8 @@ def run(ctx):
                      'nm/min'])
     ctx.result_table(['quantity', 'value', 'unit'], rows, 'Microscope calibration')
     log(f'NEW CALIBRATION  X = {fit.cx * scale:.5g} {unit} (×{kx:.4f}),  Y = {fit.cy * scale:.5g} {unit} '
-        f'(×{ky:.4f})' + (f',  axis skew {fit.skew_deg:.2f}°' if fit_skew else ''))
+        f'(×{ky:.4f})' + (f',  axis skew {fit.skew_deg:.2f}°' if fit_skew else '')
+        + ('  [Au(111) herringbones]' if method == 'herringbone' else ''))
     if relative:
         log('The previous calibration was not found in the files: the values are correction factors. '
             'New calibration = factor × the calibration used for these scans.', 'warning')
@@ -649,33 +993,44 @@ def run(ctx):
         w.writerows(vector_rows)
     ctx.result_file(ctx.output_dir / 'calibration_vectors.csv', 'Every lattice vector before / after')
     ctx.result_table(columns, [[r[0], r[1]] + [round(v, 4) if isinstance(v, float) else v for v in r[2:]]
-                               for r in vector_rows], 'Lattice vectors before → after')
+                               for r in vector_rows],
+                     'Herringbone dual-cell vectors before → after' if method == 'herringbone'
+                     else 'Lattice vectors before → after')
 
     # ---- figures
     ctx.progress(80, 'Statistics figure')
     try:
         from calibration_plots import statistics_figure
-        statistics_figure(ctx, scans, equations, fit, ref, boot, loo, singles, relative, fb, pairs)
+        statistics_figure(ctx, scans, equations, fit, ref, boot, loo, singles, relative, fb, pairs,
+                          label='Herringbone dual cell · ' if method == 'herringbone' else '')
     except Exception as exc:
         log(f'Statistics figure could not be drawn: {exc}', 'warning')
     current = next((s for s in scans if s.is_current), None)
     before_after = None
     if current is None:
         current = scans[0]
-        log(f'The active scan gave no usable lattice: the before → after figure is drawn on {current.name}.',
-            'warning')
-    ctx.progress(90, 'Lattice figure before → after')
+        log(f'The active scan gave no usable {"herringbones" if method == "herringbone" else "lattice"}: the '
+            f'before → after figure is drawn on {current.name}.', 'warning')
+    ctx.progress(90, 'Figure before → after')
     try:
-        _w, before, after, new_size = publication_figure(ctx, current, fit, ref, fb, log)
-        before_after = {'scan': current.name, 'before': before, 'after': after, 'new_size_nm': new_size}
-        log(f'Before → after figure: {current.name}  a {before[0] * 10:.3f} → {after[0] * 10:.3f} Å, '
-            f'b {before[1] * 10:.3f} → {after[1] * 10:.3f} Å, γ {before[2]:.2f} → {after[2]:.2f}°')
+        if method == 'herringbone':
+            _w, before, after, new_size = herringbone_figure(ctx, current, fit, ref, fb, log)
+            before_after = {'scan': current.name, 'periods_before_nm': before[:2], 'lines_angle_before_deg': before[2],
+                            'periods_after_nm': after[:2], 'lines_angle_after_deg': after[2], 'new_size_nm': new_size}
+            log(f'Before → after figure: {current.name}  d₁ {before[0] * 10:.2f} → {after[0] * 10:.2f} Å, '
+                f'd₂ {before[1] * 10:.2f} → {after[1] * 10:.2f} Å, lines {before[2]:.1f} → {after[2]:.1f}°')
+        else:
+            _w, before, after, new_size = publication_figure(ctx, current, fit, ref, fb, log)
+            before_after = {'scan': current.name, 'before': before, 'after': after, 'new_size_nm': new_size}
+            log(f'Before → after figure: {current.name}  a {before[0] * 10:.3f} → {after[0] * 10:.3f} Å, '
+                f'b {before[1] * 10:.3f} → {after[1] * 10:.3f} Å, γ {before[2]:.2f} → {after[2]:.2f}°')
     except Exception:
         import traceback
         log('Before → after figure could not be drawn:\n' + traceback.format_exc(limit=8), 'warning')
 
     result = {
         'schema_version': 1, 'kind': 'spm_studio_xy_calibration',
+        'method': 'herringbone' if method == 'herringbone' else 'lattice',
         'reference': {'name': ref.name, 'a_nm': ref.a_nm, 'b_nm': ref.b_nm, 'gamma_deg': ref.gamma_deg,
                       'diagonal_nm': ref.diagonal_nm, 'interpretation': ref_why,
                       'entered_a_nm': entered.a_nm, 'entered_b_nm': entered.b_nm, 'notes': list(entered.notes)},
@@ -711,8 +1066,79 @@ def run(ctx):
         'model': 'L² = Vx²·cx² + Vy²·cy² (+ 2VxVy·cxy); V = piezo-frame vector / previous calibration; weighted '
                  'linear least squares over every a, b and diagonal of every scan.',
     }
+    if method == 'herringbone':
+        result['herringbone'] = {
+            'period_nm': ref.a_nm * math.sqrt(3) / 2, 'source': cc.BARTH_1990,
+            'equivalent_cell': 'dual basis of the two line families (a_i·k_j = δ_ij), hexagonal a = 2d/√3, γ = 120°',
+            'per_scan': [{'scan': s.name,
+                          'periods_nm': [float(x) for x in s.extra['herringbone']['periods_nm']],
+                          'line_family_angles_deg': [float(x) for x in s.extra['herringbone']['angles_deg']],
+                          'signal_to_noise': [float(x) for x in s.extra['herringbone']['snr']],
+                          'wave_vectors_nm_inv': [list(map(float, k)) for k in s.extra['herringbone']['k_nm_inv']],
+                          'estimator': s.extra['herringbone'].get('method'),
+                          'drawn_region': bool(s.extra.get('region_polygons'))} for s in scans]}
     path = ctx.output_dir / 'calibration_result.json'
     path.write_text(json.dumps(result, indent=2, ensure_ascii=False, default=float), encoding='utf8')
     ctx.result_file(path, 'Calibration result (JSON)')
+    return {'path': path, 'fit': fit, 'scans': scans, 'fallback': fb, 'relative': relative, 'result': result,
+            'method': method}
+
+
+def _run_xy_with_fallback(ctx, method):
+    """``auto``: atomic lattice; when no scan shows it and the crystal is Au(111), the herringbones."""
+    if method != 'auto':
+        return run_xy(ctx, method)
+    try:
+        return run_xy(ctx, 'lattice')
+    except NoUsableScan as exc:
+        period, _why = herringbone_period_nm(ctx.parameters)
+        if not period:
+            raise
+        message = str(exc)
+    # outside the except block, so that later tracebacks are not chained to this one
+    ctx.log('No atomic lattice could be used; trying the Au(111) herringbone reconstruction instead.\n' + message,
+            'warning')
+    return run_xy(ctx, 'herringbone')
+
+
+# --------------------------------------------------------------------------- run
+def run(ctx):
+    p = ctx.parameters
+    log = ctx.log
+    xy_method = _xy_method(p)
+    z_mode = _z_mode(p)
+    xy_out = xy_error = None
+    split = 70 if (xy_method != 'off' and z_mode != 'off') else 100
+    if xy_method != 'off':
+        try:
+            xy_out = _run_xy_with_fallback(_Stage(ctx, 0, split), xy_method)
+        except Exception as exc:
+            if z_mode == 'off':
+                raise
+            xy_error = exc
+            log(f'X/Y calibration not done: {exc}', 'warning')
+    z_out = None
+    if z_mode != 'off':
+        import z_steps as zs
+        from z_report import run_z
+        try:
+            z_out = run_z(_Stage(ctx, split if xy_method != 'off' else 0, 100), xy_out)
+        except zs.NoStepsFound as exc:
+            if z_mode == 'required' or (xy_out is None and xy_error is None):
+                raise ValueError(f'Z calibration: {exc}') from exc
+            if xy_out is None:
+                log(f'Z calibration not done either: {exc}', 'warning')
+                raise xy_error
+            log(f'No monatomic step for the Z calibration ({exc}); Z is not calibrated. Set “Z calibration” to Off '
+                'to skip this check.')
     ctx.progress(100, 'Calibration done')
-    return path
+    if xy_out is not None and z_out is not None:
+        try:     # one summary in the X/Y result, the full Z result next to it
+            result = xy_out['result']
+            result['z_calibration'] = z_out['summary']
+            xy_out['path'].write_text(json.dumps(result, indent=2, ensure_ascii=False, default=float), encoding='utf8')
+        except Exception:
+            pass
+    if xy_out is not None:
+        return xy_out['path']
+    return z_out['path']

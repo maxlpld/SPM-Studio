@@ -1,9 +1,9 @@
 {
   "api_version": "1.0",
   "id": "microscope_calibration",
-  "name": "Microscope X/Y calibration (lattice)",
-  "version": "1.3.0",
-  "description": "New X/Y piezo calibration constants from lattice images of a known crystal (KBr, NaCl, HOPG …), fitted over every open scan; before → after lattice figure and statistics.",
+  "name": "Microscope X/Y calibration (lattice, Au(111) herringbones) + Z (monatomic steps)",
+  "version": "1.4.0",
+  "description": "New X/Y piezo constants from lattice images of a known crystal (KBr, NaCl, HOPG …) or from the Au(111) herringbone reconstruction, and the new Z constant from monatomic steps, fitted over every open scan with the thermal drift; before → after figures, step profiles and statistics.",
   "category": "Lattice",
   "mode": "analysis",
   "status": "experimental",
@@ -34,6 +34,35 @@
         "h-BN (hexagonal)"
       ],
       "description": "Fills a, b, γ and the diagonal (source shown in the log). Choose “Custom” to use the four values below."
+    },
+    "xy_method": {
+      "type": "choice",
+      "label": "X/Y calibration with",
+      "default": "Automatic (atomic lattice, else Au(111) herringbones)",
+      "choices": [
+        "Automatic (atomic lattice, else Au(111) herringbones)",
+        "Atomic lattice (FFT)",
+        "Au(111) herringbone reconstruction",
+        "Off (Z only)"
+      ],
+      "description": "Atomic lattice: atomic-resolution images. Au(111) herringbones: the 22×√3 reconstruction (63.4 Å line pairs, Barth et al., PRB 42, 9307, 1990), visible at 50–300 nm without atomic resolution; if they are not found automatically, draw around them (rectangle, or a closed line with Shift+click). Automatic: the lattice, then the herringbones when the crystal is Au(111)."
+    },
+    "z_calibration": {
+      "type": "choice",
+      "label": "Z calibration (monatomic steps)",
+      "default": "Automatic (when monatomic steps are found)",
+      "choices": [
+        "Automatic (when monatomic steps are found)",
+        "Off",
+        "Required (stop if no step is found)"
+      ],
+      "description": "Looks for monatomic steps of the crystal (Au(111): 2.355 Å) on the topography channel of every open scan and fits the new Z constant. Lines drawn across steps on the active scan are used as the profiles instead of the automatic ones."
+    },
+    "z_channel": {
+      "type": "channel",
+      "label": "Topography channel for Z",
+      "default": "Z",
+      "description": "The height channel (m) in which the steps are measured."
     },
     "a_angstrom": {
       "type": "float",
@@ -72,6 +101,22 @@
       "default": true,
       "description": "If the detected lattice matches a/√2 or a·√2 (square), a·√3 or a/√3 (hexagonal) of the value entered — e.g. KBr a0 = 6.60 Å entered while the image shows the 4.67 Å surface cell — use that exact description and say so in the log."
     },
+    "step_height_angstrom": {
+      "type": "float",
+      "label": "Monatomic step height (Å) — 0 = from the crystal",
+      "default": 0.0,
+      "min": 0.0,
+      "max": 100.0,
+      "description": "Au(111) 2.355 Å (a/√3), Ag(111) 2.359, Cu(111) 2.087, HOPG 3.354, KBr(001) 3.325 (a/2), NaCl(001) 2.820, Si(111) 3.136. Needed with Custom."
+    },
+    "herringbone_period_angstrom": {
+      "type": "float",
+      "label": "Herringbone period (Å) — 0 = 63.4 Å (Barth 1990)",
+      "default": 0.0,
+      "min": 0.0,
+      "max": 500.0,
+      "description": "Distance between neighbouring pairs of corrugation lines of the Au(111) 22×√3 reconstruction: 22 × 2.884 Å = 63.4 Å (measured 63 Å)."
+    },
     "previous_cx_nm_per_v": {
       "type": "float",
       "label": "Previous calibration X (nm/V) — 0 = from file",
@@ -89,6 +134,13 @@
       "type": "bool",
       "label": "Use these previous values instead of the files'",
       "default": false
+    },
+    "previous_cz_nm_per_v": {
+      "type": "float",
+      "label": "Previous calibration Z (nm/V) — 0 = from file",
+      "default": 0.0,
+      "min": 0.0,
+      "description": "Used when the file has no Z piezo calibration (or with the override above). 0 → a correction factor only."
     },
     "traces": {
       "type": "choice",
@@ -131,6 +183,26 @@
       "default": 400,
       "min": 0,
       "max": 5000
+    },
+    "max_step_profiles": {
+      "type": "integer",
+      "label": "Step profiles per scan (max)",
+      "default": 12,
+      "min": 1,
+      "max": 60
+    },
+    "step_profile_length_nm": {
+      "type": "float",
+      "label": "Step profile length (nm) — 0 = automatic",
+      "default": 0.0,
+      "min": 0.0,
+      "max": 10000.0,
+      "description": "Automatic: ≈ 40 pixels (≥ 8 nm), shortened so that a profile never crosses another step."
+    },
+    "accept_multiple_steps": {
+      "type": "bool",
+      "label": "Also use double / triple steps (n × step height)",
+      "default": false
     },
     "scan_colormap": {
       "type": "choice",
@@ -198,9 +270,13 @@
   },
   "selection": {
     "tools": [
-      "rectangle"
+      "rectangle",
+      "line"
     ],
-    "multiple": false,
+    "multiple": true,
     "preview": "none"
-  }
+  },
+  "snapshot_parameter_channels": [
+    "z_channel"
+  ]
 }

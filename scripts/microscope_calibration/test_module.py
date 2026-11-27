@@ -323,3 +323,237 @@ def test_end_to_end_with_open_files(tmp_path, monkeypatch):
     assert doc['drift']['mode'] == 'fitted'
     assert doc['drift']['fitted_nm_per_s'][1] == pytest.approx(drift[1], abs=2e-4)
     assert len(doc['drift']['updown_pairs']) == 2
+
+
+# ------------------------------------------------------------------ v1.4: Z from monatomic steps
+AU_STEP = 0.23545e-9          # m
+KZ = 1.07                     # real Z constant / previous one: the file shows steps 7 % too low
+
+
+def _au_topography(n=320, size=80.0, angle=0.0, direction='down', true_xy=(1.0, 1.0), drift_xy=(0.0, 0.0),
+                   vz=0.0, line=1.0, herringbone=True, steps=True, step_dir_deg=35.0, step_spacing=26.0,
+                   rot=20.0, zigzag=25.0, seed=0, noise=4e-12):
+    """Au(111) topography in m as recorded with the previous X/Y and Z calibrations.
+
+    Terraces separated by monatomic steps (h = 2.355 Å, shown 1/KZ too low), the herringbone
+    corrugation (period 6.34 nm, irregular 25 nm zigzag, 0.2 Å), line jumps, a tilt, X/Y drift and a
+    constant Z drift v_z (m/s) during the frame.
+    """
+    rng = np.random.default_rng(seed)
+    x = (np.arange(n) + .5) * size / n - size / 2
+    X, Y = np.meshgrid(x, x[::-1])
+    rows, cols = np.mgrid[0:n, 0:n]
+    line_index = rows if direction == 'down' else (n - 1 - rows)
+    t = line_index * 2 * line + (cols + .5) / n * line
+    r = cc.rotation(angle)
+    px = r[0, 0] * X + r[0, 1] * Y
+    py = r[1, 0] * X + r[1, 1] * Y
+    tx = px * true_xy[0] - drift_xy[0] * t
+    ty = py * true_xy[1] - drift_xy[1] * t
+    z = np.zeros_like(X)
+    if steps:
+        u = math.radians(step_dir_deg)
+        coord = tx * math.cos(u) + ty * math.sin(u)
+        z += AU_STEP * np.floor(coord / step_spacing + .37)
+        z = z + .0 * X
+    if herringbone:
+        a, beta = math.radians(rot), math.radians(30)
+        m = np.array([math.cos(a), math.sin(a)])
+        p = np.array([-math.sin(a), math.cos(a)])
+        w = tx * m[0] + ty * m[1]
+        v = tx * p[0] + ty * p[1]
+        seg = zigzag / 2 * (1 + .3 * (rng.random(400) * 2 - 1))
+        L = size * 3
+        bp = np.concatenate([[-L], -L + np.cumsum(seg)])
+        k = np.clip(np.searchsorted(bp, w) - 1, 0, len(seg) - 1)
+        sign = np.where(k % 2 == 0, 1., -1.)
+        base = np.concatenate([[0], np.cumsum(np.where(np.arange(len(seg)) % 2 == 0, 1., -1.) * seg)])
+        tri = base[k] + sign * (w - bp[k])
+        z += .1e-10 * np.cos(2 * np.pi * (v + math.tan(beta) * tri) * math.cos(beta) / 6.3448)
+    z = z / KZ + vz * t + 3e-12 * X - 2e-12 * Y
+    z += rng.normal(0, noise, z.shape) + rng.normal(0, 2e-12, (n, 1))
+    return z
+
+
+def _write_au_sxm(path, image, size_nm, angle=0.0, cxy=(1e-8, 1e-8), cz=2.0e-9, direction='down', line_time=1.0,
+                  drift_z=None):
+    ny, nx = image.shape
+    if direction == 'up':
+        image = image[::-1]
+    lines = [':SCAN_TIME:', f'{line_time:.3E} {line_time:.3E}', ':SCAN_PIXELS:', f'{nx} {ny}',
+             ':SCAN_RANGE:', f'{size_nm * 1e-9:.6E} {size_nm * 1e-9:.6E}', ':SCAN_OFFSET:', '0 0',
+             ':SCAN_ANGLE:', f'{angle}', ':SCAN_DIR:', direction,
+             ':Piezo Configuration>Calib. X (m/V):', f'{cxy[0]:.6E}', ':Piezo Configuration>Calib. Y (m/V):',
+             f'{cxy[1]:.6E}', ':Piezo Configuration>Calib. Z (m/V):', f'{cz:.6E}']
+    if drift_z is not None:
+        lines += [':Piezo Configuration>Drift Z (m/s):', f'{drift_z:.3E}',
+                  ':Piezo Configuration>Drift correction status (on/off):', 'OFF']
+    lines += [':SCANIT_TYPE:', 'FLOAT MSBFIRST', ':DATA_INFO:', 'Channel\tName\tUnit\tDirection\tCalibration\tOffset',
+              '14\tZ\tm\tboth\t1\t0', ':SCANIT_END:']
+    raw = np.concatenate([image.ravel(), image[:, ::-1].ravel()]).astype('>f4')
+    path.write_bytes(('\r\n'.join(lines) + '\r\n').encode('latin-1') + b'\x1a\x04' + raw.tobytes())
+
+
+def test_step_detection_and_height_on_synthetic_au111():
+    import z_steps as zs
+    for angle in (0, 35, 90):
+        z = _au_topography(step_dir_deg=angle + 10, seed=angle)
+        px = 80.0 / 320
+        res = zs.find_steps(z, px, px, AU_STEP)
+        zs.assign_layers(res['profiles'], AU_STEP, .25)
+        used = [p for p in res['profiles'] if p.used]
+        assert len(used) >= 4, [p.reason for p in res['profiles']]
+        h = np.array([p.h_m for p in used])
+        assert np.mean(h) == pytest.approx(AU_STEP / KZ, rel=.01)
+        assert res['labels'].max() >= 3
+
+
+def test_z_header_and_fit_statistics():
+    h = {'PIEZO CONFIGURATION>CALIB. Z (M/V)': '2.5E-9', 'PIEZO CONFIGURATION>DRIFT Z (M/S)': '1.0E-12',
+         'Z-CONTROLLER>SETPOINT': '1E-10', 'PIEZO CONFIGURATION>HV GAIN Z': '4'}
+    z = cc.z_calibration_from_header(h)
+    assert z['cz'] == 2.5e-9 and z['drift_z_nm_per_s'] == pytest.approx(1e-3) and z['hv_gain_z'] == 4
+    assert cc.z_calibration_from_header({'Z CALIBRATION (NM/V)': '3.1'})['cz'] == pytest.approx(3.1e-9)
+    assert cc.calibration_from_header(h)['cx'] is None          # X/Y parsing unchanged
+    import z_steps as zs
+    prof = zs.StepProfile(1, (0, 0), (0, 0), (1, 1), np.zeros(3), np.zeros(3), 0, AU_STEP / KZ, 1e-13, 0, 0, 1e-12,
+                          (0, 0), 0, used=True, n_layers=1)
+    scan = zs.ZScan('s', '', 'forward', 0, 2e-9, (1, 1), (2, 2), 'down', True, [prof], np.zeros((2, 2)),
+                    np.zeros((2, 2)), np.ones((2, 2), int), (0, 0), {})
+    fit = zs.combine(zs.step_estimates([scan], AU_STEP))
+    assert fit.cz == pytest.approx(2e-9 * KZ, rel=1e-9)
+
+
+def test_z_drift_from_updown_pair_is_measured_and_does_not_bias_heights():
+    import z_steps as zs
+    vz = 4e-13                                    # m/s → 0.2 nm over a 512 s frame
+    px = 80.0 / 320
+    out = []
+    for direction in ('up', 'down'):
+        z = _au_topography(direction=direction, vz=vz, herringbone=False, seed=3)
+        res = zs.find_steps(z, px, px, AU_STEP)
+        zs.assign_layers(res['profiles'], AU_STEP)
+        g = cc.time_gradient('forward', direction, (80.0, 80.0), z.shape, (1.0, 1.0))
+        out.append(zs.ZScan(direction, '', 'forward', 0.0, 2e-9, (80.0, 80.0), z.shape, direction, False,
+                            res['profiles'], res['leveled'], res['leveled'], res['labels'], res['slopes'],
+                            res['offsets'], g, {'timestamp': None, 'offset_nm': None}))
+        h = np.mean([p.h_m for p in res['profiles'] if p.used])
+        assert h == pytest.approx(AU_STEP / KZ, rel=.01)
+    pairs = zs.z_drift_pairs(out)
+    assert len(pairs) == 1 and pairs[0]['vz_nm_per_s'] == pytest.approx(vz * 1e9, rel=.15)
+
+
+def test_herringbone_dual_cell_recovers_known_xy_distortion():
+    import herringbone as hb
+    period = 6.3448
+    ref = cc.Reference(hb.equivalent_cell_nm(period), hb.equivalent_cell_nm(period), 120.0, None, 'hb')
+    scans = []
+    for i, (rot, angle) in enumerate(((20, 0), (-35, 90), (5, 0), (50, 90), (80, 0))):
+        z = _au_topography(n=420, size=110.0, angle=angle, true_xy=(TRUE[0] / OLD[0], TRUE[1] / OLD[1]),
+                           steps=False, rot=rot, seed=i)
+        det = hb.detect(z, 110 / 420, 110 / 420, period)
+        assert abs(det['separation_deg'] - 60) < 15
+        scans.append(cc.ScanLattice(f'h{i}', det['dual_basis_nm'], angle, *OLD, (110., 110.), z.shape))
+    fit, _ = cc.calibrate(scans, ref)
+    # the herringbone is a weaker standard than an atomic lattice: ≈ 1–2 %
+    assert fit.cx == pytest.approx(TRUE[0], rel=.025) and fit.cy == pytest.approx(TRUE[1], rel=.025)
+
+
+def test_herringbone_region_mask_and_not_found_message():
+    import herringbone as hb
+    from types import SimpleNamespace as NS
+    mask, polys = hb.region_mask((100, 100), [NS(kind='line', points_px=((10, 10), (60, 12), (55, 70))),
+                                              NS(kind='rectangle', points_px=((70, 70), (90, 95)))])
+    assert mask[30, 40] and mask[80, 80] and not mask[90, 10] and len(polys) == 2
+    flat = np.random.default_rng(0).normal(0, 1e-12, (256, 256))
+    with pytest.raises(hb.HerringboneNotFound):
+        hb.detect(flat, .4, .4, 6.34)
+
+
+def _au_context(tmp_path, files, params, monkeypatch):
+    from spm_studio.core.io import read_scan
+    from spm_studio.core.module_api import ModuleContext
+    scan = read_scan(files[0])
+    ch = scan.channels['Z']
+    out = tmp_path / 'run'
+    out.mkdir(exist_ok=True)
+    ctx = ModuleContext(files[0], 'Z', 'forward', ch.traces['forward'], 'm', ch.geometry, scan.metadata, params, out,
+                        files, {f'Z|{t}': a for t, a in ch.traces.items()}, None, [], {}, [],
+                        {'schema_version': 1}, ('svg',), {'Z': 'm'})
+    events = []
+    monkeypatch.setattr(ctx, 'log', lambda m, level='info': events.append(m))
+    monkeypatch.setattr(ctx, 'progress', lambda *a, **k: None)
+    monkeypatch.setattr(ctx, 'result_file', lambda *a, **k: None)
+    monkeypatch.setattr(ctx, 'result_table', lambda *a, **k: None)
+    return ctx, out, events
+
+
+def test_end_to_end_z_calibration_from_steps(tmp_path, monkeypatch):
+    pytest.importorskip('skimage')
+    pytest.importorskip('spm_studio')
+    import os
+    os.environ.setdefault('QT_QPA_PLATFORM', 'offscreen')
+    import module
+    files = []
+    for i, direction in enumerate(('down', 'up')):
+        path = tmp_path / f'au_steps_{i}.sxm'
+        _write_au_sxm(path, _au_topography(n=256, size=70.0, direction=direction, herringbone=False, vz=2e-13,
+                                           seed=10 + i), 70.0, direction=direction, drift_z=0.0)
+        files.append(path)
+    params = {'material': 'Au(111) (1×1)', 'xy_method': 'Off (Z only)', 'z_calibration': 'Required (stop if no '
+              'step is found)', 'z_channel': 'Z', 'bootstrap_repeats': 60, 'max_deviation_percent': 25.0,
+              'traces': 'Active trace only'}
+    ctx, out, events = _au_context(tmp_path, files, params, monkeypatch)
+    result = module.run(ctx)
+    import json
+    doc = json.loads(Path(result).read_text())
+    assert doc['kind'] == 'spm_studio_z_calibration', events
+    assert doc['new_calibration_m_per_V']['z'] == pytest.approx(2.0e-9 * KZ, rel=.012), events
+    assert doc['previous_calibration_m_per_V'] == pytest.approx(2.0e-9)
+    assert len(doc['drift']['updown_pairs']) == 1
+    for stem in ('z_steps_scan', 'z_step_profiles', 'z_calibration_overview', 'z_calibration_statistics'):
+        assert (out / f'{stem}.svg').is_file(), (stem, events)
+    try:
+        import PySide6  # noqa: F401
+    except ImportError:
+        pass
+    else:
+        assert not any('renderer failed' in str(m) for m in events), events
+
+
+def test_end_to_end_herringbone_xy_and_steps_z(tmp_path, monkeypatch):
+    """No atomic resolution: Automatic X/Y falls back to the herringbones, Z from the steps of the same scans."""
+    pytest.importorskip('skimage')
+    pytest.importorskip('spm_studio')
+    lattice_tool = HERE.parent / 'lattice_measurements'
+    if not (lattice_tool / 'roi_pipeline.py').is_file():
+        pytest.skip('Lattice measurements tool not installed next to this one')
+    import os
+    os.environ.setdefault('QT_QPA_PLATFORM', 'offscreen')
+    import module
+    files = []
+    for i, (angle, rot, direction) in enumerate(((0, 20, 'down'), (90, -35, 'up'), (0, 50, 'up'), (90, 80, 'down'))):
+        path = tmp_path / f'au_{i}.sxm'
+        image = _au_topography(n=400, size=100.0, angle=angle, direction=direction,
+                               true_xy=(TRUE[0] / OLD[0], TRUE[1] / OLD[1]), rot=rot, step_spacing=40.0,
+                               step_dir_deg=15 + 30 * i, seed=20 + i)
+        _write_au_sxm(path, image, 100.0, angle=angle, cxy=OLD, direction=direction)
+        files.append(path)
+    params = {'material': 'Au(111) (1×1)', 'z_channel': 'Z', 'bootstrap_repeats': 40, 'max_deviation_percent': 25.0,
+              'traces': 'Active trace only', 'drift_mode': 'No drift correction'}
+    ctx, out, events = _au_context(tmp_path, files, params, monkeypatch)
+    result = module.run(ctx)
+    import json
+    doc = json.loads(Path(result).read_text())
+    assert doc['method'] == 'herringbone', events
+    assert any('herringbone reconstruction instead' in str(m) for m in events)
+    new = doc['new_calibration_m_per_V']
+    assert new['x'] == pytest.approx(TRUE[0], rel=.03) and new['y'] == pytest.approx(TRUE[1], rel=.03), events
+    assert 'Barth' in doc['herringbone']['source']
+    z = doc['z_calibration']
+    assert z['new_z_calibration_m_per_V'] == pytest.approx(2.0e-9 * KZ, rel=.015), events
+    assert (out / 'calibration_herringbone_overlay.svg').is_file(), events
+    assert (out / 'calibration_statistics.svg').is_file()
+    assert (out / 'z_calibration_overview.svg').is_file()
+    zdoc = json.loads((out / 'z_calibration_result.json').read_text())
+    assert any(s['lateral_correction_from_xy'] for s in zdoc['scans'])

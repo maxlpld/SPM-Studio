@@ -213,6 +213,7 @@ class MainWindow(QMainWindow):
         self._module_upgrade_messages += paths.upgrade_factory_overlays_v15()
         self._module_upgrade_messages += paths.upgrade_factory_overlays_v16()
         self._module_upgrade_messages += paths.upgrade_factory_tools_v080()
+        self._module_upgrade_messages += paths.upgrade_factory_calibration_v0021()
         paths.install_factory_customization()
         self._module_upgrade_messages += paths.upgrade_factory_profiles_v7()
         self._module_upgrade_messages += paths.upgrade_factory_brand_themes_v054()
@@ -295,6 +296,7 @@ class MainWindow(QMainWindow):
         self.module_panel.changed.connect(self._staleness_timer.start)
         self.module_panel.masksChanged.connect(self._on_masks_changed)
         self.module_panel.gifExportRequested.connect(self._export_overlay_gif)
+        self.module_panel.gifEstimateRequested.connect(self._estimate_overlay_gif)
         self.module_panel.channelTitleEdited.connect(self._tool_title_edited)
         self.module_panel.use_scan_display.setChecked(str(self.settings.value('use_scan_display','true')).lower()=='true')
         self.module_panel.viewerDisplayToggled.connect(lambda v:self.settings.setValue('use_scan_display','true' if v else 'false'))
@@ -936,11 +938,12 @@ class MainWindow(QMainWindow):
     def restore_builtin_tools(self):
         """Replace the lattice / molecule tools by the versions shipped with this release (backup first)."""
         if QMessageBox.question(self,'Restore built-in tools',
-                'Replace the installed Lattice measurements and Molecule placement scripts by the '
+                'Replace the installed Lattice measurements, Molecule placement and Microscope calibration scripts by the '
                 'versions shipped with this release?\n\nYour current files are backed up first '
                 '(scripts folder › .factory_backups_v080).')!=QMessageBox.StandardButton.Yes:
             return
         notes=paths.upgrade_factory_tools_v080(force=True)
+        notes+=paths.upgrade_factory_calibration_v0021(force=True)
         for note in notes:self._log('Built-in tools: '+note)
         self.refresh_modules()
         self.statusBar().showMessage('Built-in tools restored' if notes else 'Built-in tools already up to date',6000)
@@ -2825,6 +2828,37 @@ class MainWindow(QMainWindow):
                 raise ValueError(f'{layer.name}: scan geometry differs; alignment not assumed')
         return layers,original_geo,channel
 
+    def _estimate_overlay_gif(self,options):
+        """v0.0.21: size of the GIF (and MP4) the current settings would give, computed in the background."""
+        from ..core.channel_overlay import estimate_overlay_animation_size
+        from ..core.export_estimate import describe_animation
+        if self.scan is None or self.processed is None:
+            self.module_panel.set_gif_estimate('');return
+        if getattr(self,'_gif_estimate_busy',False):
+            self._gif_estimate_pending=dict(options);return
+        try:
+            layers,geo,_channel=self._overlay_layers_for_current([])
+        except Exception as exc:
+            self.module_panel.set_gif_estimate(f'Size not available: {exc}');return
+        if len(layers)<2:
+            self.module_panel.set_gif_estimate('Choose a second channel to see the file size.');return
+        self._gif_estimate_busy=True
+        self._gif_estimate_pending=None
+        self.module_panel.set_gif_estimate('Estimating file size…')
+        task=Task(self._job_token+1,estimate_overlay_animation_size,layers,geo,**options)
+        def finish(text):
+            self._gif_estimate_busy=False
+            pending=getattr(self,'_gif_estimate_pending',None)
+            if pending is not None:
+                self._gif_estimate_pending=None
+                self._estimate_overlay_gif(pending)
+                return
+            self.module_panel.set_gif_estimate(text)
+        def failed(_token,message):
+            lines=[l for l in str(message or '').strip().splitlines() if l.strip()]
+            finish('Size not available: '+(lines[-1] if lines else 'error'))
+        self._start_task(task,lambda _token,result:finish(describe_animation(result)),failed)
+
     def _export_overlay_gif(self,options):
         """v29: layer-by-layer transparency sweep exported as a presentation GIF."""
         from PySide6.QtWidgets import QProgressDialog,QApplication
@@ -2891,6 +2925,7 @@ class MainWindow(QMainWindow):
                     max(100,size.height()-10),Qt.AspectRatioMode.KeepAspectRatio,
                     Qt.TransformationMode.SmoothTransformation)
                 self.module_panel.molecule_preview.setPixmap(pix)
+                self.module_panel.schedule_gif_estimate()
             except (ValueError,KeyError,IndexError,TypeError) as exc:
                 self.viewer.mask_overlay=None
                 self.viewer.update()
@@ -3917,7 +3952,8 @@ class MainWindow(QMainWindow):
                                   transparent=self.export_transparent(),
                                   arrangement=str(self.settings.value('export_triple_arrangement','triangle')),
                                   formats=[f for f in str(self.settings.value('export_formats_v34','svg')).split(',') if f],
-                                  other_scans=others,scan_loader=read_scan)
+                                  other_scans=others,scan_loader=read_scan,
+                                  size_estimator=self._publication_size_estimate)
         # A profile saved from the dialog is listed and selected at once (no restart).
         dialog.profileSaved.connect(self._export_profile_saved)
         if dialog.exec()!=dialog.DialogCode.Accepted:return
@@ -3929,53 +3965,8 @@ class MainWindow(QMainWindow):
         if not selected:return
         self.tutorial_event('export')
         preset=dialog.resolved_preset()
-        for spec in selected:
-            if spec['kind']=='report' and spec.get('colorbar_source'):
-                reference_name=spec['colorbar_source']
-                reference=self.scan.channels[reference_name]
-                direction=self.inspector.selected_trace()
-                if direction not in reference.traces:direction=next(iter(reference.traces))
-                ref_key=(str(self.scan.path),reference_name,direction)
-                spec['trace']=direction
-                spec['colorbar_steps']=self.pipelines.get(ref_key,[])
-                spec['colorbar_style']=self.styles.get(ref_key,ImageStyle(colormap='gray'))
-            if spec['kind']!='channel':continue
-            channel=spec['channel']
-            direction=spec['trace']
-            from ..core.plot_settings import default_viewer_palette
-            if spec.get('scan_path'):
-                # Panel of another listed scan: use the display already set on that scan, if any.
-                other=spec['scan_path']
-                candidates=[(other,channel,direction)]
-                try:candidates.append((str(Path(other).resolve()),channel,direction))
-                except OSError:pass
-                found=next((c for c in candidates if c in self.styles or c in self.pipelines),candidates[0])
-                spec['steps']=self.pipelines.get(found,[])
-                spec['style']=self.styles.get(found) or replace(ImageStyle(),colormap=default_viewer_palette(channel,self._plot_profile_for_run()))
-                continue
-            if direction not in self.scan.channels[channel].traces:
-                self._log(f'{channel} does not have a {direction} trace',important=True)
-                return
-            selection=(str(self.scan.path),channel,direction)
-            spec['steps']=self.pipelines.get(selection,[])
-            spec['style']=self.styles.get(selection) or replace(ImageStyle(),colormap=default_viewer_palette(channel,self._plot_profile_for_run()))
-            # Respect active preview annotations without adding any axis labels.
-            if channel==key[1] and direction==key[2]:
-                overlays=list(self.viewer.overlays)
-                rois=list(self.viewer.extra_rois)+([self.viewer.roi] if self.viewer.roi is not None else [])
-                for roi in rois:
-                    if (roi.kind=='rectangle' and len(roi.points_px)==2) or \
-                       (roi.kind=='line' and len(roi.points_px)>=2):
-                        line_style=self.viewer.line_styles.get(tuple(map(tuple,roi.points_px)))
-                        color=(self.viewer.line_color_of(roi) if roi.kind=='line' else '#ffda55')
-                        width=(line_style[2] if roi.kind=='line' and line_style and len(line_style)>2 else 2)
-                        overlay={'type':'rectangle' if roi.kind=='rectangle' else 'line',
-                                 'points_px':[list(p) for p in roi.points_px],
-                                 'color':color,'width':width}
-                        if roi.kind=='line' and line_style and len(line_style)>2:
-                            overlay['width_mode']='scan'
-                        overlays.append(overlay)
-                spec['overlays']=overlays
+        selected=self._prepare_publication_specs(selected)
+        if selected is None:return
         folder=self.scan.path.parent/'selection'
         folder.mkdir(exist_ok=True)
         name='_'.join(spec['channel'].replace('/','_') if spec['kind']=='channel'
@@ -4033,6 +4024,80 @@ class MainWindow(QMainWindow):
         self._start_task(task,finished,
                          lambda _,exc:self._log(f'Export failed:\n{exc}',important=True))
         self._log(f'Publication export requested: {destination}')
+
+    def _prepare_publication_specs(self,selected,quiet=False):
+        """Steps, display style and drawn overlays of every panel (used by Export… and the size preview)."""
+        key=self._selection_key()
+        for spec in selected:
+            if spec['kind']=='report' and spec.get('colorbar_source'):
+                reference_name=spec['colorbar_source']
+                reference=self.scan.channels[reference_name]
+                direction=self.inspector.selected_trace()
+                if direction not in reference.traces:direction=next(iter(reference.traces))
+                ref_key=(str(self.scan.path),reference_name,direction)
+                spec['trace']=direction
+                spec['colorbar_steps']=self.pipelines.get(ref_key,[])
+                spec['colorbar_style']=self.styles.get(ref_key,ImageStyle(colormap='gray'))
+            if spec['kind']!='channel':continue
+            channel=spec['channel']
+            direction=spec['trace']
+            from ..core.plot_settings import default_viewer_palette
+            if spec.get('scan_path'):
+                # Panel of another listed scan: use the display already set on that scan, if any.
+                other=spec['scan_path']
+                candidates=[(other,channel,direction)]
+                try:candidates.append((str(Path(other).resolve()),channel,direction))
+                except OSError:pass
+                found=next((c for c in candidates if c in self.styles or c in self.pipelines),candidates[0])
+                spec['steps']=self.pipelines.get(found,[])
+                spec['style']=self.styles.get(found) or replace(ImageStyle(),colormap=default_viewer_palette(channel,self._plot_profile_for_run()))
+                continue
+            if direction not in self.scan.channels[channel].traces:
+                if not quiet:self._log(f'{channel} does not have a {direction} trace',important=True)
+                return None
+            selection=(str(self.scan.path),channel,direction)
+            spec['steps']=self.pipelines.get(selection,[])
+            spec['style']=self.styles.get(selection) or replace(ImageStyle(),colormap=default_viewer_palette(channel,self._plot_profile_for_run()))
+            # Respect active preview annotations without adding any axis labels.
+            if channel==key[1] and direction==key[2]:
+                overlays=list(self.viewer.overlays)
+                rois=list(self.viewer.extra_rois)+([self.viewer.roi] if self.viewer.roi is not None else [])
+                for roi in rois:
+                    if (roi.kind=='rectangle' and len(roi.points_px)==2) or \
+                       (roi.kind=='line' and len(roi.points_px)>=2):
+                        line_style=self.viewer.line_styles.get(tuple(map(tuple,roi.points_px)))
+                        color=(self.viewer.line_color_of(roi) if roi.kind=='line' else '#ffda55')
+                        width=(line_style[2] if roi.kind=='line' and line_style and len(line_style)>2 else 2)
+                        overlay={'type':'rectangle' if roi.kind=='rectangle' else 'line',
+                                 'points_px':[list(p) for p in roi.points_px],
+                                 'color':color,'width':width}
+                        if roi.kind=='line' and line_style and len(line_style)>2:
+                            overlay['width_mode']='scan'
+                        overlays.append(overlay)
+                spec['overlays']=overlays
+        return selected
+
+    def _publication_size_estimate(self,dialog,done):
+        """v0.0.21: render the figure of the open Export dialog in the background and report its file sizes."""
+        from ..core.export_estimate import estimate_publication_sizes
+        try:
+            selected=dialog.selection()
+            if not selected:
+                done(None,'choose at least one image');return
+            selected=self._prepare_publication_specs(selected,quiet=True)
+            if selected is None:
+                done(None,'a chosen trace does not exist');return
+            formats=dialog.formats() or ['svg']
+            task=Task(self._job_token+1,estimate_publication_sizes,self.scan,selected,dialog.resolved_preset(),formats,
+                      plot_config=self._plot_profile_for_run(),transparent=dialog.transparent_background(),
+                      arrangement=dialog.arrangement() if len(selected)>=2 else 'row',
+                      panel_letters=dialog.letters_enabled(),columns=dialog.columns())
+        except Exception as exc:
+            done(None,str(exc));return
+        def failed(_token,message):
+            lines=[l for l in str(message or '').strip().splitlines() if l.strip()]
+            done(None,lines[-1] if lines else 'the figure could not be rendered')
+        self._start_task(task,lambda _token,result:done(result,''),failed)
 
     def _export_profile_saved(self,name):
         self._load_export_presets()

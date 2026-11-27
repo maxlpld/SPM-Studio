@@ -7,7 +7,7 @@ listed scan, or an analysis result / plot, with its own title, unit, colourbar a
 once (no restart) and can be exported to a colleague from Settings › Library.
 """
 from pathlib import Path
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import Qt, Signal, QTimer
 from PySide6.QtWidgets import (QDialog,QVBoxLayout,QGroupBox,QComboBox,
     QLineEdit,QLabel,QDialogButtonBox,QFormLayout,QCheckBox,QHBoxLayout,QPushButton,QDoubleSpinBox,QSpinBox,
     QButtonGroup,QWidget,QGridLayout,QScrollArea,QFrame,QApplication)
@@ -24,8 +24,24 @@ class PublicationDialog(QDialog):
     def __init__(self, scan, report_files=(), *, two_columns=False, selected_channel='',
                  selected_trace='forward', channel_titles=None, preset=None, layout_name=None, parent=None,
                  transparent=False, arrangement='triangle', formats=('svg',), other_scans=(), scan_loader=None,
-                 save_folder=None):
+                 save_folder=None, size_estimator=None):
         super().__init__(parent)
+        # v0.0.21: live file-size preview. ``size_estimator(dialog, done)`` renders the figure as it
+        # would be exported (in the background) and calls ``done(result, error)``.
+        self._size_estimator=size_estimator
+        self._size_busy=False
+        self._size_dirty=False
+        self._size_closed=False
+        self._size_watched=set()
+        self._size_timer=QTimer(self)
+        self._size_timer.setSingleShot(True)
+        self._size_timer.setInterval(700)
+        self._size_timer.timeout.connect(self._run_size_estimate)
+        self.size_label=QLabel('')
+        self.size_label.setObjectName('hint')
+        self.size_label.setAccessibleName('ExportSizePreviewV0021')
+        self.size_label.setWordWrap(True)
+        self.size_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         self.setWindowTitle('Export figure')
         self.setMinimumWidth(980)
         self.scan=scan
@@ -126,6 +142,17 @@ class PublicationDialog(QDialog):
             self.format_boxes[key]=box;fmt_row.addWidget(box)
         fmt_row.addStretch(1)
         root.addLayout(fmt_row)
+        size_row=QHBoxLayout()
+        size_title=QLabel('File size')
+        size_row.addWidget(size_title)
+        size_row.addWidget(self.size_label,1)
+        self.size_label.setToolTip('Size of the files that Export… will write with these settings: the figure is '
+                                   'rendered in the background exactly as it will be exported, then measured. '
+                                   'PNG grows with the resolution and the page size; SVG and PDF mostly with the '
+                                   'number of images.')
+        if self._size_estimator is None:
+            size_title.hide();self.size_label.hide()
+        root.addLayout(size_row)
         # Image panels live in a scrolling grid that mirrors the chosen arrangement.
         self.controls=[]
         self.panel_scroll=QScrollArea()
@@ -171,6 +198,79 @@ class PublicationDialog(QDialog):
             try:self.apply_layout(saved)
             except Exception as exc:    # a hand-edited profile must never block exporting
                 self.profile_status.setText(f'Saved figure not applied: {exc}')
+        self._watch_for_size()
+        self.schedule_size_estimate()
+
+    # ---- v0.0.21: live file-size preview
+    def _watch_for_size(self):
+        """Re-estimate the file size whenever any export setting changes (new panels included)."""
+        if self._size_estimator is None:return
+        for widget in self.findChildren(QWidget):
+            key=id(widget)
+            if key in self._size_watched:continue
+            signal=None
+            if isinstance(widget,QComboBox):signal=widget.currentIndexChanged
+            elif isinstance(widget,(QSpinBox,QDoubleSpinBox)):signal=widget.valueChanged
+            elif isinstance(widget,QCheckBox):signal=widget.toggled
+            elif isinstance(widget,QLineEdit):signal=widget.textChanged
+            elif isinstance(widget,QPushButton) and widget.isCheckable():signal=widget.toggled
+            elif isinstance(widget,ColorField):signal=widget.changed
+            if signal is None:continue
+            try:
+                signal.connect(self.schedule_size_estimate)
+                self._size_watched.add(key)
+            except Exception:
+                pass
+
+    def schedule_size_estimate(self,*_):
+        timer=getattr(self,'_size_timer',None)
+        if timer is None or self._size_estimator is None or self._size_closed:return
+        timer.start()
+
+    def _size_page_hint(self):
+        try:
+            from ..core.export_estimate import page_pixels
+            w,h=page_pixels({'width_mm':self.page_width.value(),'height_mm':self.page_height.value(),
+                             'dpi':self.page_dpi.value()})
+            return f'page {w} × {h} px at {self.page_dpi.value()} DPI'
+        except Exception:
+            return ''
+
+    def _run_size_estimate(self):
+        if self._size_closed or self._size_estimator is None:return
+        if self._size_busy:
+            self._size_dirty=True
+            return
+        if not self.formats():
+            self.size_label.setText('Tick at least one format.');return
+        self._size_busy=True
+        self.size_label.setText(f'Estimating… ({self._size_page_hint()})')
+        try:
+            self._size_estimator(self,self._size_ready)
+        except Exception as exc:
+            self._size_busy=False
+            self.size_label.setText(f'Size not available: {exc}')
+
+    def _size_ready(self,result,error=''):
+        self._size_busy=False
+        if self._size_closed:return
+        try:
+            if self._size_dirty:
+                self._size_dirty=False
+                self._size_timer.start()
+            if result is None:
+                self.size_label.setText(f'Size not available: {error}' if error else 'Size not available.')
+                return
+            from ..core.export_estimate import describe_publication
+            self.size_label.setText(describe_publication(result,self.formats()))
+        except RuntimeError:          # the dialog was closed meanwhile
+            self._size_closed=True
+
+    def done(self,result):
+        self._size_closed=True
+        try:self._size_timer.stop()
+        except Exception:pass
+        super().done(result)
 
     # ---- panels
     def _panel_scan(self,index):
@@ -306,11 +406,14 @@ class PublicationDialog(QDialog):
         if dialog.exec():
             fields['params']=dialog.state()
             self._refresh_parameter_summary(index)
+            self.schedule_size_estimate()
 
     def _ensure_controls(self,count):
         """Create image panels on demand (three exist from the start; up to MAX_PANELS)."""
         while len(self.controls)<min(int(count),MAX_PANELS):
             self._make_panel(len(self.controls))
+        if getattr(self,'_size_watched',None) is not None and getattr(self,'_ok_button',None) is not None:
+            self._watch_for_size()
 
     def _reflow(self):
         """Place the visible panels like the exported figure (row, triangle or grid)."""

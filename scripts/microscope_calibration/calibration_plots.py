@@ -21,7 +21,7 @@ def _after_lengths(equations, fit, loo, scans):
     return np.asarray(out, float), bool(loo_map)
 
 
-def statistics_figure(ctx, scans, equations, fit, ref, boot, loo, singles, relative, fallback, pairs=()):
+def statistics_figure(ctx, scans, equations, fit, ref, boot, loo, singles, relative, fallback, pairs=(), label=''):
     from spm_studio.core.plots import plot_style
     from spm_studio.core.analysis_utils import save_plot
     theory = np.array([e.theory_nm for e in equations])
@@ -53,7 +53,7 @@ def statistics_figure(ctx, scans, equations, fit, ref, boot, loo, singles, relat
         ax.set_xticks([0, 45, 90, 135, 180])
         ax.set_xlabel('Vector direction in piezo frame (° from X)')
         ax.set_ylabel('Measured / theoretical length')
-        ax.set_title('Length error vs direction', loc='left')
+        ax.set_title(f'{label}Length error vs direction', loc='left')
         ax.legend(fontsize='x-small', loc='best', frameon=True, framealpha=.9, edgecolor='none')
         # (2) per-scan error of the cell parameters ------------------------------------
         ax = axes[0, 1]

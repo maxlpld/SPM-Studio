@@ -23,6 +23,7 @@ class ModulePanel(QWidget):
     deleteSelectionRequested=Signal(int)
     selectionChosen=Signal(int)
     gifExportRequested=Signal(dict)
+    gifEstimateRequested=Signal(dict)
     channelTitleEdited=Signal(str)
     viewerDisplayToggled=Signal(bool)
 
@@ -183,6 +184,24 @@ class ModulePanel(QWidget):
         gif_form.addRow('',self.gif_scalebar);gif_form.addRow('',self.gif_labels)
         gif_form.addRow('',self.gif_ease);gif_form.addRow('',self.gif_mp4)
         gif_form.addRow(self.gif_button)
+        # v0.0.21: size of the GIF / MP4 these settings give, updated while they are changed.
+        self.gif_size_estimate=QLabel('')
+        self.gif_size_estimate.setObjectName('hint')
+        self.gif_size_estimate.setWordWrap(True)
+        self.gif_size_estimate.setToolTip('Estimated size of the file that Export GIF… will write: a few frames are '
+                                          'rendered and encoded exactly like the export (same size, palette and '
+                                          'dithering). Fewer fps, a shorter duration, a smaller longest side or a '
+                                          'longer hold make the file smaller.')
+        gif_form.addRow('File size',self.gif_size_estimate)
+        from PySide6.QtCore import QTimer
+        self._gif_estimate_timer=QTimer(self)
+        self._gif_estimate_timer.setSingleShot(True)
+        self._gif_estimate_timer.setInterval(600)
+        self._gif_estimate_timer.timeout.connect(lambda:self.gifEstimateRequested.emit(self._gif_options()))
+        for w in (self.gif_duration,self.gif_hold):w.valueChanged.connect(self.schedule_gif_estimate)
+        for w in (self.gif_fps,self.gif_alpha0,self.gif_alpha1):w.valueChanged.connect(self.schedule_gif_estimate)
+        self.gif_size.currentIndexChanged.connect(self.schedule_gif_estimate)
+        for w in (self.gif_scalebar,self.gif_labels,self.gif_ease,self.gif_mp4):w.toggled.connect(self.schedule_gif_estimate)
         self.gif_group.setVisible(False)
         layout.addWidget(self.gif_group)
         self.mask_group=QGroupBox('Masks')
@@ -616,13 +635,26 @@ class ModulePanel(QWidget):
         self.undo_line.setEnabled(bool(rois))
         self.clear_lines.setEnabled(bool(rois))
 
-    def _request_gif(self):
-        self.gifExportRequested.emit({'duration_s':self.gif_duration.value(),
+    def _gif_options(self):
+        return {'duration_s':self.gif_duration.value(),
             'fps':self.gif_fps.value(),'max_px':int(self.gif_size.currentData()),
             'hold_fraction':self.gif_hold.value()/100.,'scale_bar':self.gif_scalebar.isChecked(),
             'labels':self.gif_labels.isChecked(),'ease':self.gif_ease.isChecked(),
             'also_mp4':self.gif_mp4.isChecked(),
-            'start_opacity':self.gif_alpha0.value()/100.,'end_opacity':self.gif_alpha1.value()/100.})
+            'start_opacity':self.gif_alpha0.value()/100.,'end_opacity':self.gif_alpha1.value()/100.}
+
+    def _request_gif(self):
+        self.gifExportRequested.emit(self._gif_options())
+
+    def schedule_gif_estimate(self,*_):
+        """Recompute the GIF file size shortly after the last change (only while the GIF box is shown)."""
+        timer=getattr(self,'_gif_estimate_timer',None)
+        if timer is not None and self.module is not None and self.module.id=='channel_overlay':
+            timer.start()
+
+    def set_gif_estimate(self,text):
+        try:self.gif_size_estimate.setText(str(text or ''))
+        except RuntimeError:pass
 
     def values(self):
         result={}

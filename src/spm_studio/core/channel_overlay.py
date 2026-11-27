@@ -289,6 +289,114 @@ def _annotate(img, geometry, layers, alphas, *, scale_bar=True, labels=True):
     return img
 
 
+def _animation_plan(nx, ny, geometry, duration_s, fps, max_px, hold_fraction):
+    """Frame size (W, H), frame delay (1/100 s) and the normalized time of every frame."""
+    if geometry is not None and getattr(geometry,'size_m',None):
+        aspect=float(geometry.size_m[0])/float(geometry.size_m[1])
+    else:aspect=nx/ny
+    aspect=max(.03,min(33.,aspect))
+    if aspect>=1:W,H=max_px,max(16,int(round(max_px/aspect)))
+    else:W,H=max(16,int(round(max_px*aspect))),max_px
+    # GIF frame delays are stored in 1/100 s; browsers clamp < 20 ms.
+    delay_cs=max(2,int(round(100/fps)))
+    n=max(2,int(round(duration_s*100/delay_cs)))
+    hold=int(round(n*float(np.clip(hold_fraction,0,.4))))
+    ramp=max(2,n-2*hold)
+    times=[0.]*hold+list(np.linspace(0,1,ramp))+[1.]*hold
+    return W,H,delay_cs,times
+
+
+def _sweep_image(rgbs, finite, layers, geometry, t, W, H, *, ease=True, scale_bar=True, labels=True,
+                 start_opacity=0., end_opacity=1.):
+    """One annotated RGB frame (PIL image) of the sweep at normalized time t."""
+    from PIL import Image
+    n_layers=len(layers)
+    if ease:
+        # Ease each layer's own fade so every channel sweep starts/ends softly.
+        n_top=n_layers-1
+        seg=min(n_top-1,int(t*n_top)) if t<1 else n_top-1
+        local=t*n_top-seg
+        t=(seg+_smoothstep(float(np.clip(local,0,1))))/n_top
+    alphas=sweep_opacities(n_layers,t,start_opacity,end_opacity)
+    frame=Image.fromarray(sweep_frame(rgbs,finite,alphas),'RGB').resize((W,H),Image.NEAREST)
+    if scale_bar or labels:
+        frame=_annotate(frame,geometry,layers,alphas,scale_bar=scale_bar,labels=labels)
+    return frame
+
+
+def _gif_palette(frames_rgb, W, H):
+    from PIL import Image
+    keys=frames_rgb[::max(1,len(frames_rgb)//12)][:12]
+    thumb_w=min(W,720);thumb_h=max(1,int(round(H*thumb_w/W)))
+    mosaic=Image.new('RGB',(thumb_w,thumb_h*len(keys)))
+    for k,f in enumerate(keys):mosaic.paste(f.resize((thumb_w,thumb_h),Image.NEAREST),(0,k*thumb_h))
+    return mosaic.quantize(colors=256,method=Image.Quantize.MEDIANCUT,dither=Image.Dither.NONE)
+
+
+def estimate_overlay_animation_size(layers, geometry, *, duration_s=6., fps=20, max_px=1440,
+                                    hold_fraction=.10, ease=True, scale_bar=True, labels=True,
+                                    also_mp4=False, start_opacity=0., end_opacity=1., samples=6, **_ignored):
+    """v0.0.21: size of the GIF (and MP4) that ``save_overlay_animation`` would write, without writing it.
+
+    A few frames spread over the sweep are rendered at the final size with the same palette and
+    dithering, and encoded as a GIF in memory. Identical consecutive frames (the holds at the
+    start and the end) are merged by the GIF writer, so the estimate is
+    header + (number of distinct frames) × (mean encoded frame). Usually within ~10 % of the file.
+    The MP4 is estimated by encoding one second of the sweep with ffmpeg (when installed).
+    Returns {'gif_bytes', 'mp4_bytes' (or None), 'frames', 'distinct_frames', 'size_px', 'fps'}.
+    """
+    import io
+    from PIL import Image
+    if len(layers)<2:raise ValueError('Select at least two channels for an animation')
+    duration_s=float(np.clip(float(duration_s),.5,120.));fps=int(np.clip(int(fps),2,50))
+    max_px=int(np.clip(int(max_px),64,4096))
+    rgbs,finite,_legend=_layer_rgb_stack(layers)
+    ny,nx=rgbs[0].shape[:2]
+    W,H,delay_cs,times=_animation_plan(nx,ny,geometry,duration_s,fps,max_px,hold_fraction)
+    ramp=[t for t in times if 0<t<1]
+    distinct=len(ramp)+(1 if len(times)>len(ramp) else 0)+(1 if any(t>=1 for t in times) else 0)
+    distinct=max(2,min(len(times),distinct))
+    picks=sorted(set(int(round(x)) for x in np.linspace(0,len(times)-1,max(2,int(samples)))))
+    opts=dict(ease=ease,scale_bar=scale_bar,labels=labels,start_opacity=start_opacity,end_opacity=end_opacity)
+    frames=[_sweep_image(rgbs,finite,layers,geometry,times[i],W,H,**opts) for i in picks]
+    palette=_gif_palette(frames,W,H)
+    quant=[f.quantize(palette=palette,dither=Image.Dither.FLOYDSTEINBERG) for f in frames]
+    one=io.BytesIO();quant[0].save(one,format='GIF')
+    header=max(0,len(one.getvalue())-0)
+    sizes=[]
+    for q in quant:
+        buf=io.BytesIO();q.save(buf,format='GIF');sizes.append(len(buf.getvalue()))
+    per_frame=float(np.mean(sizes))-800          # header + global palette counted once
+    per_frame=max(per_frame,float(min(sizes))*.5)
+    gif_bytes=int(round(800+per_frame*distinct+20*len(times)))
+    mp4=None
+    if also_mp4:
+        import shutil,subprocess,tempfile
+        ff=shutil.which('ffmpeg')
+        if ff:
+            w2,h2=W-(W%2),H-(H%2)
+            n=max(4,min(len(ramp) or 4,int(round(100/delay_cs))))
+            mid=[times[len(times)//2-n//2+i] for i in range(n)] if len(times)>n else times
+            with tempfile.TemporaryDirectory() as tmp:
+                out=Path(tmp)/'estimate.mp4'
+                cmd=[ff,'-y','-loglevel','error','-f','rawvideo','-pix_fmt','rgb24','-s',f'{w2}x{h2}',
+                     '-r',f'{100/delay_cs:.4f}','-i','-','-c:v','libx264','-preset','veryfast','-crf','12',
+                     '-pix_fmt','yuv420p','-movflags','+faststart',str(out)]
+                try:
+                    proc=subprocess.Popen(cmd,stdin=subprocess.PIPE)
+                    for t in mid:
+                        f=_sweep_image(rgbs,finite,layers,geometry,t,W,H,**opts)
+                        proc.stdin.write(np.asarray(f.crop((0,0,w2,h2)),dtype=np.uint8).tobytes())
+                    proc.stdin.close();proc.wait(timeout=60)
+                    if proc.returncode==0 and out.is_file():
+                        # the moving part scales with the ramp; holds cost almost nothing in H.264
+                        mp4=int(out.stat().st_size/len(mid)*max(len(ramp),1)+out.stat().st_size*.05)
+                except Exception:
+                    mp4=None
+    return {'gif_bytes':gif_bytes,'mp4_bytes':mp4,'frames':len(times),'distinct_frames':distinct,
+            'size_px':[W,H],'fps':100/delay_cs}
+
+
 def save_overlay_animation(layers, geometry, path, *, duration_s=6., fps=20, max_px=1440,
                            hold_fraction=.10, ease=True, scale_bar=True, labels=True,
                            also_mp4=False, progress=None, start_opacity=0., end_opacity=1.):
@@ -316,39 +424,14 @@ def save_overlay_animation(layers, geometry, path, *, duration_s=6., fps=20, max
     if not (64<=max_px<=4096):raise ValueError('GIF size must be 64–4096 px')
     rgbs,finite,_legend=_layer_rgb_stack(layers)
     ny,nx=rgbs[0].shape[:2]
-    if geometry is not None and getattr(geometry,'size_m',None):
-        aspect=float(geometry.size_m[0])/float(geometry.size_m[1])
-    else:aspect=nx/ny
-    aspect=max(.03,min(33.,aspect))
-    if aspect>=1:W,H=max_px,max(16,int(round(max_px/aspect)))
-    else:W,H=max(16,int(round(max_px*aspect))),max_px
-    # GIF frame delays are stored in 1/100 s; browsers clamp < 20 ms.
-    delay_cs=max(2,int(round(100/fps)))
-    n=max(2,int(round(duration_s*100/delay_cs)))
-    hold=int(round(n*float(np.clip(hold_fraction,0,.4))))
-    ramp=max(2,n-2*hold)
-    times=[0.]*hold+list(np.linspace(0,1,ramp))+[1.]*hold
-    n_layers=len(layers)
+    W,H,delay_cs,times=_animation_plan(nx,ny,geometry,duration_s,fps,max_px,hold_fraction)
     frames_rgb=[]
     for i,t in enumerate(times):
-        if ease:
-            # Ease each layer's own fade so every channel sweep starts/ends softly.
-            n_top=n_layers-1
-            seg=min(n_top-1,int(t*n_top)) if t<1 else n_top-1
-            local=t*n_top-seg
-            t=(seg+_smoothstep(float(np.clip(local,0,1))))/n_top
-        alphas=sweep_opacities(n_layers,t,start_opacity,end_opacity)
-        frame=Image.fromarray(sweep_frame(rgbs,finite,alphas),'RGB').resize((W,H),Image.NEAREST)
-        if scale_bar or labels:
-            frame=_annotate(frame,geometry,layers,alphas,scale_bar=scale_bar,labels=labels)
-        frames_rgb.append(frame)
+        frames_rgb.append(_sweep_image(rgbs,finite,layers,geometry,t,W,H,ease=ease,scale_bar=scale_bar,
+                                       labels=labels,start_opacity=start_opacity,end_opacity=end_opacity))
         if progress:progress(int(70*(i+1)/len(times)))
     # One palette for the whole animation, from evenly spaced key frames.
-    keys=frames_rgb[::max(1,len(frames_rgb)//12)][:12]
-    thumb_w=min(W,720);thumb_h=max(1,int(round(H*thumb_w/W)))
-    mosaic=Image.new('RGB',(thumb_w,thumb_h*len(keys)))
-    for k,f in enumerate(keys):mosaic.paste(f.resize((thumb_w,thumb_h),Image.NEAREST),(0,k*thumb_h))
-    palette=mosaic.quantize(colors=256,method=Image.Quantize.MEDIANCUT,dither=Image.Dither.NONE)
+    palette=_gif_palette(frames_rgb,W,H)
     frames=[]
     for i,f in enumerate(frames_rgb):
         frames.append(f.quantize(palette=palette,dither=Image.Dither.FLOYDSTEINBERG))

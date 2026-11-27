@@ -861,6 +861,55 @@ def upgrade_factory_tools_v080(force=False):
     return notes
 
 
+# v0.0.21 — Microscope calibration 1.4 (Au(111) herringbones for X/Y, Z from monatomic steps).
+# SHA-256 of the 1.3.0 files shipped since v0.0.11: an installed copy that still matches is upgraded
+# (backup in ``.factory_backups_v0021``); an edited file is kept. New helper files are added.
+CALIBRATION_V13_SHA256={'module.py':'d56d0612dca6c8f39ef807243631dc11ef3129a68ea54276e9e753f7f2dfd3ea',
+                        'module.json':'08affbdef75c20fc7437dd15bf27cbf7a0f6afbcbffcda16a0bb9c51d90be8bf',
+                        'calibration_core.py':'6270120627d4661d782ce6b89b674c254c5f3fe7c7f5371127792765e69f78d1',
+                        'calibration_plots.py':'d7cf5bfe5c6907dc24141fc55ef44b151e67d11d3f25c6cd790d97576b9aa030',
+                        'README.md':'4fef91a55801fda09b5433f51b77ec246913081e2e7c5675ec800ad7dd8af5de',
+                        'test_module.py':'94a7c2b9de2be2b3d91479d720e5ddd05be5f63918b4a9af269554228e2d5a5c'}
+CALIBRATION_V14_NEW_FILES=('z_steps.py','z_report.py','herringbone.py')
+
+
+def upgrade_factory_calibration_v0021(force=False):
+    """Bring an installed, unedited Microscope calibration tool (1.3.0) to 1.4.0.
+
+    Removed tools stay removed; edited files are kept (unless ``force``, which backs them up first);
+    the new helper files are always added when missing, never overwritten.
+    """
+    import hashlib, shutil
+    source=bundled_studio_root()/'scripts'/'microscope_calibration'
+    target=scripts_dir()/'microscope_calibration'
+    if not (target/'module.json').is_file() or not (source/'module.json').is_file():
+        return []
+    notes=[]
+    for name in CALIBRATION_V14_NEW_FILES:
+        if (source/name).is_file() and not (target/name).exists():
+            shutil.copy2(source/name,target/name)
+            notes.append(f'microscope_calibration/{name}: added (1.4)')
+    for name,digest in CALIBRATION_V13_SHA256.items():
+        new,installed=source/name,target/name
+        if not new.is_file():
+            continue
+        if not installed.is_file():
+            shutil.copy2(new,installed);notes.append(f'microscope_calibration/{name}: installed (1.4)');continue
+        current=installed.read_bytes()
+        if current==new.read_bytes():
+            continue
+        known={hashlib.sha256(current).hexdigest(),hashlib.sha256(current.replace(b'\r\n',b'\n')).hexdigest()}
+        if digest not in known and not force:
+            notes.append(f'microscope_calibration/{name}: your edited copy was kept')
+            continue
+        backup=scripts_dir()/'.factory_backups_v0021'/'microscope_calibration'/name
+        backup.parent.mkdir(parents=True,exist_ok=True)
+        shutil.copy2(installed,backup)
+        shutil.copy2(new,installed)
+        notes.append(f'microscope_calibration/{name}: updated to 1.4 (backup saved)')
+    return notes
+
+
 def migrate_themes_v080():
     """Retire the unmodified old factory themes (now Graphite / Porcelain).
 

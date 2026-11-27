@@ -7,6 +7,41 @@ so write it for users. Add new versions **at the top**.
 The internal builds that preceded the GitHub project (0.7.0 – 0.8.3) are documented in
 [`docs/DEVELOPMENT_HISTORY.md`](docs/DEVELOPMENT_HISTORY.md).
 
+## 0.0.21 — 2026-11-27
+
+### Microscope calibration: Z from monatomic steps, X/Y from the Au(111) herringbones
+
+The calibration tool (now 1.4) keeps everything it did — the lattice X/Y calibration, the thermal drift, the
+statistics and the figures — and adds two methods. Installed copies of the tool are updated automatically
+(a copy you edited is kept; *Restore built-in tools* replaces it, with a backup).
+
+- **Z calibration from monatomic steps.** On the topography channel of every open scan the tool looks for steps of
+  the reference crystal (Au(111): 2.355 Å; Ag, Cu, Si(111), HOPG, h-BN, KBr, NaCl, KCl too) and fits the new Z
+  constant (Nanonis *Calib. Z*). Terraces are leveled without bending the steps (one plane, one offset per terrace,
+  line jumps removed on the terraces only); step profiles are taken across every edge, never crossing another step,
+  and each height is fitted on the two terraces in 2-D so the herringbone corrugation averages out. Lines you draw
+  across steps are used instead of the automatic profiles. A constant Z drift / creep is absorbed by the terrace
+  slope, and up/down pairs measure it.
+  - Results: the scan drawn exactly like the Export panel (recalibrated heights) with the numbered profiles used,
+    the profiles before → after, both side by side, and a statistics figure (every profile, terrace levels, every
+    scan alone vs all with bootstrap, subsets, height vs step direction, drift); JSON and CSV.
+  - *Z calibration*: Automatic (when steps are found — default), Required or Off.
+- **X/Y from the Au(111) herringbone reconstruction** — when there is no atomic resolution. The two families of
+  corrugation lines (63.4 Å, bent by 120°; J. V. Barth et al., *Phys. Rev. B* 42, 9307 (1990)) are found
+  automatically; if they are not, the tool asks you to draw around the herringbones (rectangle, or a closed line
+  with Shift+click). Their spacing goes into the same fit as an atomic lattice, with the same drift treatment,
+  bootstrap, leave-one-out and statistics figure; the result figure shows the scan with the herringbones used
+  (terraces flattened), the period arrows before → after and the region. Accuracy ≈ 1–2 %.
+  *Automatic* (default) uses the atomic lattice, and the herringbones when no lattice is found on Au(111).
+
+### Export: see the file size before exporting
+
+- **Export figure** shows the size of every file it will write (SVG, PDF, PNG, with the pixel size of the PNG) and
+  updates it a moment after you change the page, resolution, images, formats or any panel setting. The figure is
+  rendered in the background exactly as it will be exported, so the size is the real one.
+- **Animated overlay (GIF)** shows the size of the GIF (and of the MP4 when ticked) while you change the duration,
+  frame rate, longest side, hold, opacity or labels, so you can optimise without exporting again and again.
+
 ## 0.0.20 — 2026-11-25
 
 ### Projects and crash recovery
