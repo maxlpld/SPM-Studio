@@ -557,3 +557,9 @@ def test_end_to_end_herringbone_xy_and_steps_z(tmp_path, monkeypatch):
     assert (out / 'z_calibration_overview.svg').is_file()
     zdoc = json.loads((out / 'z_calibration_result.json').read_text())
     assert any(s['lateral_correction_from_xy'] for s in zdoc['scans'])
+    try:
+        import PySide6  # noqa: F401
+    except ImportError:
+        pass
+    else:      # with Qt the herringbone, Z scan and overview figures come from the Export-panel renderer
+        assert not any('renderer failed' in str(m) for m in events), events

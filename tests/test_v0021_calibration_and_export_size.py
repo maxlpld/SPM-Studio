@@ -140,7 +140,7 @@ def test_export_dialog_shows_live_size(app):
         done({'sizes': {'svg': 50_000, 'png': 3_000_000}, 'size_px': [1000, 900]}, '')
     dialog = PublicationDialog(_scan(), (), selected_channel='Z', formats=('svg', 'png'), size_estimator=estimator)
     dialog._run_size_estimate()
-    assert 'SVG 50 kB' in dialog.size_label.text() and 'PNG 3.0 MB' in dialog.size_label.text()
+    assert 'SVG 50.0 kB' in dialog.size_label.text() and 'PNG 3.0 MB' in dialog.size_label.text()
     dialog.page_dpi.setValue(600)
     assert dialog._size_timer.isActive()            # a change schedules a new estimate
     dialog._run_size_estimate()
