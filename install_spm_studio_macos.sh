@@ -24,7 +24,7 @@ if [[ "$(uname -s)" != Darwin ]]; then echo 'This installer is for macOS. On Lin
 if [[ "${EUID:-$(id -u)}" -eq 0 ]]; then echo 'Run as your normal user, not with sudo.' >&2; exit 2; fi
 case "$MODE" in --install|--stage|--activate|--dry-run|--prune-old) ;;
   *) echo 'Use --dry-run, --stage, --activate, --install or --prune-old' >&2; exit 2;; esac
-[[ -f "$ROOT/pyproject.toml" && -f "$ROOT/src/spm_studio/ai/chat_ui.py" ]] || { echo 'Run from the extracted SPM_Studio folder.' >&2; exit 2; }
+[[ -f "$ROOT/pyproject.toml" && -f "$ROOT/src/spm_studio/assistant/controller.py" && -f "$ROOT/src/agent_hub/__init__.py" ]] || { echo 'Run from the extracted SPM_Studio folder.' >&2; exit 2; }
 
 python_ok() {   # prints a Python >=3.12 interpreter with venv and ensurepip
   "$1" - <<'PY' 2>/dev/null

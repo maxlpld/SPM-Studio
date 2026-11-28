@@ -454,31 +454,30 @@ def test_literature_page_connects_zotero_with_one_click(qt_home, monkeypatch):
     from test_v007_literature_connections import make_zotero
     from spm_studio.ai import literature
     from spm_studio.ai.config import load, save
-    from spm_studio.ui.settings_dialog import SettingsDialog
+    from spm_studio.assistant.literature_page import LiteraturePage
     save({**load(), 'zotero_mode': 'off'})          # v0.0.12 default is 'auto'; start from a disconnected Zotero
     monkeypatch.setattr(literature, 'ZOTERO_LOCAL', 'http://127.0.0.1:9/api')
     monkeypatch.setattr(literature, 'ZOTERO_CONNECTOR', 'http://127.0.0.1:9/connector/ping')
-    monkeypatch.setattr(SettingsDialog, '_general_page', lambda self: __import__('PySide6.QtWidgets').QtWidgets.QWidget())
-    monkeypatch.setattr(SettingsDialog, '_library_page', lambda self: __import__('PySide6.QtWidgets').QtWidgets.QWidget())
     window = QMainWindow()
-    dialog = SettingsDialog(window, 'literature')
+    dialog = LiteraturePage(window)                 # v0.1.0: a page of the assistant's own settings
     dialog.show()
     assert 'Not connected' in dialog.zotero_state.text() and not dialog.zotero_disconnect.isEnabled()
     # nothing on the computer: a clear sentence and the advanced choices open
     dialog.zotero_connect.click()
-    assert wait_until(app, lambda: dialog.zotero_status.text().startswith('✗'))
+    assert wait_until(app, lambda: dialog.zotero_status.text().startswith('Problem:'))
     assert 'No Zotero library was found' in dialog.zotero_status.text() and dialog.zotero_advanced.isChecked()
     assert load()['zotero_mode'] == 'off'
     # with a library in the usual place: one click
     make_zotero(tmp_path / 'home' / 'Zotero')
     dialog.zotero_connect.click()
-    assert wait_until(app, lambda: dialog.zotero_status.text().startswith('✓'))
+    assert wait_until(app, lambda: dialog.zotero_status.text().startswith('OK:'))
     assert load()['zotero_mode'] == 'auto' and '2 items' in dialog.zotero_status.text()
     assert 'Connected' in dialog.zotero_state.text() and dialog.zotero_disconnect.isEnabled()
     dialog.zotero_test_button.click()
     assert wait_until(app, lambda: 'Connected — 2 items' in dialog.zotero_status.text())
     dialog.zotero_disconnect.click()
     assert load()['zotero_mode'] == 'off' and 'Not connected' in dialog.zotero_state.text()
+    dialog.stop()
     dialog.close()
 
 
@@ -488,7 +487,7 @@ def test_consensus_sign_in_happens_in_the_settings_window(qt_home, monkeypatch):
     import test_v007_literature_connections as lit
     from spm_studio.ai import consensus
     from spm_studio.ai.config import load
-    from spm_studio.ui import settings_dialog
+    from spm_studio.assistant import literature_page
     server = HTTPServer(('127.0.0.1', 0), lit._Consensus)
     lit._Consensus.state = {}
     threading.Thread(target=server.serve_forever, daemon=True).start()
@@ -502,13 +501,9 @@ def test_consensus_sign_in_happens_in_the_settings_window(qt_home, monkeypatch):
         threading.Thread(target=lambda: lit._browser_signs_in(url.toString(), lit._Consensus.state)).start()
         return True
     from types import SimpleNamespace
-    monkeypatch.setattr(settings_dialog, 'QDesktopServices', SimpleNamespace(openUrl=browser))
-    monkeypatch.setattr(settings_dialog.SettingsDialog, '_general_page',
-                        lambda self: __import__('PySide6.QtWidgets').QtWidgets.QWidget())
-    monkeypatch.setattr(settings_dialog.SettingsDialog, '_library_page',
-                        lambda self: __import__('PySide6.QtWidgets').QtWidgets.QWidget())
+    monkeypatch.setattr(literature_page, 'QDesktopServices', SimpleNamespace(openUrl=browser))
     try:
-        dialog = settings_dialog.SettingsDialog(QMainWindow(), 'literature')
+        dialog = literature_page.LiteraturePage(QMainWindow())     # v0.1.0: in the assistant's settings
         dialog.show()
         assert 'Not connected' in dialog.consensus_state.text() and not dialog.consensus_enabled.isEnabled()
         assert dialog.consensus_signin.text() == 'Sign in to Consensus'
@@ -519,17 +514,18 @@ def test_consensus_sign_in_happens_in_the_settings_window(qt_home, monkeypatch):
         assert dialog.consensus_progress.isHidden() and dialog.consensus_cancel.isHidden()
         assert dialog.consensus_enabled.isChecked() and dialog.consensus_signin.text() == 'Sign in again'
         dialog.consensus_test.click()
-        assert wait_until(app, lambda: dialog.consensus_status.text().startswith('✓'), 30)
+        assert wait_until(app, lambda: dialog.consensus_status.text().startswith('OK:'), 30)
         dialog.consensus_signout.click()
         assert not consensus.signed_in() and load()['consensus_enabled'] is False
         assert 'Not connected' in dialog.consensus_state.text()
         # a sign-in the user abandons can be cancelled from the same place
-        monkeypatch.setattr(settings_dialog, 'QDesktopServices', SimpleNamespace(openUrl=lambda url: True))
+        monkeypatch.setattr(literature_page, 'QDesktopServices', SimpleNamespace(openUrl=lambda url: True))
         dialog.consensus_signin.click()
         assert wait_until(app, lambda: not dialog.consensus_cancel.isHidden(), 30)
         dialog.consensus_cancel.click()
         assert wait_until(app, lambda: 'cancelled' in dialog.consensus_status.text(), 30)
         assert dialog.consensus_cancel.isHidden() and not consensus.signed_in()
+        dialog.stop()
         dialog.close()
     finally:
         server.shutdown()
@@ -537,10 +533,12 @@ def test_consensus_sign_in_happens_in_the_settings_window(qt_home, monkeypatch):
 
 
 def test_chat_runs_the_lookup_the_assistant_asked_for(qt_home, monkeypatch):
+    # v0.1.0: Agent Hub hands the reply to SPM Studio's host, which runs the lookup and sends the results back
     tmp_path, app = qt_home
     from test_v007_literature_connections import make_zotero
     from spm_studio.ai import literature
     from spm_studio.ai.config import load, save
+    from spm_studio.assistant.host import SPMHost
     from spm_studio.ui.main_window import MainWindow
     monkeypatch.setattr(literature, 'ZOTERO_LOCAL', 'http://127.0.0.1:9/api')
     make_zotero(tmp_path / 'home' / 'Zotero')
@@ -548,28 +546,24 @@ def test_chat_runs_the_lookup_the_assistant_asked_for(qt_home, monkeypatch):
     conf.update(zotero_mode='auto', backend='none', configured=True)
     save(conf)
     window = MainWindow()
-    dock = window.ai_dock
+    host = SPMHost(window)
+    reply = ('Let me check your library.\n<spm-literature>{"source": "zotero", "action": "search", '
+             '"query": "graphene"}</spm-literature>')
     sent = []
-    monkeypatch.setattr(dock, '_dispatch', lambda text: sent.append(text))
-    dock.history = [{'role': 'user', 'content': 'What do I have on KPFM of graphene?'}]
-    dock._running = True
-    dock.partial = ('Let me check your library.\n<spm-literature>{"source": "zotero", "action": "search", '
-                    '"query": "graphene"}</spm-literature>')
-    dock._lit_rounds = 0
-    dock._settled()                                             # the reply ends: the lookup starts by itself
-    assert dock._running and not dock.send.isEnabled()
+    assert host.handle_reply(reply, {}, lambda message, summary='': sent.append((message, summary)))
     assert wait_until(app, lambda: bool(sent), 30)
-    assert sent[0].startswith('[SPM Studio literature results') and '"key": "AAAA1111"' in sent[0]
-    # what the user sees: a short line, never the protocol text or the raw data
-    html = dock._message_html('assistant', dock.history[-1]['content'])
-    assert 'Looking up: Zotero search' in html and 'spm-literature' not in html
-    shown = dock._message_html('user', sent[0])
-    assert 'SPM Studio' in shown and 'Looked up: Zotero search' in shown and 'AAAA1111' not in shown
-    # a reply without a request ends the turn; a runaway model is stopped after a few rounds
-    dock.partial = 'You have one paper: Meyer and Glatzel (2019).'
-    dock._running = True
-    dock._settled()
-    assert not dock._running and len(sent) == 1
-    dock._lit_rounds = 99
-    assert dock._literature_followup(dock.history[-2]['content'] if len(dock.history) > 1 else '') is False
+    message, summary = sent[0]
+    assert message.startswith('[SPM Studio literature results') and '"key": "AAAA1111"' in message
+    assert 'Zotero search' in summary
+    # what the user sees: a short line, never the protocol text
+    shown = host.display_text(reply)
+    assert 'Zotero search' in shown and 'spm-literature' not in shown
+    # a reply without a request is not handled; a runaway model is stopped after a few rounds
+    assert host.handle_reply('You have one paper: Meyer and Glatzel (2019).', {}, lambda *a: None) is False
+    core = window.ai_dock.ensure()
+    chat = core.store.new_chat()
+    run = core.run_for(chat['id'])
+    run.tool_rounds = 4
+    run._host_done(message, summary, 'auto')
+    assert core.store.get_chat(chat['id'])['messages'] == []
     window.close()

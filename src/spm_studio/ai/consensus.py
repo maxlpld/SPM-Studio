@@ -3,7 +3,7 @@
 SPM Studio is itself the client of Consensus' MCP server
 ``https://mcp.consensus.app/mcp`` (Streamable HTTP, one tool: ``search``):
 
-* **Sign in** (Settings › Literature › *Sign in to Consensus*) is the standard
+* **Sign in** (the AI assistant settings › Literature › *Sign in to Consensus*) is the standard
   OAuth 2.0 authorization-code flow with PKCE, exactly as documented by
   Consensus: the app registers itself (Dynamic Client Registration), opens the
   Consensus sign-in page in the browser, and receives the result on a
@@ -263,7 +263,7 @@ def _load_record() -> dict:
 
 def _refresh(record: dict) -> dict:
     if not record.get('refresh_token') or not record.get('token_endpoint'):
-        raise ConsensusError('The Consensus sign-in has expired. Open SPM Studio › Settings › Literature and click '
+        raise ConsensusError('The Consensus sign-in has expired. Open the AI assistant settings › Literature (Consensus & Zotero) and click '
                              '“Sign in to Consensus”.')
     form = {'grant_type': 'refresh_token', 'refresh_token': record['refresh_token'], 'client_id': record['client_id'],
             'resource': MCP_URL}
@@ -272,7 +272,7 @@ def _refresh(record: dict) -> dict:
     try:
         tokens = _token_request(record['token_endpoint'], form)
     except ConsensusError as exc:
-        raise ConsensusError('The Consensus sign-in has expired. Open SPM Studio › Settings › Literature and click '
+        raise ConsensusError('The Consensus sign-in has expired. Open the AI assistant settings › Literature (Consensus & Zotero) and click '
                              f'“Sign in to Consensus”. ({exc})') from exc
     new = _token_record(tokens, {'client_id': record['client_id'], 'client_secret': record.get('client_secret', '')},
                         record['token_endpoint'], previous=record)
@@ -300,7 +300,7 @@ def _bearer(force_refresh: bool = False) -> str:
         return key
     record = _load_record()
     if not record.get('access_token'):
-        raise ConsensusError('Consensus is not signed in. Open SPM Studio › Settings › Literature and click '
+        raise ConsensusError('Consensus is not signed in. Open the AI assistant settings › Literature (Consensus & Zotero) and click '
                              '“Sign in to Consensus”.')
     expires = record.get('expires_at') or 0
     if force_refresh or (expires and time.time() > expires - 60):

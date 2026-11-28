@@ -195,39 +195,53 @@ def app():
 
 
 def test_todo_window_check_style_erase_and_persist(app, data_home, monkeypatch):
-    from PySide6.QtCore import Qt
+    # v0.1.0: the upgraded to-do window keeps every feature of the first one
     from PySide6.QtWidgets import QMessageBox
-    from spm_studio.documents import todo
-    from spm_studio.documents.ui.todo_window import TodoWindow
-    hub = SimpleNamespace(unregister=lambda w: None, ask_assistant=lambda *a, **k: sent.append((a, k)))
+    from agent_hub import host as ah_host
+    from agent_hub.organizer import shared
+    from agent_hub.ui.organizer.todo_view import TodoWindow
     sent = []
-    win = TodoWindow(hub)
+
+    class Host(ah_host.Host):
+        def ask_assistant(self, text, send=True):
+            sent.append((text, send))
+            return True
+    ah_host.set_host(Host())
+    org = shared()
+    win = TodoWindow(org)
+    win.select_view('all')
     win.quick.setText('Analysis: lattice of scan 0024')
-    win.add_from_quick()
+    win.quick_add()
     win.quick.setText('Write the KBr report')
-    win.add_from_quick()
-    assert win.list.count() == 2 and win.data['tasks'][0]['category'] == 'Analysis'
-    win.list.item(0).setCheckState(Qt.CheckState.Checked)
-    app.processEvents()
-    assert win.data['tasks'][0]['done']
-    assert win.list.item(0).font().strikeOut()
-    win.done_style.setCurrentIndex(win.done_style.findData('hide'))
-    assert win.list.count() == 1
-    win.done_style.setCurrentIndex(win.done_style.findData('plain'))
-    assert win.list.count() == 2 and not win.list.item(0).font().strikeOut()
+    win.quick_add()
+    tasks = org.todo.tasks()
+    assert win.tasks.count() == 2
+    analysis = next(t for t in tasks if t['title'] == 'lattice of scan 0024')
+    assert org.todo.list_(analysis['list'])['name'] == 'Analysis'           # "Category: text" kept
+    win.toggle(analysis['id'])
+    assert org.todo.get(analysis['id'])['done']
+    win._done_style('hide')
+    assert win.tasks.count() == 1
+    win._done_style('strike')
+    assert win.tasks.count() == 2
+    win.select_view('notes')
     win.notes.setPlainText('Terrace width 40 nm')
-    win.save()
+    win._notes_timer.timeout.emit()
     win.close()
-    again = TodoWindow(hub)                         # reopening: nothing lost
-    assert again.list.count() == 2 and again.notes.toPlainText() == 'Terrace width 40 nm'
-    again.list.setCurrentRow(1)
-    again.list.item(1).setSelected(True)
+    again = TodoWindow(org)                         # reopening: nothing lost
+    again.select_view('all')
+    assert again.tasks.count() == 2 and org.todo.notes() == 'Terrace width 40 nm'
+    row = next(i for i in range(again.tasks.count()) if again.tasks.item(i).data(0x0100)['title'] ==
+               'Write the KBr report')
+    again.tasks.setCurrentRow(row)
+    again.tasks.item(row).setSelected(True)
     again.ask_tasks('selected')
-    assert sent and 'Write the KBr report' in sent[-1][0][0] and sent[-1][1]['send']
+    assert sent and 'Write the KBr report' in sent[-1][0] and sent[-1][1]
     monkeypatch.setattr(QMessageBox, 'question', lambda *a, **k: QMessageBox.StandardButton.Yes)
+    monkeypatch.setattr(QMessageBox, 'information', lambda *a, **k: None)
     again.erase_all()
-    assert again.list.count() == 0 and todo.load()['notes'] == ''
-    assert list(todo.folder().glob('erased_*.json'))
+    assert again.tasks.count() == 0 and org.todo.notes() == ''
+    assert list(org.root.glob('erased_*.json'))
     again.close()
 
 

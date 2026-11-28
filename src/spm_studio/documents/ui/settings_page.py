@@ -26,14 +26,7 @@ def build_page(dialog):
             window.refresh_document_buttons()
         except Exception:
             pass
-        if values.get('latex_enabled') or values.get('slides_enabled') or values.get('todo_enabled'):
-            # give a connected assistant the editors' instructions now (its conversation is kept)
-            dock = getattr(window, 'ai_dock', None)
-            try:
-                if dock is not None and dock.rpc is not None and not dock._running:
-                    dock._open_backend()
-            except Exception:
-                pass
+        # v0.1.0: the assistant reads the editors' instructions with every new message (nothing to restart)
 
     def folder_row(box_layout, title, hint, key, root_fn):
         row = QWidget()

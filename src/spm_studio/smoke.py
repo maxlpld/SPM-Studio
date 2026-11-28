@@ -1,7 +1,7 @@
 """Installer self-test (``python -m spm_studio --smoke-test``), offscreen, disposable dirs.
 
 Exercises the parts most likely to break on a new machine: every bundled theme,
-the main menus, the assistant panel and setup dialog, the Results options and the
+the main menus, the assistant panel (Agent Hub), calendar, to-do and setup dialog, the Results options and the
 Export-panel renderer used by the lattice / molecule figures (SVG, PDF, PNG).
 Nothing touches the user's data; no network, no hardware, no AI provider.
 """
@@ -65,27 +65,34 @@ def run(win) -> int:
         win.log_dock.hide()
 
     def assistant():
-        win.ai_dock.show(); app.processEvents()
-        # v0.0.8.1: detached = a window of its own, without parent (any screen / desktop)
-        window = win.ai_dock.undock_panel(); app.processEvents()
-        assert window.parent() is None and window.isVisible() and win.ai_dock.is_open()
-        assert win.ai_dock.input.window() is window
-        win.ai_dock.dock_panel(); app.processEvents()
-        assert win.ai_dock.isVisible() and not window.isVisible() and win.ai_dock.input.window() is win
-        win.ai_dock.history = [{'role': 'user', 'content': 'Hello'},
-                               {'role': 'assistant', 'content': '**Bold** and `code`\n\n```python\nprint(1)\n```'}]
-        win.ai_dock.render()
-        assert 'Bold' in win.ai_dock.conversation.toPlainText()
-        win.ai_dock.history = []
-        win.ai_dock.render()
-        win.ai_dock._set_busy(True, 'smoke'); app.processEvents(); win.ai_dock._set_busy(False)
-        assert win.ai_dock.tools_button is not None
+        # v0.1.0: Agent Hub — a docked panel, detachable into a window of its own and back
+        controller = win.ai_dock
+        controller.open_panel(); app.processEvents()
+        assert controller.is_open() and not controller.detached()
+        panel = controller.ask('Hello', send=False); app.processEvents()
+        assert panel is not None and panel.input.toPlainText() == 'Hello'
+        window = controller.undock_panel(); app.processEvents()
+        assert window.parent() is None and window.isVisible() and controller.is_open()
+        assert panel.window() is window
+        controller.dock_panel(); app.processEvents()
+        assert controller.is_open() and not window.isVisible() and panel.window() is win
+        from agent_hub.ui.widgets import md_html
+        assert 'Bold' in md_html('**Bold** and `code`\n\n```python\nprint(1)\n```')
+        assert controller.dock.hub.full_button.text() == ''           # octopus icon only
         from spm_studio.ai.config import spm_context_file
         from spm_studio.core import paths
         # The generated prompt is UTF-8. Without an explicit encoding,
         # Windows users with a cp1252 locale fail this installer smoke test
         # on perfectly valid Unicode punctuation (e.g. U+201D).
         assert str(paths.scripts_dir()) in spm_context_file(paths.scripts_dir()).read_text(encoding='utf-8')
+        # calendar and to-do (no AI needed)
+        cal = win.open_calendar(); app.processEvents()
+        for view in ('day', 'week', 'month', 'schedule'):
+            cal.set_view(view); app.processEvents()
+        cal.close()
+        todo = win.open_todo(); app.processEvents()
+        todo.select_view('today'); app.processEvents()
+        todo.close()
 
     def live_tools():
         from spm_studio.core import paths
@@ -101,7 +108,7 @@ def run(win) -> int:
         import shutil
         shutil.rmtree(folder)
         from spm_studio.ai.setup_ui import SetupDialog
-        dialog = SetupDialog(win.ai_dock)
+        dialog = SetupDialog(win)
         for i in range(dialog.mode.count()):
             dialog.mode.setCurrentIndex(i); app.processEvents()
         # v0.0.7: Quick start cards + Advanced page
@@ -110,7 +117,7 @@ def run(win) -> int:
             dialog.nav.setCurrentRow(row); app.processEvents()
         from spm_studio.ai.pi_wizard import PiSetupWizard
         from spm_studio.ai import pi_setup, platform_util, judge_proxy, cli_agents  # noqa: F401
-        wizard = PiSetupWizard(win.ai_dock)
+        wizard = PiSetupWizard(win)
         for i in range(wizard.pages.count()):
             wizard.pages.setCurrentIndex(i); app.processEvents()
         wizard.close(); wizard.deleteLater()

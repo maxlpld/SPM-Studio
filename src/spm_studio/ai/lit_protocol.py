@@ -74,7 +74,7 @@ def run_request(request: dict, conf: dict) -> str:
     try:
         if request['source'] == 'zotero':
             if not literature.zotero_enabled(conf):
-                raise literature.LiteratureError('Zotero is not connected (SPM Studio › Settings › Literature).')
+                raise literature.LiteratureError('Zotero is not connected (the AI assistant settings › Literature (Consensus & Zotero)).')
             action = request['action']
             if action == 'search':
                 result = literature.zotero_search(request.get('query', ''), request.get('limit', 10),

@@ -240,7 +240,11 @@ def test_chat_agent_defaults_and_context_file(tmp_path, monkeypatch):
 def test_pi_rpc_passes_context_and_tools_flags():
     source = (ROOT / 'src/spm_studio/ai/pi_rpc.py').read_text()
     assert "'--append-system-prompt'" in source and "args += ['--no-tools']" in source
-    chat = (ROOT / 'src/spm_studio/ai/chat_ui.py').read_text()
-    assert 'coding=tools' in chat and '_paths.scripts_dir()' in chat
+    # v0.1.0: the assistant is Agent Hub: Pi gets the context and the approval gate; tools are built in the
+    # Scripts project (staging folder, then "Install a staged tool")
+    core = (ROOT / 'src/agent_hub/core.py').read_text(encoding='utf8')
+    assert "'--append-system-prompt'" in core and "args += ['-e', self.gate]" in core
+    develop = (ROOT / 'src/spm_studio/assistant/develop.py').read_text(encoding='utf8')
+    assert 'install_staged' in develop and 'README_SCRIPT.md' in develop
     window = (ROOT / 'src/spm_studio/ui/main_window.py').read_text()
     assert '_start_scripts_watch' in window and 'New tool available in Tools' in window

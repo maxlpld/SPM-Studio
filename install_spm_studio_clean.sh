@@ -17,7 +17,7 @@ if [[ "${EUID}" -eq 0 ]];then echo 'Run as your normal user, not sudo.' >&2;exit
 if [[ "${MODE}" != --install && "${MODE}" != --stage && "${MODE}" != --activate && "${MODE}" != --dry-run && "${MODE}" != --prune-old ]]; then
   echo 'Use --dry-run, --stage, --activate, --install or --prune-old' >&2;exit 2
 fi
-[[ -f "$ROOT/pyproject.toml" && -f "$ROOT/src/spm_studio/ai/chat_ui.py" ]] || { echo 'Run from the extracted release.' >&2;exit 2; }
+[[ -f "$ROOT/pyproject.toml" && -f "$ROOT/src/spm_studio/assistant/controller.py" && -f "$ROOT/src/agent_hub/__init__.py" ]] || { echo 'Run from the extracted release.' >&2;exit 2; }
 if [[ "$MODE" == --dry-run ]];then
   printf 'Version: %s\nSource: %s\nNew isolated package: %s\nLauncher: %s\nDesktop: %s\n' "$VERSION" "$ROOT" "$RELEASE" "$LAUNCHER" "$DESKTOP"
   for old in "$HOME_APP"/releases/*/;do

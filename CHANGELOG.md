@@ -7,6 +7,77 @@ so write it for users. Add new versions **at the top**.
 The internal builds that preceded the GitHub project (0.7.0 – 0.8.3) are documented in
 [`docs/DEVELOPMENT_HISTORY.md`](docs/DEVELOPMENT_HISTORY.md).
 
+## 0.1.0 — 2026-11-28
+
+### A new AI assistant, and a calendar, a to-do list and e-mail
+
+The assistant is now built on the **Agent Hub** engine. Everything the classic panel did is still there, and much
+more. Your conversations and choices from the classic assistant are copied over the first time you open it (the
+originals stay untouched, so going back to 0.0.x still works).
+
+- **Docked, and detachable.** The Assistant button (or Ctrl+Alt+A) opens a panel docked in the window. One click
+  (or dragging the panel out) moves it into its own window on any screen, and back — a running reply, a waiting
+  question, your draft and attachments are kept. The separate "classic panel" is gone: this panel does all of it
+  (voice input, attaching the active scan, files, copying the conversation, building a new analysis tool in the
+  *Scripts & analysis tools* project and installing it after checks).
+- **Chats and projects** with a calmer sidebar: a *Projects* header with a + button, folder icons in colours you
+  choose, chat counts, rename / colour / archive / delete, and *Recent chats* with times. Several chats can work at
+  the same time, side by side or in a grid.
+- **Brainstorming first** (light-bulb button): refine the idea with an economical model where nothing can run, then
+  let it write the final prompt and start the real work.
+- **Usage at a glance**: one ring per connected account (Claude, ChatGPT / Codex, Pi, API keys), in the provider's
+  colour, showing how much of the current limit window is used and when it resets — as reported by the provider;
+  "limit n/a" when the provider does not say. A click shows the 5-hour and weekly windows and what was used here.
+- **Full access** is now an octopus button (its tentacles reach anything). Even with full access, **nothing that
+  leaves your computer happens without your click**: sending an e-mail, a push, an upload, a form — you see it and
+  confirm it every time, and such actions can no longer be "always allowed".
+- **All AI settings in one place**: the assistant's own settings window (gear button in the panel) has the
+  providers and accounts, models and routing, permissions, voice, usage, e-mail accounts, calendar sync, the
+  literature sources (Consensus and Zotero, moved from Settings › Literature — your connections are kept) and SPM
+  Studio's Pi setup. SPM Studio's Settings keep one line: *AI assistant: open its settings*.
+- **No cost when unused**: nothing of the assistant is loaded until you open it.
+
+### Calendar (new)
+
+- Day, week, month and schedule views with a small month navigator, like a web calendar. Several calendars with
+  their own colour; show or hide each one.
+- Create an event by clicking or dragging in the grid; move it or change its length by dragging.
+- Repeating events (daily, weekly, monthly, yearly or custom, with exceptions; change "this", "this and following"
+  or "all" events), time zones, location, description, colour, and several notifications per event.
+- Keyboard: d / w / m / a for the views, t for today, j / k (or n / p) for next / previous, c to create, / to search.
+- Import and export `.ics`, subscribe to a read-only iCal / webcal address with a refresh interval, and — if you want
+  — two-way sync with Google Calendar, Microsoft 365 / Outlook or iCloud / CalDAV (passwords and tokens in your
+  system keyring; a guide is in `docs/EMAIL_CALENDAR_OAUTH.md`).
+- Reminders as desktop notifications while SPM Studio runs, and on start a short summary of what you missed and what
+  comes next.
+- The assistant can read your calendar, find free time and plan ("plan 3 hours for the report this week"), add
+  reminders on its own when something matters (a card you can dismiss) and propose preparation to-dos for a meeting.
+  It asks before changing or deleting an event you made (unless full access is on).
+
+### To-do list (upgraded)
+
+- Lists with a colour and an icon, tags, priority, a deadline with an optional time, a start date, repeat, subtasks,
+  notes, and links to files, chats, e-mails and events.
+- Today, Upcoming, Overdue and Completed; search, sort, filter by priority, drag and drop to reorder.
+- Quick add in plain words: *call Bob friday 10am #admin !high*, *report dec 5*, *timesheet every friday*,
+  *Analysis: fit the CPD* (that list).
+- A task with a deadline appears in the calendar, and the two stay linked: change one and the other follows; tick
+  one and both are done.
+- Your list and notes were copied into the new list once; the old file is kept as it was. Notes, "keep on top",
+  how done tasks look, *Erase all* (with a copy kept) and the assistant buttons (do it, plan, write a report / paper /
+  slides / summary from your notes) are still there. The window also works small, like a post-it.
+
+### E-mail (new, in the assistant)
+
+- Connect any mailbox: Gmail, Outlook, iCloud, Yahoo, your university or work server — with an app password, or by
+  signing in with Google or Microsoft using your own client id (step-by-step guide in `docs/EMAIL_CALENDAR_OAUTH.md`).
+- The assistant reads, searches and summarises e-mail and drafts replies. **Sending, replying, forwarding or moving
+  always shows the complete message with Edit / Send / Discard, and only your Send click releases it.**
+- E-mails that ask you to fill something in (home-office days, a form, a timesheet) become a to-do with the deadline;
+  a small form asks only for what is missing (the rest comes from your calendar and earlier answers), the PDF is
+  filled and the reply drafted, and you see both side by side before anything is sent.
+- New mail is checked in the background only while an account is connected.
+
 ## 0.0.21 — 2026-11-27
 
 ### Microscope calibration: Z from monatomic steps, X/Y from the Au(111) herringbones

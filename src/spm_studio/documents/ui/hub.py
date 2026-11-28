@@ -66,8 +66,7 @@ class DocumentHub(QObject):
     @staticmethod
     def kind_of(window) -> str:
         from .latex_editor import LatexEditorWindow
-        from .todo_window import TodoWindow
-        if isinstance(window, TodoWindow):
+        if type(window).__name__ == 'TodoWindow':
             return 'todo'
         return 'latex' if isinstance(window, LatexEditorWindow) else 'slides'
 
@@ -159,15 +158,13 @@ class DocumentHub(QObject):
         return win
 
     def open_todo(self):
-        """The to-do list & notes window (one per application; the list is saved on disk)."""
+        """The to-do list & notes window (v0.1.0: upgraded — lists, deadlines, tags, priorities, subtasks, linked to
+        the calendar; one window per application; the first list was copied into it once, untouched)."""
+        organizer = getattr(self.main_window, 'organizer', None) if self.main_window is not None else None
+        if organizer is not None:
+            return organizer.open('todo')
         from .todo_window import TodoWindow
-        for win in self.windows('todo'):
-            win.show()
-            win.raise_()
-            win.activateWindow()
-            return win
         win = TodoWindow(self)
-        self.register(win)
         win.show()
         return win
 
@@ -301,8 +298,6 @@ class DocumentHub(QObject):
             return None
         if source is not None:
             self.note_active(source)
-        if not dock.conf.get('configured'):
-            dock.setup()
         was_open = dock.is_open()
         placed = bool(self.main_window.settings.value('ai_window_geometry')) if self.main_window else False
         if source is not None and not dock.detached():
@@ -322,14 +317,7 @@ class DocumentHub(QObject):
     def ask_assistant(self, text, send=False, source=None):
         if self.show_assistant(source) is None:
             return
-        dock = self._dock()
-        dock.input.setPlainText(text)
-        cursor = dock.input.textCursor()
-        cursor.movePosition(cursor.MoveOperation.End)
-        dock.input.setTextCursor(cursor)
-        dock.input.setFocus()
-        if send:
-            QTimer.singleShot(0, dock.send_prompt)
+        self._dock().ask(text, send=send, source=source)
 
     def ai_context_line(self) -> str:
         """One line telling the assistant which document the user is working on (empty if none)."""
@@ -356,9 +344,8 @@ class DocumentHub(QObject):
         app, action = r['app'], r['action']
         conf = doc_settings.load()
         if app == 'todo':
-            from .todo_window import ai_action
-            found = self.windows('todo')
-            return ai_action(r, found[0] if found else None)
+            from spm_studio.assistant.todo_bridge import ai_action
+            return ai_action(r)
         if app == 'latex':
             if action == 'new_project':
                 from spm_studio.documents import templates

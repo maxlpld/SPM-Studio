@@ -23,7 +23,7 @@ DEFAULT = {'backend': 'none', 'pi_executable': '', 'provider': 'openai', 'model'
            # v0.8.2: Pi installed by SPM Studio (private Node/Pi/agent folder, never ~/.pi),
            # Claude Code / Codex CLI executable, and the port of the in-app Judge proxy.
            'pi_managed': False, 'agent_executable': '', 'judge_proxy_port': 11436,
-           # v0.0.5: literature sources for the agent (Settings › Literature). The Zotero API key is
+           # v0.0.5: literature sources for the agent (the AI assistant settings › Literature). The Zotero API key is
            # never stored here (OS keyring, see ai/literature.py).
            'consensus_enabled': False, 'zotero_mode': 'off', 'zotero_library_id': '',
            'zotero_library_type': 'user',
@@ -99,7 +99,7 @@ def grant_full_access(conf: dict) -> dict:
     """Tools on (file + shell, everywhere in SPM Studio) and literature sources on.
 
     Used when the assistant is set up (the setup window says so) and once when v0.0.12 starts.
-    Consensus still needs its sign-in (Settings › Literature); Zotero 'auto' uses the local
+    Consensus still needs its sign-in (the AI assistant settings › Literature); Zotero 'auto' uses the local
     Zotero when it exists. Nothing else is changed.
     """
     conf = dict(conf)

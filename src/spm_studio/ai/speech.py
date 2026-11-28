@@ -49,7 +49,7 @@ def available() -> bool:
 def download_model(progress=None) -> Path:
     """One-time fetch of the small, generic offline English acoustic model.
 
-    Must only be called after explicit user confirmation (see chat_ui.py).
+    Must only be called after explicit user confirmation (the voice button of the assistant asks first).
     Safe to call again later: it is a no-op once the model is cached.
     """
     import zipfile, tempfile, urllib.request

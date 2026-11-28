@@ -1,8 +1,12 @@
-# AI assistant setup (SPM Studio 0.8.2 — Linux, Windows, macOS)
+# AI assistant setup (Linux, Windows, macOS)
 
 The assistant is optional: every scientific tool works without it. Open it with the **Assistant** button
-in the header; settings are in **Settings › AI assistant…**. Nothing is downloaded, installed or signed in
-without a confirmation dialog.
+in the header (or Ctrl+Alt+A). Since 0.1.0 every AI setting is in the assistant's own settings window (gear
+button in the assistant panel; SPM Studio's Settings › General has one line that opens it): *AI Providers &
+Accounts*, *Models & Routing*, *Permissions & Security*, *E-mail accounts*, *Calendar*, *Literature (Consensus &
+Zotero)* and **SPM Studio assistant & Pi setup**, which opens the dialogs described below (the connection choice
+and the guided Pi setup). Nothing is downloaded, installed or signed in without a confirmation dialog.
+How the engine is built into SPM Studio: [`AGENT_HUB.md`](AGENT_HUB.md).
 
 ## The five starting paths
 

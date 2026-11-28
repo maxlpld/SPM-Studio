@@ -1,0 +1,10 @@
+{
+ "package": "agent-hub",
+ "version": "0.3.0",
+ "contract": [
+  1,
+  1
+ ],
+ "commit": "c7ae5d1169956b65bd841658171edf808691302b",
+ "tree_sha256": "163604f7760fd5948f09bee29e4c201885bd8fd2dc8313dc204578f79559870f"
+}

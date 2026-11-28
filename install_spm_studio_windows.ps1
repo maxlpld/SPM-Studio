@@ -17,7 +17,7 @@ Set-StrictMode -Version 2
 
 $Root = Split-Path -Parent $MyInvocation.MyCommand.Path
 $Toml = Join-Path $Root 'pyproject.toml'
-if (-not (Test-Path $Toml) -or -not (Test-Path (Join-Path $Root 'src\spm_studio\ai\chat_ui.py'))) {
+if (-not (Test-Path $Toml) -or -not (Test-Path (Join-Path $Root 'src\spm_studio\assistant\controller.py')) -or -not (Test-Path (Join-Path $Root 'src\agent_hub\__init__.py'))) {
     Fail 'Run this script from the extracted SPM_Studio folder.'
 }
 $Version = (Select-String -Path $Toml -Pattern '^version = "(.+)"' | Select-Object -First 1).Matches[0].Groups[1].Value

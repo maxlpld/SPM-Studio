@@ -521,17 +521,22 @@ def test_beta_page_activation_flow(window, fake_service):
 
 
 def test_assistant_states_and_extension_hooks(window):
+    # v0.1.0: the Agent Hub engine reports the same states to extensions as the classic panel did
     dock = window.ai_dock
+    core = dock.ensure()
     seen = []
     window.extension_api.assistantState.connect(seen.append)
-    dock._running = True
-    dock._set_busy(True)
-    dock._activity('Running tool: read')
-    dock._receive_delta('Hello')
-    dock._settled()
-    assert seen[:4] == ['thinking', 'working', 'talking', 'success']
-    dock._running = True
-    dock._error('provider down')
+    chat = core.store.new_chat()
+    run = core.run_for(chat['id'])
+    run.set_state('running')
+    core.detail_state('thinking')
+    run._activity('Running tool: read')
+    run._text('Hello')
+    run.set_state('done')
+    for state in ('thinking', 'working', 'talking', 'success'):
+        assert state in seen, (state, seen)
+    assert seen.index('thinking') < seen.index('talking') < seen.index('success')
+    run.set_state('error')
     assert seen[-1] == 'error'
     from spm_studio.beta.api import ExtensionAPI
     api = window.extension_api

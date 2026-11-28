@@ -290,6 +290,12 @@ _loaded: dict[str, object] = {}
 def load_enabled(api, beta_ok: bool) -> dict[str, str]:
     """Activate every enabled extension; ``{id: 'ok' | reason}``. Never raises."""
     report = {}
+    try:
+        # v0.1.0: the assistant engine is part of SPM Studio. Import it before any extension folder is put on
+        # sys.path, so an extension that still ships its own copy can never replace the built-in one.
+        import agent_hub  # noqa: F401
+    except Exception:
+        pass
     for ext_id, info in installed().items():
         d = info['descriptor']
         if not info['enabled']:

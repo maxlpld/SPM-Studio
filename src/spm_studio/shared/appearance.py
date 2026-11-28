@@ -230,6 +230,8 @@ ICONS = {
     'folder-plus': '<path d="M3.5 7.5A1.5 1.5 0 0 1 5 6h4l2 2h8a1.5 1.5 0 0 1 1.5 1.5v8A1.5 1.5 0 0 1 19 19H5a1.5 1.5 0 0 1-1.5-1.5z"/><path d="M12 10.5v5M9.5 13h5"/>',
     'menu': '<path d="M4 7h16M4 12h16M4 17h16"/>',
     'send-to': '<path d="M4 12h12"/><path d="M12 7l5 5-5 5"/><path d="M20 5v14"/>',
+    # v0.1.0: calendar (same style as the Agent Hub calendar icon)
+    'calendar': '<rect x="3.5" y="5" width="17" height="15" rx="1.5"/><path d="M3.5 9.5h17"/><path d="M8 3.5v3M16 3.5v3"/>',
 }
 
 
@@ -302,7 +304,7 @@ DOCK_CLOSE_ICON = 18      # px, glyph of the dock close cross
 DOCK_CLOSE_BUTTON = 28    # px, clickable area
 
 
-def style_dock_titlebar(dock):
+def style_dock_titlebar(dock, keep_floatable: bool = False):
     """Dock header with a clearly visible close button (Logs, Assistant).
 
     Qt draws the built-in dock close button at the style's small-icon size and
@@ -316,7 +318,8 @@ def style_dock_titlebar(dock):
     """
     from PySide6.QtWidgets import QDockWidget, QWidget, QHBoxLayout, QLabel
     from PySide6.QtCore import QSize, Qt
-    dock.setFeatures(dock.features() & ~QDockWidget.DockWidgetFeature.DockWidgetFloatable)
+    if not keep_floatable:          # v0.1.0: the assistant keeps "drag out into a window of its own"
+        dock.setFeatures(dock.features() & ~QDockWidget.DockWidgetFeature.DockWidgetFloatable)
     bar = QWidget(dock)
     bar.setObjectName('dockTitleBar')
     bar.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)

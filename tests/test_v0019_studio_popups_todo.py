@@ -195,20 +195,27 @@ def _outline_settings_and_order_of_channel_tiles(window, app):
 
 
 def _todo_is_a_compact_post_it_window(window, app):
+    # v0.1.0: the upgraded to-do window still works as a small post-it (one column below 640 px)
     from PySide6.QtCore import Qt
     win = window.documents.open_todo()
-    app.processEvents()
+    for _ in range(3):                      # the window narrows step by step, like a drag of its edge
+        win.resize(380, 560)
+        app.processEvents()
     assert win.width() <= 480 and win.height() <= 700
-    assert win.title.text() == 'To-do' and not win.tabs.tabBar().isVisible()
+    assert win.compact_mode and not win.side.isVisible() and win.nav_combo.isVisible()
+    win.select_view('all')
     win.quick.setText('Measure the step height')
-    win.add_from_quick()
-    assert win.segment_buttons[0].text() == 'Tasks (1)' and '1 open' in win.count.text()
-    win.segment_buttons[1].click()
-    assert win.tabs.currentIndex() == 1 and not win.quick.isVisible()
-    win.pin.setChecked(True)
+    win.quick_add()
+    assert win.tasks.count() == 1 and win.org.todo.counts()['completed'] == 0
+    win.select_view('notes')
+    assert win.stack.currentWidget() is win.notes
+    win.set_pinned(True)
     assert win.windowFlags() & Qt.WindowType.WindowStaysOnTopHint
-    win.pin.setChecked(False)
+    win.set_pinned(False)
     assert not win.windowFlags() & Qt.WindowType.WindowStaysOnTopHint
+    win.resize(1100, 700)
+    app.processEvents()
+    assert not win.compact_mode and win.side.isVisible()
     win.close()
 
 

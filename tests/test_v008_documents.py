@@ -718,24 +718,21 @@ def test_latex_editor_adds_packages_and_offers_to_install(window, qt, home, tmp_
 
 
 def test_assistant_gets_a_window_of_its_own(window, qt, home, tmp_path):
-    from spm_studio.ai import config as ai_config
+    # v0.1.0: the assistant is Agent Hub; for an editor it opens in a window of its own beside it
     from spm_studio.documents import latex_project
-    from spm_studio.ai.chat_ui import AssistantWindow
-    conf = ai_config.load()
-    conf.update(configured=True, chat_tools_ack=True)       # no first-use dialogs in the test
-    ai_config.save(conf)
+    from agent_hub.ui.window import DetachedWindow
     dock = window.ai_dock
-    dock.conf = ai_config.load()
     project = latex_project.create_project(tmp_path, 'Asked')
     win = window.documents.open_latex(project)
     win.auto_button.setChecked(False)
     qt.processEvents()
     shown = window.documents.show_assistant(win)
     qt.processEvents()
-    assert isinstance(shown, AssistantWindow) and shown.parent() is None and shown.isVisible()
-    assert dock.detached() and dock.is_open() and not dock.isVisible()
+    assert isinstance(shown, DetachedWindow) and shown.parent() is None and shown.isVisible()
+    assert dock.detached() and dock.is_open() and not dock.dock.isVisible()
     assert window.ai_toolbar_button.isChecked()
     window.documents.ask_assistant('Explain this line', send=False, source=win)
+    qt.processEvents()
     assert dock.input.toPlainText() == 'Explain this line' and dock.input.window() is shown
     shown.move(shown.x() + 37, shown.y())
     qt.processEvents()
@@ -747,7 +744,7 @@ def test_assistant_gets_a_window_of_its_own(window, qt, home, tmp_path):
     assert shown.isVisible() and dock.detached()
     dock.dock_panel()
     qt.processEvents()
-    assert not dock.detached() and dock.isVisible() and dock.input.window() is window
+    assert not dock.detached() and dock.is_open() and dock.input.window() is window
     window.toggle_ai_assistant()
     assert not dock.is_open()
     win.close()

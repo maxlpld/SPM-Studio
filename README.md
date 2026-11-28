@@ -10,7 +10,7 @@
 </p>
 
 <p align="center">
-  <img alt="Version 0.0.21" src="https://img.shields.io/badge/version-0.0.21-57758B">
+  <img alt="Version 0.1.0" src="https://img.shields.io/badge/version-0.1.0-57758B">
   <img alt="Python 3.12+" src="https://img.shields.io/badge/python-3.12%2B-3776AB">
   <img alt="Linux, Windows, macOS" src="https://img.shields.io/badge/platform-Linux%20%7C%20Windows%20%7C%20macOS-555555">
   <img alt="MIT licence" src="https://img.shields.io/badge/licence-MIT-2E7D32">
@@ -239,32 +239,55 @@ Guide: [`docs/DOCUMENTS.md`](docs/DOCUMENTS.md).
 
 ## AI assistant (optional)
 
-The **Assistant** button in the header opens a panel that can dock on the right,
-float to another screen and keep its history. Its settings (*Settings › General › AI assistant…*) have two
-pages: **Quick start** — one card per way of getting an assistant, each showing what is done and what is
-left to do — and **Advanced**, for people who bring their own AI workflow (program paths, workspace, API
-connections and fallbacks, routing, local Judge). The starting points:
+The **Assistant** button (or Ctrl+Alt+A) opens the assistant as a **panel docked in the main window**; one click
+moves it into a window of its own on any screen, and back — without stopping anything. It is built on the Agent
+Hub engine (kept in `src/agent_hub`, pinned and hash-checked): chats and projects, several chats at the same time,
+approval cards, brainstorming before execution, voice input, routing profiles, and a usage ring per connected
+account. Nothing of it starts, and nothing AI-related appears anywhere else, until you open it. Every AI option —
+providers and accounts, models and routing, permissions, voice, usage, e-mail accounts, calendar sync, literature
+sources, SPM Studio's own Pi setup — is in **its own settings** (gear button in the panel); SPM Studio's Settings
+keep one line: *AI assistant: open its settings*.
 
-| Choice | For whom | What SPM Studio does |
+| Choice | For whom | What it does |
 |---|---|---|
-| **Set up Pi** | New to AI agents | Guided setup: private Node.js (if needed), the Pi agent, optional router and sub-agents, browser sign-in (e.g. ChatGPT Plus/Pro, GitHub Copilot) or an API key, model choice, and an optional **local Judge** model through Ollama with three hardware-checked profiles and a live test. Never changes an existing `~/.pi`. |
+| **Set up Pi** | New to AI agents | Guided setup: private Node.js (if needed), the Pi agent, optional router and sub-agents, browser sign-in (e.g. ChatGPT Plus/Pro, GitHub Copilot) or an API key, model choice, and an optional **local Judge** model through Ollama. Never changes an existing `~/.pi`. |
 | **My Pi** | You already use Pi | Uses your Pi exactly as configured. |
 | **Claude Code / Codex** | Claude or ChatGPT subscribers | Uses those command-line agents with their own sign-in. |
-| **Cloud API** | Chat only | Direct OpenAI-compatible, Anthropic, Gemini, OpenRouter or Ollama chat (not a coding agent). |
-| **Later** | | Assistant off; all scientific tools keep working. |
+| **API keys, local servers** | Chat | OpenAI, Anthropic, Gemini, OpenRouter, Mistral, DeepSeek, Ollama, LM Studio, llama.cpp — several at once. |
 
-- Ordinary chat starts Pi **without tools**. Writing or changing analysis tools is a separate, explicitly
-  authorised task; new tools are staged, checked (manifest and syntax) and only then registered.
-- API keys come from environment variables or the operating system's secure keyring; without a keyring they
-  stay in memory for the current session only. No key is ever shipped with SPM Studio.
-- Optional offline push-to-talk speech input (Vosk), with a one-time, confirmed model download.
-- **Limits:** neither Pi's coding tools nor Python plugins are an operating-system sandbox, and a generated
-  tool is not scientifically validated by passing a syntax check. Read
-  [`SECURITY.md`](SECURITY.md) and [`VERIFY_AND_TEST.md`](VERIFY_AND_TEST.md) before enabling coding tools.
+- **Nothing leaves your computer without your click.** The assistant can never send an e-mail, a message, a form
+  or an upload on its own: e-mails wait in an outbox card (full message, *Edit / Send / Discard*), and any other
+  command that would send something away asks every time — also with full access (the octopus button), and it
+  cannot be "always allowed".
+- **Usage rings** show, per connected account, the share of the current limit window and the time to reset as
+  reported by the provider (Claude Code, Codex, API headers) — never guessed; otherwise "limit n/a".
+- API keys, passwords and tokens live only in the operating system's keyring (in memory for the session when
+  there is none).
+- **Limits:** coding agents are not an operating-system sandbox, and a generated tool is not scientifically
+  validated by passing a syntax check. Read [`SECURITY.md`](SECURITY.md) before giving an agent full access.
+
+## Calendar, to-do and e-mail
+
+These work **without any AI connected** (header buttons *Calendar* and *To-do*):
+
+- **Calendar** — day, week, month and schedule views like a web calendar, several calendars with colours,
+  create by click or drag, move and resize by drag, repeating events with exceptions, time zones, several
+  notifications per event, keyboard shortcuts (d w m a t j k c). Import / export `.ics`, read-only iCal / webcal
+  subscriptions, optional two-way sync with Google Calendar, Microsoft 365 / Outlook and iCloud / CalDAV.
+  Reminders while SPM Studio runs, and a "missed / upcoming" summary at start.
+- **To-do** — lists with colour and icon, tags, priority, deadline (date and time), start date, repeat, subtasks,
+  notes and links; Today, Upcoming, Overdue, Completed; quick add in plain language (*call Bob friday 10am
+  #admin !high*). A task with a deadline appears in the calendar, linked both ways. Your previous list was
+  copied into it once (the original file is kept).
+- **E-mail** (in the assistant) — connect any mailbox (IMAP / SMTP with an app password, or sign in with Google /
+  Microsoft using your own client id: [`docs/EMAIL_CALENDAR_OAUTH.md`](docs/EMAIL_CALENDAR_OAUTH.md)). The
+  assistant reads, searches, summarises and drafts; administrative e-mails (forms, home-office days, timesheets)
+  become a to-do with the deadline and a form card that asks only for what is missing, fills the PDF and drafts
+  the reply — and nothing is sent before you press Send.
 
 ### Literature: Consensus and Zotero
 
-*Settings › Literature* lets the assistant answer with references instead of from memory. Both sources are
+The assistant's settings › *Literature (Consensus & Zotero)* let it answer with references instead of from memory. Both sources are
 connected in that page, by SPM Studio itself — no terminal, no agent configuration — and then work with every
 assistant (Pi, Claude Code, Codex or a direct API chat), in ordinary chat too. Both are read-only and off
 until you connect them.
@@ -320,7 +343,8 @@ python -m spm_studio                                             # run from sour
 Project layout:
 
 ```text
-src/spm_studio/        the application (core = readers, processing, export, updates; ui = Qt; ai = assistant)
+src/spm_studio/        the application (core = readers, processing, export, updates; ui = Qt; ai, assistant = AI)
+src/agent_hub/         the assistant engine, calendar, to-do and e-mail (pinned copy, tools/vendor_agent_hub.py)
 scripts/               the analysis tools shipped to users (copied to their scripts folder on first start)
 customization/         themes, colour maps, profiles, presets, shortcuts
 tests/                 pytest suite (headless; Qt tests run when PySide6 is installed)

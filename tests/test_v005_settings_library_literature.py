@@ -542,9 +542,9 @@ def test_dock_close_buttons_are_large_enough_to_see(window):
     from spm_studio.shared.appearance import DOCK_CLOSE_BUTTON, DOCK_CLOSE_ICON
     assert DOCK_CLOSE_ICON >= 18 and DOCK_CLOSE_BUTTON >= 26
     window.log_dock.show()
-    window.ai_dock.show()
+    window.ai_dock.show()                           # v0.1.0: the assistant (Agent Hub) panel
     QApplication.processEvents()
-    for dock in (window.log_dock, window.ai_dock):
+    for dock in (window.log_dock, window.ai_dock.dock):
         close = dock.spm_close_button
         assert close.isVisible() and close.width() >= 26 and close.height() >= 26
         assert close.iconSize().width() >= 18 and not close.icon().isNull()
@@ -577,7 +577,7 @@ def test_tools_list_has_no_status_glyph_and_readme_button_opens(window, monkeypa
     panel.set_run_state('idle')
     assert panel.activity.isHidden()
     assert window.logs.progress.property('role') == 'activity' and window.logs.progress.maximumWidth() >= 300
-    assert window.ai_dock.busy_bar.property('role') == 'activity'
+    # v0.1.0: the assistant shows its progress in its own panel (spinner on the chat tab), no strip here
 
 
 def test_settings_window_pages_and_library_actions(window, tmp_path, monkeypatch):
@@ -587,9 +587,10 @@ def test_settings_window_pages_and_library_actions(window, tmp_path, monkeypatch
     dialog = SettingsDialog(window, 'about')
     dialog.show()
     QApplication.processEvents()
-    assert [p[0] for p in PAGES] == ['general', 'appearance', 'library', 'literature', 'documents', 'updates',
-                                     'tutorials', 'beta', 'about']   # v0.0.20: + appearance
-    assert dialog.stack.currentIndex() == 8
+    # v0.0.20: + appearance; v0.1.0: Literature moved to the assistant's own settings
+    assert [p[0] for p in PAGES] == ['general', 'appearance', 'library', 'documents', 'updates',
+                                     'tutorials', 'beta', 'about']
+    assert dialog.stack.currentIndex() == 7
     author = dialog.findChild(type(dialog.about_version), 'AboutAuthorV005')
     assert 'maxlpld' in author.text() and 'https://github.com/maxlpld' in author.text()
     current = re.search(r'^version = "(\d+\.\d+\.\d+)"',
@@ -615,16 +616,18 @@ def test_settings_window_pages_and_library_actions(window, tmp_path, monkeypatch
     dialog._library_changed('imported')
     assert window.profile_combo.findData('Multipass') >= 0          # back without restarting
     assert window.profile_combo.findData('KPFM_v7') < 0
-    # literature page reflects the saved settings and saves them
-    dialog.show_page('literature')
-    dialog.consensus_enabled.setChecked(True)
-    dialog.zotero_mode.setCurrentIndex(dialog.zotero_mode.findData('local'))
-    monkeypatch.setattr(window.ai_dock, '_open_backend', lambda: None)
-    dialog._literature_apply()
+    dialog.close()
+    # literature page (v0.1.0: in the assistant's settings) reflects the saved settings and saves them
+    from spm_studio.assistant.literature_page import LiteraturePage
+    page = LiteraturePage(window)
+    page.consensus_enabled.setChecked(True)
+    page.zotero_mode.setCurrentIndex(page.zotero_mode.findData('local'))
+    page._literature_apply()
     from spm_studio.ai.config import load
     assert load()['consensus_enabled'] is True and load()['zotero_mode'] == 'local'
-    assert 'Saved.' in dialog.literature_result.text()
-    dialog.close()
+    assert 'Saved.' in page.literature_result.text()
+    page.stop()
+    page.close()
 
 
 def test_export_dialog_custom_grid_and_saved_profile(window, home):

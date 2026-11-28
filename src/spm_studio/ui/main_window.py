@@ -7,7 +7,7 @@ from datetime import datetime
 import numpy as np
 from PySide6.QtCore import (Qt, QEvent, QTimer, QThreadPool, QThread, QProcess, QProcessEnvironment,
                            Signal, QSettings, QUrl, Slot, QFileSystemWatcher)
-from PySide6.QtGui import QAction, QKeySequence, QDesktopServices, QImage, QPixmap
+from PySide6.QtGui import QAction, QKeySequence, QShortcut, QDesktopServices, QImage, QPixmap
 from PySide6.QtWidgets import (QMainWindow,QFrame,QCheckBox,QWidget,QVBoxLayout,QHBoxLayout,QSplitter,QTabWidget,
     QScrollArea,QDockWidget,QFileDialog,QMessageBox,QInputDialog,QPushButton,QListWidgetItem,QToolBar,QComboBox,QLabel,QApplication,QSizePolicy,QLineEdit,QTextEdit,QPlainTextEdit,QAbstractSpinBox)
 from spm_studio.shared.dialogs import MessageDialog as QMessageBox, TextInputDialog as QInputDialog
@@ -457,7 +457,8 @@ class MainWindow(QMainWindow):
         self.ai_toolbar_button.setObjectName('AiAssistantToggleV08')
         self.ai_toolbar_button.setCheckable(True)
         self.ai_toolbar_button.setProperty('flat',True)
-        self.ai_toolbar_button.setToolTip('Show / hide the AI assistant (dockable, detachable)')
+        self.ai_toolbar_button.setToolTip('Show / hide the AI assistant (docked panel, detachable into its own window; '
+                                          'Ctrl+Alt+A)')
         set_icon(self.ai_toolbar_button,'ai')
         self.ai_toolbar_button.clicked.connect(self.toggle_ai_assistant)
         # v0.0.5: the menu bar is gone. Logs get a visible toggle, and everything that had no other
@@ -466,8 +467,8 @@ class MainWindow(QMainWindow):
                                              checkable=True)
         self.logs_toolbar_button.setObjectName('LogsToggleV005')
         self.logs_toolbar_button.clicked.connect(self._toggle_logs)
-        self.settings_button=tool_button('','gear','Settings: library, literature sources, theme, shortcuts, '
-                                         'assistant, updates, about',icon_only=True)
+        self.settings_button=tool_button('','gear','Settings: library, theme, documents, shortcuts, updates, about '
+                                         '(the AI assistant has its own settings)',icon_only=True)
         self.settings_button.setObjectName('SettingsGearV005')
         self.settings_button.setAccessibleName('Settings')
         from PySide6.QtCore import QSize as _QSize
@@ -490,11 +491,18 @@ class MainWindow(QMainWindow):
         self.slides_button=tool_button('Slides','slides','Presentation editor: new presentation, open, import')
         self.slides_button.setObjectName('OpenSlidesEditorV008')
         self.slides_button.clicked.connect(self.open_slides_editor)
-        self.todo_button=tool_button('To-do','todo','To-do list & notes, connected to the assistant (opens in its own window)')
+        self.todo_button=tool_button('To-do','todo','To-do list & notes: lists, deadlines, tags, priorities, '
+                                     'subtasks; tasks with a deadline appear in the calendar (own window)')
         self.todo_button.setObjectName('OpenTodoV0012')
         self.todo_button.clicked.connect(self.open_todo)
+        # v0.1.0: calendar (works without any AI connected)
+        self.calendar_button=tool_button('Calendar','calendar','Calendar: day, week, month and schedule views, '
+                                         'reminders, .ics import / export, subscriptions (own window)')
+        self.calendar_button.setObjectName('OpenCalendarV010')
+        self.calendar_button.clicked.connect(self.open_calendar)
         self.topbar.addWidget(self.latex_button)
         self.topbar.addWidget(self.slides_button)
+        self.topbar.addWidget(self.calendar_button)
         self.topbar.addWidget(self.todo_button)
         self.topbar.addWidget(self.logs_toolbar_button)
         self.topbar.addWidget(self.ai_toolbar_button)
@@ -691,9 +699,13 @@ class MainWindow(QMainWindow):
         self.latex_button.setVisible(bool(conf.get('latex_enabled')))
         self.slides_button.setVisible(bool(conf.get('slides_enabled')))
         self.todo_button.setVisible(bool(conf.get('todo_enabled',True)))
+        self.calendar_button.setVisible(bool(conf.get('calendar_enabled',True)))
 
     def open_todo(self):
-        self.documents.open_todo()
+        return self.documents.open_todo()
+
+    def open_calendar(self):
+        return self.organizer.open('calendar')
 
     def open_latex_editor(self):
         self.documents.launch('latex',self)
@@ -743,6 +755,7 @@ class MainWindow(QMainWindow):
                 if status!='disabled':self._log(f'Extension {ext_id}: {status}')
         except Exception as exc:
             self._log(f'Extensions were not loaded: {exc}')
+        self._keep_builtin_assistant()
         headless=os.environ.get('QT_QPA_PLATFORM')=='offscreen' and not os.environ.get('SPM_STUDIO_FORCE_ONBOARDING')
         if not headless and not os.environ.get('SPM_STUDIO_NO_ONBOARDING'):
             QTimer.singleShot(1500,self._maybe_onboard)
@@ -1142,7 +1155,7 @@ class MainWindow(QMainWindow):
         self._action(options,'Keyboard shortcuts…','options.shortcuts',self.open_shortcut_options)
         self._action(options,'Export shortcut file…','options.export_shortcuts',self.export_shortcuts)
         options.addSeparator()
-        options.addAction('AI assistant…',lambda:self.ai_dock.setup())
+        options.addAction('AI assistant settings…',self.open_assistant_settings)
         options.addAction('Check for updates…',lambda:self.open_update_dialog())
         options.addSeparator()
         self._action(options,'Open customization folder','tool.customization_folder',lambda:self._open_directory(paths.customization_dir()))
@@ -1171,13 +1184,19 @@ class MainWindow(QMainWindow):
         if missing:raise RuntimeError('Unregistered keyboard actions: '+', '.join(sorted(missing)))
 
     def _create_ai_dock(self):
-        # Persistent native dock. Hiding/undocking does not interrupt its tasks.
-        from spm_studio.ai.chat_ui import AssistantDock
-        self.ai_dock=AssistantDock(self)
-        self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea,self.ai_dock)
-        self.ai_dock.hide()
-        self.ai_dock.visibilityChanged.connect(lambda visible:self.ai_toolbar_button.setChecked(self.ai_dock.is_open()))
+        # v0.1.0: the AI assistant is Agent Hub (spm_studio/assistant). Nothing is imported or started until it is
+        # first opened; then it is a docked panel that can be detached into its own window and docked back.
+        from spm_studio.assistant.controller import AssistantController
+        from spm_studio.assistant.organizer import Organizer
+        self.agent_hub_builtin=True                 # extensions: do not add a second assistant panel
+        self.ai_dock=AssistantController(self)
         self.ai_dock.shownChanged.connect(lambda shown:self.ai_toolbar_button.setChecked(self.ai_dock.is_open()))
+        sc=QShortcut(QKeySequence('Ctrl+Alt+A'),self)
+        sc.activated.connect(self.toggle_ai_assistant)
+        self._assistant_shortcut=sc
+        # calendar, to-do reminders and (only when an account is connected) e-mail checks — no AI needed
+        self.organizer=Organizer(self)
+        self.organizer.start_background()
 
     def open_ai_assistant(self):
         self.ai_dock.first_open()
@@ -1188,6 +1207,25 @@ class MainWindow(QMainWindow):
         else:
             self.ai_dock.first_open()
         self.ai_toolbar_button.setChecked(self.ai_dock.is_open())
+
+    def _keep_builtin_assistant(self):
+        """v0.1.0: the assistant is built in. An older extension that adds its own assistant panel must not take
+        over the Assistant button or Ctrl+Alt+A (newer extensions check ``agent_hub_builtin`` themselves)."""
+        try:
+            self.ai_toolbar_button.clicked.disconnect()
+        except (RuntimeError,TypeError):
+            pass
+        self.ai_toolbar_button.clicked.connect(self.toggle_ai_assistant)
+        self.ai_toolbar_button.setToolTip('Show / hide the AI assistant (docked panel, detachable into its own window; '
+                                          'Ctrl+Alt+A)')
+        own=getattr(self,'_assistant_shortcut',None)
+        for sc in self.findChildren(QShortcut):
+            if sc is not own and sc.key().matches(QKeySequence('Ctrl+Alt+A'))==QKeySequence.SequenceMatch.ExactMatch:
+                sc.setEnabled(False)
+
+    def open_assistant_settings(self):
+        """The AI assistant's own settings window (every AI option is there)."""
+        self.ai_dock.setup()
 
     @staticmethod
     def _shift_combo(combo,delta):
@@ -4809,6 +4847,10 @@ class MainWindow(QMainWindow):
         try:
             self.ai_dock.save_state()
             self.ai_dock.shutdown()
+        except (AttributeError,RuntimeError):
+            pass
+        try:
+            self.organizer.stop()
         except (AttributeError,RuntimeError):
             pass
         self.settings.setValue('geometry',self.saveGeometry())

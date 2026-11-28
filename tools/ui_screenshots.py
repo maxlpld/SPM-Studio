@@ -291,6 +291,61 @@ def main(argv=None) -> int:
         shot('15_theme_studio', w)
         w.close()
 
+    def assistant_and_organizer():
+        # v0.1.0: the assistant (Agent Hub) docked and detached, calendar, to-do, the e-mail approval card
+        import datetime as dt
+        os.environ.setdefault('AGENT_HUB_DATA', str(tmp / 'agent-hub'))
+        win.ai_dock.open_panel()
+        core = win.ai_dock.core
+        for title, project in (('Fit the lattice of scan 0024', 'scripts'), ('Release notes', 'app'),
+                               ('Plan the week', '')):
+            chat = core.store.new_chat(project=project, title=title)
+            core.store.add_message(chat['id'], 'user', title)
+        core.chatsChanged.emit()
+        win.ai_dock.ask('How do I calibrate Z from monatomic steps?')
+        shot('20_assistant_docked')
+        shot('21_assistant_sidebar', win.ai_dock.dock.hub.sidebar)
+        window = win.ai_dock.undock_panel()
+        window.resize(1100, 760)
+        shot('22_assistant_detached', window)
+        win.ai_dock.dock_panel()
+        win.ai_dock.close_panel()
+        cal = win.open_calendar()
+        org = cal.org
+        monday = dt.date.today() - dt.timedelta(days=dt.date.today().weekday())
+        org.create_event({'title': 'Group meeting', 'start': f'{monday}T10:00', 'end': f'{monday}T11:00',
+                          'rrule': 'FREQ=WEEKLY;BYDAY=MO', 'location': 'Room B12', 'reminders': [10]})
+        org.create_event({'title': 'STM beamtime', 'start': f'{monday + dt.timedelta(days=1)}T08:30',
+                          'end': f'{monday + dt.timedelta(days=1)}T12:30'})
+        org.create_event({'title': 'Conference', 'start': str(monday + dt.timedelta(days=3)),
+                          'end': str(monday + dt.timedelta(days=5)), 'all_day': True})
+        org.add_task({'title': 'Prepare slides for group meeting', 'due': str(monday + dt.timedelta(days=6)),
+                      'priority': 3})
+        cal.resize(1280, 820)
+        cal.set_view('week')
+        cal.grid.scroll_to_hour(7)
+        shot('23_calendar_week', cal)
+        cal.set_view('month')
+        shot('24_calendar_month', cal)
+        cal.close()
+        todo = win.open_todo()
+        todo.resize(1180, 720)
+        todo.select_view('all')
+        shot('25_todo', todo)
+        todo.close()
+        org.mail.add_account({'preset': 'custom', 'address': 'me@example.org',
+                              'imap': {'host': 'imap.example.org', 'port': 993, 'security': 'ssl'},
+                              'smtp': {'host': 'smtp.example.org', 'port': 587, 'security': 'starttls'}})
+        item = org.mail.outbox.propose('reply', '', {'to': ['office@example.org'], 'subject': 'Re: Home office days',
+                                                     'body': 'Hello,\n\nHome-office days in November: 9.\n\n'
+                                                             'Best regards\n'})
+        from agent_hub.ui.organizer.cards import MailCard
+        card = MailCard(org, item['id'])
+        card.resize(640, 420)
+        card.show()
+        shot('26_mail_approval_card', card)
+        card.close()
+
     def narrow():
         win.resize(1100, 720)
         shot('11_main_narrow_1100x720')
@@ -300,7 +355,7 @@ def main(argv=None) -> int:
                      ('settings', settings), ('messages', messages), ('readme', readme), ('documents', documents),
                      ('3D print', print3d), ('tutorial', tutorial), ('projects', projects_and_selection),
                      ('channel switch', channel_switch), ('compare', compare), ('theme studio', theme_studio_window),
-                     ('narrow', narrow)):
+                     ('assistant and organizer', assistant_and_organizer), ('narrow', narrow)):
         step(name, fn)
     print('FAILED SHOTS:', failures if failures else 'none', flush=True)
     if os.environ.get('SPM_SHOTS_TO_LOG') == '1':

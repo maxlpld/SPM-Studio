@@ -106,7 +106,7 @@ class SetupDialog(QDialog):
         self._create_managed_page()
         self._create_agent_page()
         self._create_api_page()
-        later=QLabel('The assistant stays off. Open Settings › AI assistant… at any time.')
+        later=QLabel('The assistant stays off. Open the AI assistant settings at any time.')
         later.setObjectName('hint');later.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.pages.addWidget(later)
         self.mode.currentIndexChanged.connect(self.pages.setCurrentIndex)
@@ -206,7 +206,7 @@ class SetupDialog(QDialog):
          'and looks up literature, but cannot create analysis tools.'),
         ('off',4,'','No assistant',
          'Keep it switched off. Every scientific tool works without it; come back any time from '
-         'Settings › General › AI assistant…'),
+         'the AI assistant settings › SPM Studio assistant & Pi setup'),
     )
 
     def _build_quick_page(self):

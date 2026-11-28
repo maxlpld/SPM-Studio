@@ -4,12 +4,14 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "spm-studio"
-version = "0.0.21"
+version = "0.1.0"
 description = "SPM Studio — Scientific image & data analysis"
 readme = "README.md"
 requires-python = ">=3.12"
 license = "MIT"
-dependencies = ["numpy>=1.24", "PySide6>=6.5", "gwyfile>=0.3.0", "certifi>=2024.2"]
+dependencies = ["numpy>=1.24", "PySide6>=6.5", "gwyfile>=0.3.0", "certifi>=2024.2", "tzdata; sys_platform == 'win32'"]
+# v0.1.0: the AI assistant (Agent Hub), calendar, to-do and e-mail are in the source tree (src/agent_hub, pinned;
+# see tools/vendor_agent_hub.py). Optional: keyring (credentials), pypdf (filling PDF forms), psutil (monitoring).
 
 [project.optional-dependencies]
 gwy = ["gwyfile>=0.3.0"]
@@ -22,7 +24,8 @@ voice = ["vosk==0.3.44; sys_platform == 'darwin'", "vosk>=0.3.45; sys_platform !
 # v0.0.8: PowerPoint (.pptx) export / import of the presentation editor. Everything else of the LaTeX and
 # presentation editors uses Qt only (TeX itself comes from the computer's TeX Live / MacTeX / MiKTeX).
 documents = ["python-pptx>=1.0"]
-all = ["gwyfile>=0.3.0", "scipy>=1.10", "matplotlib>=3.7", "scikit-image>=0.21", "pandas>=2.0", "shapely>=2.0", "rich>=13.7", "tifffile>=2024.1", "keyring>=25", "python-pptx>=1.0", "vosk==0.3.44; sys_platform == 'darwin'", "vosk>=0.3.45; sys_platform != 'darwin'"]
+organizer = ["keyring>=25", "pypdf>=4"]
+all = ["pypdf>=4", "psutil>=5.9", "gwyfile>=0.3.0", "scipy>=1.10", "matplotlib>=3.7", "scikit-image>=0.21", "pandas>=2.0", "shapely>=2.0", "rich>=13.7", "tifffile>=2024.1", "keyring>=25", "python-pptx>=1.0", "vosk==0.3.44; sys_platform == 'darwin'", "vosk>=0.3.45; sys_platform != 'darwin'"]
 dev = ["pytest>=7", "pytest-qt>=4", "scipy>=1.10", "matplotlib>=3.7", "keyring>=25"]
 
 [project.scripts]
@@ -33,7 +36,8 @@ spm-studio-check = "spm_studio.core.diagnostics:main"
 where = ["src"]
 
 [tool.setuptools.package-data]
-spm_studio = ["update_config.json", "builtin_modules/*/*.json", "builtin_modules/*/*.py", "builtin_modules/*/README.md", "builtin_modules/README_SCRIPT.md", "resources/*.json", "resources/*.png", "resources/fonts/*", "resources/tutorial_scan/*"]
+agent_hub = ["pi_gate/*.ts", "resources/*.svg"]
+spm_studio = ["assistant/agent_hub.pin.json", "update_config.json", "builtin_modules/*/*.json", "builtin_modules/*/*.py", "builtin_modules/*/README.md", "builtin_modules/README_SCRIPT.md", "resources/*.json", "resources/*.png", "resources/fonts/*", "resources/tutorial_scan/*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

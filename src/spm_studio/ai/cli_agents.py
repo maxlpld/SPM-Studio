@@ -185,7 +185,7 @@ class CliAgentBackend(QObject):
             self._had_error = True
             hint = ''
             if any(w in value.lower() for w in ('authentication', 'not logged in', 'login', 'unauthorized', 'api key')):
-                hint = ' — sign in: Settings › AI assistant… › Claude / Codex › Sign in…'
+                hint = ' — sign in: the AI assistant settings › SPM Studio assistant & Pi setup › Assistant connection'
             self.error.emit(redact(value)[:600] + hint)
         elif kind == 'done':
             self._finished_turn = True
@@ -216,6 +216,6 @@ class CliAgentBackend(QObject):
             hint = ''
             low = self._stderr_tail.lower()
             if any(w in low for w in ('login', 'log in', 'auth', 'unauthorized', 'api key')):
-                hint = ' — sign in first: Settings › AI assistant… › Sign in'
+                hint = ' — sign in first: the AI assistant settings › SPM Studio assistant & Pi setup'
             self.error.emit(f"{AGENTS[self.agent]['label']} stopped: {redact(tail[0])[:300]}{hint}")
         self.settled.emit()

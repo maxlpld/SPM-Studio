@@ -192,21 +192,25 @@ def test_beta_activation_checks_and_installs_like_an_update(window, service, mon
     dialog.close()
 
 
-def test_simple_todo_window(window, home):
-    from PySide6.QtCore import Qt
+def test_simple_todo_window(window, home, monkeypatch):
+    # v0.1.0: the upgraded to-do window — empty hint, quick add, details, done, delete
+    from PySide6.QtWidgets import QMessageBox
     win = window.documents.open_todo()
-    assert win.empty.isVisible() and not win.list.isVisible()                     # explains what to do
-    assert not win.panel.isVisible()
+    win.select_view('all')
+    assert win.stack.currentWidget() is win.empty                                 # explains what to do
     win.quick.setText('Line profile across the step')
-    win.add_from_quick()
-    assert win.list.isVisible() and not win.empty.isVisible() and win.list.count() == 1
-    assert win.tabs.tabText(0) == 'Tasks (1)'
-    win.list.setCurrentRow(0)
-    assert win.panel.isVisible() and 'Line profile' in win.detail_title.text()
-    win.details.setPlainText('scan 0024, Z forward')
-    win.list.item(0).setCheckState(Qt.CheckState.Checked)
-    assert wait_until(lambda: win.data['tasks'][0]['done'])
-    assert wait_until(lambda: win.tabs.tabText(0) == 'Tasks')
-    win.delete_button.click()
-    assert win.data['tasks'] == [] and win.empty.isVisible()
+    win.quick_add()
+    assert win.stack.currentWidget() is win.tasks and win.tasks.count() == 1
+    win.tasks.setCurrentRow(0)
+    assert win.details.isEnabled() and 'Line profile' in win.details.title.text()
+    win.details.notes.setPlainText('scan 0024, Z forward')
+    win.details.save()
+    task = win.org.todo.tasks()[0]
+    assert task['notes'] == 'scan 0024, Z forward'
+    win.toggle(task['id'])
+    assert wait_until(lambda: win.org.todo.get(task['id'])['done'])
+    monkeypatch.setattr(QMessageBox, 'question', lambda *a, **k: QMessageBox.StandardButton.Yes)
+    win.details._delete()
+    win.refresh()
+    assert win.org.todo.tasks() == [] and win.stack.currentWidget() is win.empty
     win.close()

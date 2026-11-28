@@ -35,7 +35,7 @@ How the assistant reaches them — all three are served by this package:
 Secrets (zotero.org key, Consensus sign-in) are kept by ``lit_store``: the
 system keyring, else a private file of the user's account. Nothing in this
 package writes to Zotero, and nothing is contacted unless the user enabled the
-source in Settings › Literature.
+source in the AI assistant settings › Literature.
 """
 from __future__ import annotations
 
@@ -105,14 +105,14 @@ def _library_prefix(conf: dict) -> tuple[str, dict]:
         library = str(conf.get('zotero_library_id', '')).strip()
         if not library.isdigit():
             raise LiteratureError('Zotero web access needs your numeric library ID '
-                                  '(SPM Studio › Settings › Literature).')
+                                  '(the AI assistant settings › Literature (Consensus & Zotero)).')
         key = zotero_api_key()
         if not key:
-            raise LiteratureError('No Zotero API key stored (SPM Studio › Settings › Literature).')
+            raise LiteratureError('No Zotero API key stored (the AI assistant settings › Literature (Consensus & Zotero)).')
         kind = 'groups' if conf.get('zotero_library_type') == 'group' else 'users'
         return f'{ZOTERO_WEB}/{kind}/{library}', {'Zotero-API-Key': key}
     raise LiteratureError('Zotero is not connected. The user can connect it in '
-                          'SPM Studio › Settings › Literature.')
+                          'the AI assistant settings › Literature (Consensus & Zotero).')
 
 
 def _get(url: str, headers: dict, timeout: float = 20, raw: bool = False):
@@ -222,11 +222,11 @@ def _backend(conf: dict):
             return ('db', folder)
         if mode == 'database':
             raise LiteratureError('No Zotero database (zotero.sqlite) was found. Choose your Zotero data folder in '
-                                  'SPM Studio › Settings › Literature (Zotero shows it in Settings › Advanced › '
+                                  'the AI assistant settings › Literature (Consensus & Zotero) (Zotero shows it in Settings › Advanced › '
                                   'Files and Folders).')
         raise LiteratureError('No Zotero library was found on this computer: the Zotero app does not answer and '
                               'there is no Zotero data folder in the usual places. Install or start Zotero, or '
-                              'choose the data folder in SPM Studio › Settings › Literature.')
+                              'choose the data folder in the AI assistant settings › Literature (Consensus & Zotero).')
     prefix, headers = _library_prefix(conf)
     return ('api', prefix, headers)
 
@@ -546,7 +546,7 @@ def agent_context(conf: dict, python: str | None = None, shell: bool = True) -> 
                   '- Use it for questions about the published literature: findings, agreement on a question, '
                   'papers on a topic. If the user linked Zotero inside Consensus, Consensus uses that library itself.',
                   '- If the result says the sign-in is missing or expired, tell the user to open '
-                  'SPM Studio › Settings › Literature and click “Sign in to Consensus”. Never ask for a password.']
+                  'the AI assistant settings › Literature (Consensus & Zotero) and click “Sign in to Consensus”. Never ask for a password.']
         if shell:
             lines += [f'- With a shell: `{command} consensus "<question>"`.']
     return '\n'.join(lines) + '\n'
@@ -598,7 +598,7 @@ def consensus_search(query: str, conf: dict | None = None) -> str:
     conf = conf or settings()
     if not consensus_enabled(conf):
         raise LiteratureError('Consensus is not connected. The user can connect it in '
-                              'SPM Studio › Settings › Literature.')
+                              'the AI assistant settings › Literature (Consensus & Zotero).')
     from . import consensus
     try:
         return consensus.search(query)

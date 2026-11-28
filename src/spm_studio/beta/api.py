@@ -149,10 +149,8 @@ class ExtensionHandle:
         """Put text in the assistant's input box (the user decides to send it)."""
         dock = getattr(self._api.window, 'ai_dock', None)
         if dock is not None:
-            dock.first_open()
             try:
-                dock.input.setPlainText(text)
-                dock.input.setFocus()
+                dock.prefill(text)
             except AttributeError:
                 pass
 
@@ -167,8 +165,8 @@ class ExtensionHandle:
     # -- to-do
     def open_todo_count(self) -> int:
         self._need('todo_read')
-        from spm_studio.documents import todo
-        return sum(1 for task in todo.load()['tasks'] if not task.get('done'))
+        from spm_studio.assistant.todo_bridge import open_count
+        return open_count()
 
     def open_todo(self):
         self._need('todo_read')
